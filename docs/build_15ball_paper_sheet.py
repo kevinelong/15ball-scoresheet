@@ -1,17 +1,14 @@
 """
-K-Ball Paper Score-Sheet - blank printable (matches the annotated guide)
+15-Ball Rotation Paper Score-Sheet - blank printable
 
 Uses the shared draw_scoresheet() from _scoresheet_draw.py so this
 printable and any other paper variant stay in lockstep.
 
 Layout: ONE full-page blank score sheet per letter page. Uses the whole
 vertical budget so ball circles are large enough to hand-mark comfortably.
-An earlier 2-up version stacked two sheets per page with a cut line; that
-was retired because the resulting ball circles were too small to mark
-inside cleanly and the bottom-totals labels had to wrap onto two lines.
 
-Run:    python3 docs/build_paper_sheet.py
-Output: docs/paper-score-sheet-blank.pdf
+Run:    python3 docs/build_15ball_paper_sheet.py
+Output: docs/15ball-paper-sheet.pdf
 """
 from __future__ import annotations
 import os
@@ -33,18 +30,18 @@ from _scoresheet_draw import (  # noqa: E402
     PAGE_H,
 )
 
-OUT = os.path.join(HERE, "paper-score-sheet-blank.pdf")
+OUT = os.path.join(HERE, "15ball-paper-sheet.pdf")
 
 
 def build(out_path):
     c = canvas.Canvas(out_path, pagesize=letter)
     c.setAuthor("Perplexity Computer")
-    c.setTitle("K-Ball Blank Paper Score Sheet")
+    c.setTitle("15-Ball Rotation Blank Paper Score Sheet")
     c.setSubject(
-        "Blank printable K-Ball / 15-Ball Rotation score sheet. One sheet "
-        "per letter page; larger ball circles for hand marking."
+        "Blank printable 15-Ball Rotation score sheet. One sheet per "
+        "letter page; larger ball circles for hand marking."
     )
-    c.setCreator("kball-scoresheet docs/build_paper_sheet.py")
+    c.setCreator("15ball-scoresheet docs/build_15ball_paper_sheet.py")
 
     # Full-page single sheet. Reserve a strip at the bottom for the footer
     # so the sheet's outer border never crashes into the footer text.
@@ -61,7 +58,7 @@ def build(out_path):
     c.drawString(
         MARGIN,
         MARGIN - 8,
-        "ColumbiaCueClub.com  -  K-Ball / 15-Ball Rotation blank score sheet",
+        "ColumbiaCueClub.com  -  15-Ball Rotation blank score sheet",
     )
     c.drawRightString(PAGE_W - MARGIN, MARGIN - 8, "Blank Sheet v2")
 

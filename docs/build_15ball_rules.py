@@ -1,14 +1,14 @@
 """
-K-Ball Standard Rules - printable rulebook PDF (WPA-style)
+15-Ball Rotation Standard Rules - printable rulebook PDF (WPA-style)
 
 Structure follows what best serves a human reader who wants to know
-"what's actually different in K-Ball?":
+"what's actually different in 15-Ball Rotation?":
 
   Section 1  — General (WPA general rules apply)
-  Section 2  — What's New in K-Ball (summary of [K] rules)
-  Section K  — The K-Ball Discipline
+  Section 2  — What's New in 15-Ball Rotation (summary of [K] rules)
+  Section K  — The 15-Ball Rotation Discipline
                  K.1..K.n rules ordered by prominence:
-                   [K]        = K-Ball specific        (BOLD ITALIC)
+                   [K]        = 15-Ball Rotation specific        (BOLD ITALIC)
                    [K/10]     = Adapted from 10-Ball   (BOLD)
                    [K/14.1]   = Adapted from 14.1      (BOLD)
                    [10]       = Unchanged from 10-Ball (regular)
@@ -19,14 +19,14 @@ Structure follows what best serves a human reader who wants to know
   Appendix C — WPA cross-reference index
 
 Sourcing chips appear beside every rule heading. The reader can scan
-for [K] and see the K-Ball-specific rules at a glance.
+for [K] and see the 15-Ball-Rotation-specific rules at a glance.
 
-WPA copyrighted text is NOT reproduced here. Where a K-Ball rule is
+WPA copyrighted text is NOT reproduced here. Where a 15-Ball Rotation rule is
 identical to a WPA rule, we cite the WPA section number and point the
 reader to the WPA Rules of Play PDF (QR + URL on the cover).
 
-Run:    python3 docs/build_kball_rules.py
-Output: docs/kball-rules.pdf
+Run:    python3 docs/build_15ball_rules.py
+Output: docs/15ball-rules.pdf
 """
 from __future__ import annotations
 import os
@@ -41,14 +41,14 @@ sys.path.insert(0, HERE)
 
 from _scoresheet_draw import draw_qr  # noqa: E402
 
-OUT = os.path.join(HERE, "kball-rules.pdf")
+OUT = os.path.join(HERE, "15ball-rules.pdf")
 
 PAGE_W, PAGE_H = letter
 MARGIN = 0.6 * inch
 BLACK = (0, 0, 0)
 GRAY = (0.35, 0.35, 0.35)
 LIGHT_GRAY = (0.75, 0.75, 0.75)
-CHIP_BG_K = (0.90, 0.90, 0.90)       # emphasized chip (K-Ball specific)
+CHIP_BG_K = (0.90, 0.90, 0.90)       # emphasized chip (15-Ball Rotation specific)
 CHIP_BG_ADAPT = (0.95, 0.95, 0.95)   # secondary chip
 CHIP_BG_WPA = (0.98, 0.98, 0.98)     # muted chip
 
@@ -71,9 +71,9 @@ PARA_GAP = 5
 
 # Chip taxonomy: (label, background rgb, primary font for the RULE, note)
 CHIP = {
-    "K":       ("K-Ball",         CHIP_BG_K,     FONT_BOLD_ITALIC, "K-Ball specific rule"),
-    "K/10":    ("K-Ball · 10-Ball", CHIP_BG_ADAPT, FONT_BOLD,        "Adapted from 10-Ball"),
-    "K/14.1":  ("K-Ball · 14.1",    CHIP_BG_ADAPT, FONT_BOLD,        "Adapted from 14.1"),
+    "K":       ("15-Ball",       CHIP_BG_K,     FONT_BOLD_ITALIC, "15-Ball Rotation specific rule"),
+    "K/10":    ("15-Ball · 10-Ball", CHIP_BG_ADAPT, FONT_BOLD,        "Adapted from 10-Ball"),
+    "K/14.1":  ("15-Ball · 14.1",    CHIP_BG_ADAPT, FONT_BOLD,        "Adapted from 14.1"),
     "10":      ("10-Ball",        CHIP_BG_WPA,   FONT_BODY,        "From WPA 10-Ball"),
     "14.1":    ("14.1",           CHIP_BG_WPA,   FONT_BODY,        "From WPA 14.1 Continuous"),
     "Gen":     ("WPA General",    CHIP_BG_WPA,   FONT_BODY,        "From WPA general rules / fouls"),
@@ -110,7 +110,7 @@ class Cursor:
         c.setFont(FONT_BODY, 7.5)
         c.setFillColorRGB(*GRAY)
         c.drawString(self.margin, PAGE_H - self.margin + 6,
-                     "K-BALL (15-BALL ROTATION) STANDARD RULES")
+                     "15-BALL ROTATION STANDARD RULES")
         c.drawRightString(PAGE_W - self.margin, PAGE_H - self.margin + 6,
                           "Columbia Cue Club")
         c.setStrokeColorRGB(*LIGHT_GRAY)
@@ -269,7 +269,7 @@ def draw_h3(cur: Cursor, num: str, text: str, source: str) -> None:
 def draw_cover(c: canvas.Canvas) -> None:
     c.setFillColorRGB(*BLACK)
     c.setFont(FONT_BOLD, 32)
-    c.drawString(MARGIN, PAGE_H - MARGIN - 40, "K-BALL")
+    c.drawString(MARGIN, PAGE_H - MARGIN - 40, "15-BALL ROTATION")
     c.setFont(FONT_BODY, 16)
     c.drawString(MARGIN, PAGE_H - MARGIN - 64, "15-Ball Rotation — Standard Rules")
 
@@ -290,12 +290,12 @@ def draw_cover(c: canvas.Canvas) -> None:
     y = box_y_top - inner_pad - 4
     c.setFillColorRGB(*BLACK)
     c.setFont(FONT_BOLD, 13)
-    c.drawString(box_x + inner_pad, y, "WHAT IS K-BALL?")
+    c.drawString(box_x + inner_pad, y, "ABOUT 15-BALL ROTATION")
     y -= 20
 
     c.setFont(FONT_BODY, 10.5)
     para = (
-        "K-Ball is 15-ball rotation played to a target score. Fifteen numbered "
+        "15-Ball Rotation is 15-ball rotation played to a target score. Fifteen numbered "
         "balls are racked and played in ascending numerical order. Every ball "
         "legally pocketed scores one point. The first player to reach the "
         "agreed target — 25 (recreational) or 50 (competitive) — wins the Match."
@@ -306,11 +306,11 @@ def draw_cover(c: canvas.Canvas) -> None:
     y -= 6
 
     c.setFont(FONT_BOLD, 13)
-    c.drawString(box_x + inner_pad, y, "HOW K-BALL COMBINES 10-BALL AND 14.1")
+    c.drawString(box_x + inner_pad, y, "HOW 15-BALL ROTATION COMBINES 10-BALL AND 14.1")
     y -= 20
     c.setFont(FONT_BODY, 10.5)
     para2 = (
-        "K-Ball borrows rotation order and standard fouls from WPA 10-Ball, "
+        "15-Ball Rotation borrows rotation order and standard fouls from WPA 10-Ball, "
         "and 1-point-per-ball, race-to-N scoring from WPA 14.1 Continuous Pool. "
         "Unlike 10-Ball, called shots are not required. Unlike 14.1, balls must "
         "be contacted in numerical order. All other WPA general rules apply unchanged."
@@ -333,9 +333,9 @@ def draw_cover(c: canvas.Canvas) -> None:
 
     # Draw chip legend row
     legend_items = [
-        ("K",      "New K-Ball rule — bold italic heading. The reader's key differences."),
-        ("K/10",   "Adapted from WPA 10-Ball with a K-Ball change — bold heading."),
-        ("K/14.1", "Adapted from WPA 14.1 Continuous with a K-Ball change — bold heading."),
+        ("K",      "New 15-Ball Rotation rule — bold italic heading. The reader's key differences."),
+        ("K/10",   "Adapted from WPA 10-Ball with a 15-Ball Rotation change — bold heading."),
+        ("K/14.1", "Adapted from WPA 14.1 Continuous with a 15-Ball Rotation change — bold heading."),
         ("10",     "Unchanged from WPA 10-Ball (cross-referenced, not reproduced)."),
         ("14.1",   "Unchanged from WPA 14.1 Continuous (cross-referenced, not reproduced)."),
         ("Gen",    "Unchanged from WPA general rules or fouls (cross-referenced)."),
@@ -365,7 +365,7 @@ def draw_cover(c: canvas.Canvas) -> None:
     c.setFont(FONT_BOLD, 9)
     c.drawString(MARGIN, MARGIN + 60, "VERSION")
     c.setFont(FONT_BODY, 9)
-    c.drawString(MARGIN, MARGIN + 46, "K-Ball Rules v1.0")
+    c.drawString(MARGIN, MARGIN + 46, "15-Ball Rotation Rules v1.0")
     c.setFont(FONT_BOLD, 9)
     c.drawString(MARGIN, MARGIN + 28, "EFFECTIVE")
     c.setFont(FONT_BODY, 9)
@@ -382,15 +382,24 @@ def draw_cover(c: canvas.Canvas) -> None:
 # ---------- What's-new summary page ----------
 
 def draw_whats_new(cur: Cursor) -> None:
-    draw_h1(cur, "WHAT’S NEW IN K-BALL")
+    draw_h1(cur, "WHAT’S NEW IN 15-BALL ROTATION")
 
     draw_para(cur,
-        "If you already know 10-Ball or 14.1, these are the K-Ball-specific "
-        "rules to learn. Each one is marked [K-Ball] in the body of this "
+        "If you already know 10-Ball or 14.1, these are the 15-Ball-Rotation-specific "
+        "rules to learn. Each one is marked [15-Ball] in the body of this "
         "document. All other rules are pointers into the current WPA Rules "
         "of Play.")
 
     items = [
+        ("K.0  Ball in Hand Every Inning — No Safeties",
+         "The most distinctive rule of 15-Ball Rotation: every incoming "
+         "player begins their inning with the cue-ball in hand anywhere on "
+         "the playing surface. This applies after ANY inning change — after "
+         "a missed shot, after a foul, after a made ball where the shooter "
+         "chose to end their inning, and after the break. Because BIH is "
+         "guaranteed every inning, safety play is meaningless and NOT "
+         "permitted: you cannot 'leave your opponent bad.' Fouls are "
+         "instead deterred by the −1-point penalty in K.9."),
         ("K.2  The Rack",
          "The 1-ball on the Foot Spot at the apex, the 8-ball in the center "
          "of the triangle, the 15-ball and remaining balls placed randomly."),
@@ -438,25 +447,25 @@ def draw_body(c: canvas.Canvas) -> None:
 
     draw_h2(cur, "1.1", "APPLICABILITY OF THE WPA GENERAL RULES")
     draw_para(cur,
-        "All rules in WPA Section 1 (General Rules) apply to K-Ball unchanged. "
+        "All rules in WPA Section 1 (General Rules) apply to 15-Ball Rotation unchanged. "
         "This includes WPA 1.1 Player’s Responsibility, 1.2 Lagging to Determine "
         "First Break, 1.3 Subsequent Breaks, 1.4 Player’s Use of Equipment, "
         "1.5 Spotting Balls, 1.6 Cue-Ball in Hand, 1.8 Balls Settling, "
         "1.9 Restoring a Position, 1.10 Outside Interference, 1.11 Prompting "
         "Calls and Protesting Rulings, 1.12 Concession, and 1.13 Stalemate. "
-        "WPA 1.7 Standard Call Shot does NOT apply because K-Ball is not a "
+        "WPA 1.7 Standard Call Shot does NOT apply because 15-Ball Rotation is not a "
         "call-shot Discipline (see K.5 below).")
 
     draw_h2(cur, "1.2", "APPLICABILITY OF THE WPA FOULS")
     draw_para(cur,
-        "All fouls defined in WPA Section 3 (Fouls) apply to K-Ball as listed "
+        "All fouls defined in WPA Section 3 (Fouls) apply to 15-Ball Rotation as listed "
         "under K.9 (Standard Fouls) and K.10 (Serious Fouls). Any WPA foul "
         "not explicitly listed nevertheless remains in force where relevant "
         "to normal play.")
 
     draw_h2(cur, "1.3", "GAME OVERVIEW")
     draw_para(cur,
-        "K-Ball is a rotation Discipline played with fifteen object-balls "
+        "15-Ball Rotation is a rotation Discipline played with fifteen object-balls "
         "numbered 1 through 15 and the cue-ball. The object-balls are played "
         "in ascending numerical order. Each legally pocketed ball counts one "
         "point. The first player to reach the target score wins the Match. "
@@ -470,16 +479,16 @@ def draw_body(c: canvas.Canvas) -> None:
 
     # ===== Section K: The Discipline =====
     cur.page_break()
-    draw_h1(cur, "K.  K-BALL (15-BALL ROTATION)")
+    draw_h1(cur, "K.  15-BALL ROTATION")
 
     draw_para(cur,
-        "K-Ball is a rotation Discipline played with fifteen object-balls "
+        "15-Ball Rotation is a rotation Discipline played with fifteen object-balls "
         "numbered 1 through 15 and the cue-ball. The object-balls must be "
         "contacted in ascending numerical order (rotation). Each ball legally "
         "pocketed counts one point, and the first player to reach the target "
         "score wins the Match. Called shots are not required.")
 
-    # --- New K-Ball rules (bold italic, [K] chip) come first ---
+    # --- New 15-Ball Rotation rules (bold italic, [K] chip) come first ---
 
     draw_h3(cur, "K.2", "THE RACK", "K")
     draw_para(cur,
@@ -492,20 +501,38 @@ def draw_body(c: canvas.Canvas) -> None:
         "purposeful or intentional pattern.",
     ])
 
+    draw_h3(cur, "K.0", "BALL IN HAND EVERY INNING — NO SAFETIES", "K")
+    draw_para(cur,
+        "This is the signature rule of 15-Ball Rotation. Every incoming "
+        "player begins their inning with the cue-ball in hand anywhere on "
+        "the playing surface. This applies:")
+    draw_lettered(cur, [
+        "After the opponent misses or ends their inning without pocketing.",
+        "After any foul by the opponent (in addition to the −1-point "
+        "penalty in K.9).",
+        "After the break — see K.3 for the special break case.",
+        "After the opponent legally pockets a ball but chooses to end "
+        "their inning (rare, but permitted).",
+    ])
+    draw_para(cur,
+        "Because ball-in-hand is guaranteed every inning, safety play is "
+        "meaningless and NOT permitted as a strategic choice in 15-Ball "
+        "Rotation. There is no “declared safety.” You cannot leave your "
+        "opponent bad, because your opponent picks up the cue-ball and "
+        "places it wherever they choose. The −1-point foul penalty in K.9 "
+        "replaces ball-in-hand as the deterrent for illegal shots.")
+
     draw_h3(cur, "K.5", "SHOTS ARE NOT CALLED", "K")
     draw_para(cur,
-        "K-Ball is NOT a call-shot Discipline. A ball is legally pocketed "
-        "whenever the cue-ball first contacts the lowest-numbered ball "
-        "remaining on the table and any object-ball is subsequently pocketed "
-        "without a foul, regardless of which pocket, cushion route, or "
-        "combination produced the pocketing. Slop counts. The shooter may, "
-        "however, declare “safety” before any shot; if declared, play passes "
-        "to the opponent at the end of the shot even if a ball is pocketed, "
-        "and any pocketed object-ball is spotted per WPA 1.5.")
+        "15-Ball Rotation is NOT a call-shot Discipline. A ball is legally "
+        "pocketed whenever the cue-ball first contacts the lowest-numbered "
+        "ball remaining on the table and any object-ball is subsequently "
+        "pocketed without a foul, regardless of which pocket, cushion "
+        "route, or combination produced the pocketing. Slop counts.")
 
     draw_h3(cur, "K.6", "SPOTTING BALLS", "K")
     draw_para(cur,
-        "Balls are spotted per WPA 1.5. K-Ball has no special provision "
+        "Balls are spotted per WPA 1.5. 15-Ball Rotation has no special provision "
         "for the highest-numbered ball; the 15-ball is treated like any "
         "other object-ball. If it is pocketed on a foul or on a declared "
         "safety, it is spotted per WPA 1.5.")
@@ -544,16 +571,22 @@ def draw_body(c: canvas.Canvas) -> None:
 
     # --- Adapted-from-10-Ball rules ([K/10] chip, bold) ---
 
-    draw_h3(cur, "K.3", "LEGAL BREAK SHOT", "K/10")
+    draw_h3(cur, "K.3", "LEGAL BREAK SHOT", "K")
     draw_lettered(cur, [
         "The cue-ball begins in hand above the Head String (see WPA 1.6 "
         "Cue-Ball in Hand and WPA 3.10 Bad Cue-Ball Placement).",
         "The first object-ball contacted by the cue-ball must be the 1-ball.",
         "If no object-ball is pocketed, at least four object-balls must be "
-        "driven to one or more rails, or the shot is a foul (see K.9).",
-        "Pocketing the 1-ball on the break scores one point for the breaker "
-        "and continues the inning. Pocketing any other ball on a legal break "
-        "also scores one point per ball and continues the inning.",
+        "driven to one or more rails, or the shot is a break foul (see (d)).",
+        "Break scoring: on a LEGAL break, every ball pocketed scores 1 point "
+        "for the breaker and remains pocketed. On a BREAK FOUL (illegal "
+        "break, scratch on the break, or cue-ball off the table), all "
+        "object-balls pocketed on the break are SPOTTED per WPA 1.5, and "
+        "the breaker receives the standard −1-point penalty from K.9.",
+        "After the break — pocket or no pocket, legal break or break foul — "
+        "the incoming player takes ball in hand anywhere on the table "
+        "under K.0. The breaker never continues their inning after the "
+        "break shot; play always passes to the opponent.",
     ])
 
     draw_h3(cur, "K.1", "DETERMINING THE BREAK", "K/10")
@@ -562,25 +595,23 @@ def draw_body(c: canvas.Canvas) -> None:
         "Break). The player who wins the lag chooses who will break the first "
         "Rack. Subsequent breaks alternate between players (WPA 1.3).")
 
-    draw_h3(cur, "K.4", "SECOND SHOT OF THE RACK — PUSH OUT", "K/10")
-    draw_para(cur,
-        "If no foul is committed on the break shot, the shooter may choose "
-        "to play a “push out.” The player must inform the referee (or, in "
-        "unofficiated play, the opponent) before the shot; then WPA 3.2 "
-        "(Wrong Ball First) and WPA 3.3 (No Rail after Contact) are suspended "
-        "for that shot. Balls pocketed on a push out do NOT score and are "
-        "spotted per WPA 1.5. If no foul is committed on the push out, the "
-        "other player chooses who will shoot next.")
+    # NOTE: WPA 10-Ball's "push out" rule (WPA 6.4) does NOT apply to 15-Ball
+    # Rotation. Push-out exists to give the incoming player a way to escape
+    # a bad leave after the break; because K.0 guarantees ball-in-hand every
+    # inning, there is no bad leave to escape, so push-out is unnecessary
+    # and would only slow play. Do not add a push-out rule here.
 
     # --- Unchanged WPA rules ([Gen] / [10] chips, regular weight) ---
 
-    draw_h3(cur, "K.9", "STANDARD FOULS", "Gen")
+    draw_h3(cur, "K.9", "STANDARD FOULS", "K")
     draw_para(cur,
         "If the shooter commits a standard foul, one point is subtracted "
-        "from his score, and play passes to the opponent. The cue-ball is "
-        "in hand for the incoming player, who may place it anywhere on the "
-        "playing surface (see WPA 1.6). The following standard fouls apply "
-        "at K-Ball; refer to the WPA Rules of Play for the definitive text:")
+        "from his score, and play passes to the opponent. Note that BIH "
+        "already applies at the start of every inning under K.0; the foul "
+        "penalty is the −1-point score adjustment, NOT ball-in-hand. "
+        "A player’s score may go below zero; there is no floor. The "
+        "following standard fouls apply at 15-Ball Rotation; refer to the "
+        "WPA Rules of Play for the definitive text:")
     draw_bulleted(cur, [
         "WPA 3.1  Cue-Ball Scratch or Off the Table.",
         "WPA 3.2  Wrong Ball First — the first object-ball contacted by "
@@ -621,8 +652,8 @@ def draw_body(c: canvas.Canvas) -> None:
     draw_h1(cur, "APPENDIX A — COMPARISON WITH 10-BALL AND 14.1")
 
     draw_para(cur,
-        "The table below summarises how K-Ball relates to the two WPA "
-        "disciplines it borrows from. K-Ball adopts rotation and standard "
+        "The table below summarises how 15-Ball Rotation relates to the two WPA "
+        "disciplines it borrows from. 15-Ball Rotation adopts rotation and standard "
         "fouls from 10-Ball, and 1-point-per-ball / race-to-target scoring "
         "from 14.1. It differs from both parents in that shots are NOT "
         "called (see K.5) and no single ball is a “winning ball” (see K.8).")
@@ -675,21 +706,21 @@ def draw_body(c: canvas.Canvas) -> None:
         ("WPA 1.6",  "Cue-Ball in Hand",                  "cited in K.3, K.9"),
         ("WPA 1.7",  "Standard Call Shot",                "NOT applied (see K.5)"),
         ("WPA 1.13", "Stalemate",                         "cited in K.11"),
-        ("WPA 3.1",  "Cue-Ball Scratch or Off the Table", "standard foul at K-Ball"),
+        ("WPA 3.1",  "Cue-Ball Scratch or Off the Table", "standard foul at 15-Ball Rotation"),
         ("WPA 3.2",  "Wrong Ball First",                  "standard foul (lowest ball first)"),
-        ("WPA 3.3",  "No Rail after Contact",             "standard foul at K-Ball"),
-        ("WPA 3.4",  "No Foot on Floor",                  "standard foul at K-Ball"),
-        ("WPA 3.5",  "Ball Driven Off the Table",         "standard foul at K-Ball"),
-        ("WPA 3.6",  "Touched Ball",                      "standard foul at K-Ball"),
-        ("WPA 3.7",  "Double Hit / Frozen Balls",         "standard foul at K-Ball"),
-        ("WPA 3.8",  "Push Shot",                         "standard foul at K-Ball"),
-        ("WPA 3.9",  "Balls Still Moving",                "standard foul at K-Ball"),
-        ("WPA 3.10", "Bad Cue-Ball Placement",            "standard foul at K-Ball"),
-        ("WPA 3.12", "Playing Out of Turn",               "standard foul at K-Ball"),
-        ("WPA 3.13", "Three Consecutive Fouls",           "serious foul at K-Ball (K.10)"),
-        ("WPA 3.14", "Slow Play",                         "standard foul at K-Ball"),
-        ("WPA 3.15", "Ball Rack Template Foul",           "standard foul at K-Ball"),
-        ("WPA 3.16", "Unsportsmanlike Conduct",           "serious foul at K-Ball (K.10)"),
+        ("WPA 3.3",  "No Rail after Contact",             "standard foul at 15-Ball Rotation"),
+        ("WPA 3.4",  "No Foot on Floor",                  "standard foul at 15-Ball Rotation"),
+        ("WPA 3.5",  "Ball Driven Off the Table",         "standard foul at 15-Ball Rotation"),
+        ("WPA 3.6",  "Touched Ball",                      "standard foul at 15-Ball Rotation"),
+        ("WPA 3.7",  "Double Hit / Frozen Balls",         "standard foul at 15-Ball Rotation"),
+        ("WPA 3.8",  "Push Shot",                         "standard foul at 15-Ball Rotation"),
+        ("WPA 3.9",  "Balls Still Moving",                "standard foul at 15-Ball Rotation"),
+        ("WPA 3.10", "Bad Cue-Ball Placement",            "standard foul at 15-Ball Rotation"),
+        ("WPA 3.12", "Playing Out of Turn",               "standard foul at 15-Ball Rotation"),
+        ("WPA 3.13", "Three Consecutive Fouls",           "serious foul at 15-Ball Rotation (K.10)"),
+        ("WPA 3.14", "Slow Play",                         "standard foul at 15-Ball Rotation"),
+        ("WPA 3.15", "Ball Rack Template Foul",           "standard foul at 15-Ball Rotation"),
+        ("WPA 3.16", "Unsportsmanlike Conduct",           "serious foul at 15-Ball Rotation (K.10)"),
     ]
     _draw_xref_table(cur, xref)
 
@@ -699,7 +730,7 @@ def draw_body(c: canvas.Canvas) -> None:
 def _draw_comparison_table(cur: Cursor) -> None:
     c = cur.c
     rows = [
-        ("",              "K-Ball",              "10-Ball (WPA 6)",     "14.1 (WPA 7)"),
+        ("",              "15-Ball Rotation",              "10-Ball (WPA 6)",     "14.1 (WPA 7)"),
         ("Object-balls",  "1 through 15",        "1 through 10",        "1 through 15"),
         ("Play order",    "Rotation (lowest)",   "Rotation (lowest)",   "Any legal ball"),
         ("Call shots?",   "No",                  "Yes",                 "Yes"),
@@ -745,7 +776,7 @@ def _draw_xref_table(cur: Cursor, rows: list[tuple[str, str, str]]) -> None:
         scale = cur.col_w / total_w
         col_widths = [w * scale for w in col_widths]
 
-    hdr = ("WPA §", "Rule", "Used in K-Ball as")
+    hdr = ("WPA §", "Rule", "Used in 15-Ball Rotation as")
     cur.need(row_h * (len(rows) + 1) + 10)
 
     # Header row
@@ -779,9 +810,9 @@ def _draw_xref_table(cur: Cursor, rows: list[tuple[str, str, str]]) -> None:
 def build(out_path: str) -> None:
     c = canvas.Canvas(out_path, pagesize=letter)
     c.setAuthor("Columbia Cue Club")
-    c.setTitle("K-Ball (15-Ball Rotation) Standard Rules")
-    c.setSubject("K-Ball rules in the style of the WPA Rules of Play.")
-    c.setCreator("kball-scoresheet docs/build_kball_rules.py")
+    c.setTitle("15-Ball Rotation Standard Rules")
+    c.setSubject("15-Ball Rotation rules in the style of the WPA Rules of Play.")
+    c.setCreator("15ball-scoresheet docs/build_15ball_rules.py")
 
     draw_cover(c)
     draw_body(c)

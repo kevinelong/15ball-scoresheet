@@ -1,5 +1,5 @@
 """
-K-Ball / 15-Ball Rotation - Score-Sheet Drawing Primitives
+15-Ball Rotation - Score-Sheet Drawing Primitives
 
 Shared drawing module used by every paper-score-sheet build script.
 Provides pure-black-on-white drawing primitives + the top-level
@@ -11,7 +11,7 @@ This is not a runnable script - it's imported by:
   * build_paper_sheet_2up.py   (two side-by-side sheets per landscape page)
 
 The sheet is self-teaching: it has a HOW TO SCORE mini-instructions strip
-and a K-BALL RULES SUMMARY block with a QR to the WPA rules PDF, so no
+and a 15-BALL ROTATION RULES SUMMARY block with a QR to the rules PDF, so no
 separate annotated "guide" PDF is required.
 """
 from __future__ import annotations
@@ -128,7 +128,7 @@ SHEET_TITLE_H      = 24     # big title (subtitle retired; HOW TO SCORE covers t
 SHEET_INSTR_H      = 52     # 6-step mini-instructions strip (self-contained sheet)
 SHEET_INSTR_MARGIN = 6      # breathing room on each side of the strip
 SHEET_INSTR_GAP    = 10     # gap between strip and rules block (reclaimed from subtitle)
-SHEET_RULES_H      = 56     # K-Ball rules summary block + QR to our rules PDF
+SHEET_RULES_H      = 66     # 15-Ball rules summary block + QR to our rules PDF (title + 5 rule lines)
 SHEET_RULES_GAP    = 10     # gap between rules block and player-header card
 SHEET_PHDR_H       = 46     # PLAYER A/B name+goal card
 SHEET_PHDR_GAP     = 8
@@ -204,7 +204,7 @@ def draw_scoresheet(c, left, top, width, height, with_instructions=True):
     # Columbia Cue Club branding lives in the footer of each build script.
     c.setFont(FONT_BOLD, 12)
     c.setFillColorRGB(*BLACK)
-    c.drawCentredString(left + width/2, y0 - 14, "15-BALL ROTATION (K-BALL) - MATCH SCORE SHEET")
+    c.drawCentredString(left + width/2, y0 - 14, "15-BALL ROTATION - MATCH SCORE SHEET")
     y0 -= SHEET_TITLE_H
 
     # === Mini-instructions strip (self-contained sheet) ===
@@ -251,12 +251,12 @@ def draw_scoresheet(c, left, top, width, height, with_instructions=True):
         # Advance past the strip AND the breathing gap before the rules block.
         y0 -= SHEET_INSTR_H + SHEET_INSTR_GAP
 
-    # === K-Ball rules summary + QR to our own rules PDF ===
+    # === 15-Ball Rotation rules summary + QR to our own rules PDF ===
     # Two-column block:
-    #   Left:  K-BALL rules summary - K-Ball-only, no cross-discipline
-    #          references. The full K-Ball rulebook lives in the linked
+    #   Left:  15-BALL ROTATION rules summary - no cross-discipline
+    #          references. The full rulebook lives in the linked
     #          PDF.
-    #   Right: QR code linking to our K-Ball rules PDF hosted on the site,
+    #   Right: QR code linking to our 15-Ball Rotation rules PDF hosted on the site,
     #          with a plain-text short URL below.
     # The block is skipped when the sheet is embedded in the annotated
     # guide (with_instructions=False) so the guide's callouts drive the
@@ -273,7 +273,7 @@ def draw_scoresheet(c, left, top, width, height, with_instructions=True):
         inner_pad_x = 10
         inner_pad_top = 8
 
-        # --- Right column: QR + URLs (points at OUR K-Ball rules PDF) ---
+        # --- Right column: QR + URLs (points at OUR 15-Ball Rotation rules PDF) ---
         # Reserve 8pt below the QR for the caption; QR is bottom-aligned
         # to that reserved space.
         caption_h = 8
@@ -283,28 +283,36 @@ def draw_scoresheet(c, left, top, width, height, with_instructions=True):
         qr_x = rules_x + rules_w - inner_pad_x - qr_size
         qr_y_bottom = rules_top - inner_pad_top - qr_size
         draw_qr(c, qr_x, qr_y_bottom, qr_size,
-                "https://kevinelong.github.io/kball-scoresheet/docs/kball-rules.pdf")
+                "https://kevinelong.github.io/15ball-scoresheet/docs/15ball-rules.pdf")
         # Caption BELOW the QR, clear of the modules.
         c.setFont(FONT_BOLD, 6.5); c.setFillColorRGB(*BLACK)
         c.drawCentredString(qr_x + qr_size/2, qr_y_bottom - caption_h + 1,
-                            "Scan: full K-Ball rules")
+                            "Scan: full 15-Ball rules")
 
-        # --- Left column: K-Ball-only rules summary ---
+        # --- Left column: 15-Ball Rotation rules summary ---
         left_x = rules_x + inner_pad_x
         left_w = qr_x - left_x - 10
 
         # Title line
         c.setFont(FONT_BOLD, 8.5); c.setFillColorRGB(*BLACK)
-        c.drawString(left_x, rules_top - inner_pad_top - 4, "K-BALL RULES SUMMARY")
+        c.drawString(left_x, rules_top - inner_pad_top - 4, "15-BALL ROTATION RULES SUMMARY")
 
-        # Four terse K-Ball-only lines. No mention of 10-Ball or 14.1.
-        c.setFont(FONT_BODY, 7); c.setFillColorRGB(*BLACK)
+        # Rules lines. Lead with the SIGNATURE rule (BIH always, no safeties)
+        # in bold, then four terse mechanical rules in regular weight.
+        c.setFillColorRGB(*BLACK)
         line_y = rules_top - inner_pad_top - 13
+        # Signature rule - bold, gets pride of place on line 1.
+        c.setFont(FONT_BOLD, 7)
+        c.drawString(left_x, line_y,
+            "BALL IN HAND every inning. No safeties - opponent always "
+            "places cue ball anywhere.")
+        line_y -= 9
+        c.setFont(FONT_BODY, 7)
         for txt in [
-            "Rack 15 balls: 1 at apex on foot spot, 8 in center, others random. Break with cue ball above the head string.",
-            "Hit the lowest-numbered ball first every shot. Any ball pocketed legally scores 1 point. Slop counts.",
-            "Fouls (-1 pt): scratch, no rail after contact, wrong-ball-first, ball off table, jump-shot on cue ball.",
-            "First to the goal wins. Extra balls in the winning rack may be recorded to a higher final score.",
+            "Rack: 1 at apex on foot spot, 8 in center, others random. Break with cue ball above the head string.",
+            "Hit lowest-numbered ball first every shot. Any ball pocketed legally scores 1 point. Slop counts.",
+            "Fouls (-1 pt, score can go negative): scratch, no-rail, wrong-ball-first, ball off table, jump on cue ball.",
+            "First to goal wins. Balls made on break count for breaker (spotted on break foul). Play passes after break.",
         ]:
             c.drawString(left_x, line_y, txt)
             line_y -= 9

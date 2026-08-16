@@ -1,5 +1,5 @@
 """
-Build the K-Ball / 15-Ball Rotation score-sheet guide PDF.
+Build the 15-Ball Rotation score-sheet guide PDF.
 Layout: 8.5x11" portrait. Top ~55% is a filled sample sheet; bottom is callouts.
 """
 import os
@@ -10,7 +10,7 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 
 # ---------------- Font registration ----------------
-FONT_DIR = "/tmp/kball_fonts"
+FONT_DIR = "/tmp/15ball_fonts"
 os.makedirs(FONT_DIR, exist_ok=True)
 
 def _download(url, dest):
@@ -72,9 +72,9 @@ MARGIN = 0.5 * inch
 
 def build(out_path):
     c = canvas.Canvas(out_path, pagesize=letter)
-    c.setTitle("K-Ball Score-Sheet Guide")
+    c.setTitle("15-Ball Rotation Score-Sheet Guide")
     c.setAuthor("Perplexity Computer")
-    c.setSubject("Columbia Cue Club - How to fill out the K-Ball / 15-Ball Rotation score sheet")
+    c.setSubject("Columbia Cue Club - How to fill out the 15-Ball Rotation score sheet")
 
     draw_page_header(c)
     sheet_bounds = draw_sample_sheet(c)
@@ -92,7 +92,7 @@ def draw_page_header(c):
 
     c.setFillColorRGB(1,1,1)
     c.setFont(FONT_DISPLAY, 20)
-    c.drawString(MARGIN, PAGE_H - 0.46*inch, "K-Ball / 15-Ball Rotation \u2014 Score-Sheet Guide")
+    c.drawString(MARGIN, PAGE_H - 0.46*inch, "15-Ball Rotation \u2014 Score-Sheet Guide")
 
     c.setFont(FONT_BODY, 9.5)
     c.setFillColorRGB(0.85, 0.87, 0.95)
@@ -120,7 +120,7 @@ def draw_star(c, cx, cy, r):
 
 # ---------------- Sample sheet ----------------
 def draw_sample_sheet(c):
-    """Draw a filled sample K-Ball sheet in the top ~55% of the page.
+    """Draw a filled sample 15-Ball Rotation sheet in the top ~55% of the page.
     Returns (x, y, w, h) bounds so callouts can point at things."""
     top    = PAGE_H - 0.85*inch
     left   = MARGIN
@@ -138,7 +138,7 @@ def draw_sample_sheet(c):
     y = top - 0.3*inch
     c.setFillColorRGB(*NAVY)
     c.setFont(FONT_DISPLAY, 12)
-    c.drawCentredString(left + width/2, y, "15-Ball Rotation (K-Ball)")
+    c.drawCentredString(left + width/2, y, "15-Ball Rotation")
     y -= 0.16*inch
     c.setFillColorRGB(*MUTED)
     c.setFont(FONT_SEMI, 8)
@@ -471,12 +471,12 @@ def draw_footer(c):
 
     c.setFont(FONT_BODY, 7.5); c.setFillColorRGB(*MUTED)
     c.drawString(MARGIN, MARGIN + 0.10*inch,
-                 "Scorekeeping app: ColumbiaCueClub.com/tournaments  |  K-Ball scores each ball 1 point.")
+                 "Scorekeeping app: ColumbiaCueClub.com/tournaments  |  15-Ball Rotation scores each ball 1 point.")
     c.drawRightString(PAGE_W - MARGIN, MARGIN + 0.10*inch,
                       "Score-Sheet Guide v1")
 
 
 if __name__ == "__main__":
-    out = "/home/user/workspace/kball-scoresheet/docs/score-sheet-guide.pdf"
+    out = "/home/user/workspace/kball-scoresheet/docs/15ball-guide.pdf"
     build(out)
     print(f"Wrote {out}")

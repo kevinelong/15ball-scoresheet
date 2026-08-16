@@ -1,5 +1,5 @@
 """
-K-Ball Paper Score-Sheet - 2-up landscape variant
+15-Ball Rotation Paper Score-Sheet - 2-up landscape variant
 
 Prints TWO complete blank score sheets side-by-side on a single letter
 page in LANDSCAPE orientation. Cuts paper consumption in half at the
@@ -7,10 +7,10 @@ scorekeeper desk when a tournament is generating many matches.
 
 Each half-page sheet is 5.5" wide x 8.5" tall - a taller/narrower aspect
 than the 1-up version, but with all the same self-teaching content
-(HOW TO SCORE strip, K-BALL RULES SUMMARY block, and WPA QR code).
+(HOW TO SCORE strip, 15-BALL ROTATION RULES SUMMARY block, and QR code).
 
-Run:    python3 docs/build_paper_sheet_2up.py
-Output: docs/paper-score-sheet-2up.pdf
+Run:    python3 docs/build_15ball_paper_sheet_2up.py
+Output: docs/15ball-paper-sheet-2up.pdf
 """
 from __future__ import annotations
 import os
@@ -29,19 +29,19 @@ from _scoresheet_draw import (  # noqa: E402
     MARGIN,
 )
 
-OUT = os.path.join(HERE, "paper-score-sheet-2up.pdf")
+OUT = os.path.join(HERE, "15ball-paper-sheet-2up.pdf")
 
 
 def build(out_path):
     PAGE_W, PAGE_H = landscape(letter)  # 11" x 8.5"
     c = canvas.Canvas(out_path, pagesize=landscape(letter))
     c.setAuthor("Perplexity Computer")
-    c.setTitle("K-Ball Blank Paper Score Sheet (2-up)")
+    c.setTitle("15-Ball Rotation Blank Paper Score Sheet (2-up)")
     c.setSubject(
-        "Two blank K-Ball score sheets side-by-side on landscape letter. "
+        "Two blank 15-Ball Rotation score sheets side-by-side on landscape letter. "
         "Fold or cut along the middle to hand out to two matches at once."
     )
-    c.setCreator("kball-scoresheet docs/build_paper_sheet_2up.py")
+    c.setCreator("15ball-scoresheet docs/build_15ball_paper_sheet_2up.py")
 
     # Layout: 2 columns, small gutter between, matching outer margins.
     footer_h = 12
@@ -76,7 +76,7 @@ def build(out_path):
     c.drawString(
         MARGIN,
         MARGIN - 8,
-        "ColumbiaCueClub.com  -  K-Ball / 15-Ball Rotation blank score sheet (2-up landscape)",
+        "ColumbiaCueClub.com  -  15-Ball Rotation blank score sheet (2-up landscape)",
     )
     c.drawRightString(PAGE_W - MARGIN, MARGIN - 8, "Blank Sheet 2-up v1")
 
