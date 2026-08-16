@@ -56,7 +56,13 @@ def draw_star(c, x, y, r):
     c.drawPath(p, fill=1, stroke=0)
 
 def draw_ball(c, x, y, num, filled=False, r=5.4):
-    """Ball marker: filled black circle with white number, or outlined circle with black number."""
+    """Ball marker: filled black circle with white number, or outlined circle with black number.
+
+    The outlined variant is meant to be MARKED INSIDE by the scorer (dot, slash,
+    or X). That means the circle should be visibly larger than the numeral so
+    there is room for the mark; we cap the numeral size below the radius rather
+    than letting it grow proportionally.
+    """
     c.setLineWidth(0.9)
     c.setStrokeColorRGB(*BLACK)
     if filled:
@@ -67,10 +73,10 @@ def draw_ball(c, x, y, num, filled=False, r=5.4):
         c.setFillColorRGB(*WHITE)
         c.circle(x, y, r, stroke=1, fill=1)
         c.setFillColorRGB(*BLACK)
-    # Keep the numeral comfortably inside the smallest responsive cells.
-    # At the 2-up size the circle is intentionally compact, so scale the
-    # numeral slightly rather than allowing it to touch the outline.
-    num_size = min(6.2, max(5.3, r * 1.75))
+    # Numeral stays small so a hand mark fits comfortably inside the circle.
+    # Floor 5.3pt so single digits stay legible; ceiling ~7.5pt so a 10pt+
+    # circle still reads as "empty circle with a small number in it".
+    num_size = min(7.5, max(5.3, r * 0.85))
     c.setFont(FONT_BOLD, num_size)
     c.drawCentredString(x, y - num_size * 0.32, str(num))
 
@@ -205,9 +211,10 @@ def draw_scoresheet(c, left, top, width, height):
                 c.drawCentredString(sx + stat_w/2, stats_hdr_y - 12, l1)
     y0 -= SHEET_STATS_HDR_H
 
-    # Racks
+    # Racks - ball circles scale with cell size so the sheet fills whatever
+    # vertical room is available (single-page = big circles for hand marking).
     ball_cell_h = (rack_h - 4) / ball_rows
-    ball_radius = min(5.0, ball_cell_h * 0.36, ball_cell_w * 0.36)
+    ball_radius = min(12.0, ball_cell_h * 0.40, ball_cell_w * 0.40)
     for r in range(NUM_RACKS):
         r_top = y0 - r * rack_h
         r_bot = r_top - rack_h
@@ -263,20 +270,19 @@ def draw_scoresheet(c, left, top, width, height):
     c.setFont(FONT_BOLD, 6)
     c.drawRightString(x0 + inner_w, tot_hdr_y - 6, "left card = PLAYER A   -   right card = PLAYER B")
 
+    # Bottom totals cards get the full page width so single-line labels fit
+    # comfortably. No two-line stacking needed here (unlike the tight per-rack
+    # stats strip above).
     tcard_w = (inner_w - gap) / 2
     col_w_labels = (tcard_w - 12) / 3
-    tot_labels = [("HIGH", "RUN"), ("FOULS", ""), ("FINAL GAME", "TOTAL")]
-    label_y = tot_hdr_y - 8  # start just below the PLAYER TOTALS title strip
-    c.setFont(FONT_BOLD, 5.5)
+    tot_labels = ["HIGH RUN", "FOULS", "FINAL GAME TOTAL"]
+    label_y = tot_hdr_y - 8
+    c.setFont(FONT_BOLD, 7)
     for i in range(2):
         tx = x0 + i * (tcard_w + gap)
-        for j, (l1, l2) in enumerate(tot_labels):
+        for j, lbl in enumerate(tot_labels):
             cx = tx + 6 + j * col_w_labels
-            if l2:
-                c.drawCentredString(cx + col_w_labels/2, label_y - 5, l1)
-                c.drawCentredString(cx + col_w_labels/2, label_y - 11, l2)
-            else:
-                c.drawCentredString(cx + col_w_labels/2, label_y - 8, l1)
+            c.drawCentredString(cx + col_w_labels/2, label_y - 8, lbl)
     y0 -= SHEET_TOTALS_HDR_H
 
     tot_row_y = y0
@@ -407,7 +413,7 @@ def build(out_path):
 
     callouts = [
         (1, "Write player name & mark goal box",  0.22, 0.16),
-        (2, "Circle each ball as it's pocketed",  0.30, 0.36),
+        (2, "Mark each ball as it's pocketed",    0.30, 0.36),
         (3, "Write # of fouls this rack",                    0.62, 0.42),
         (4, "RACK TOTAL = balls made - fouls",               0.72, 0.42),
         (5, "GAME SUBTOTAL = last SUBTOTAL + this RACK",     0.94, 0.42),
@@ -444,11 +450,11 @@ def build(out_path):
         # Body text - short explanation
         bodies = {
             1: "Write the player's name on the NAME line. Check the 25 (rec) or 50 (pro) box, or write a custom goal on OTHER.",
-            2: "When a player pockets a ball, circle its number in that rack row. Empty circle = not pocketed. Balls are worth 1 point each.",
+            2: "When a player pockets a ball, mark inside its circle in that rack row (a dot, slash, or X - whatever's fastest). Empty circle = not pocketed. Balls are worth 1 point each.",
             3: "Write the number of fouls that player committed during this rack in the FOULS cell. Foul = -1 point.",
-            4: "RACK TOTAL at the end of each rack: count balls made (circled), subtract fouls, write the result. Like one line's amount in a checkbook.",
+            4: "RACK TOTAL at the end of each rack: count the balls you marked, subtract fouls, write the result. Like one line's amount in a checkbook.",
             5: "GAME SUBTOTAL = the previous rack's GAME SUBTOTAL + this rack's RACK TOTAL. First rack: GAME SUBTOTAL = RACK TOTAL. It's a running balance, like a checkbook. First player to their goal wins.",
-            6: "HIGH RUN = the most balls circled in a single rack for that player. Write once, at end of match.",
+            6: "HIGH RUN = the most balls marked in a single rack for that player. Write once, at end of match.",
             7: "Check WINNER box for the player who reached their goal first. Both players sign to certify.",
             8: "Keep a photocopy in the match binder; the paper original goes to the Bracket Desk for entry into the app.",
         }
