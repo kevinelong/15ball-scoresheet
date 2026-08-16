@@ -206,31 +206,73 @@ body {
   text-align: right;
 }
 .rackstats label { display: block; }
+/* Cell legend under sheet title */
+.legend {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+.lg-swatch {
+  display: inline-block;
+  width: 18px;
+  height: 12px;
+  border-radius: 3px;
+  vertical-align: middle;
+}
+.lg-swatch.lg-edit { border: 1.6px solid var(--red); background: #fff; }
+.lg-swatch.lg-calc { border: 1.4px dashed var(--navy); background: #eef3fb; }
+.lg-sep { color: var(--line-strong); }
+
 .rackstats input {
   width: 96px;
-  padding: 3px 6px;
-  font-size: 13px;
+  padding: 4px 6px;
+  font-size: 14px;
   text-align: right;
-  border: 1.4px solid var(--line);
   border-radius: 4px;
-  background: #fff;
   color: var(--ink);
 }
+/* Editable numeric inputs: bright white with clear focus */
+.rackstats input:not([readonly]) {
+  background: #fff;
+  border: 1.6px solid var(--red);
+  box-shadow: 0 0 0 1px rgba(198,40,45,0.08);
+  font-weight: 700;
+  cursor: text;
+}
+.rackstats input:not([readonly]):hover {
+  border-color: var(--red-dark, #a01f24);
+  background: #fffbfa;
+}
+.rackstats input:not([readonly]):focus {
+  outline: 3px solid rgba(198,40,45,0.35);
+  outline-offset: 0;
+  background: #fff;
+}
+/* Calculated (readonly) cells: no border, dashed under-line to look like a display */
 .rackstats input[readonly] {
   background: #f5f7fc;
   color: var(--navy);
   font-weight: 700;
-  border-color: var(--line-strong);
+  border: 1.4px dashed var(--line-strong);
+  cursor: default;
 }
 .rackstats label.racknet input[readonly] {
   background: #fff7e6;
   border-color: #d89b3d;
+  border-style: dashed;
   color: #7a4a00;
 }
 .rackstats label.running input[readonly] {
   background: var(--navy);
   color: #fff;
   border-color: var(--navy);
+  border-style: solid;  /* running is the KEY output, keep solid emphasis */
   font-size: 15px;
 }
 
@@ -261,18 +303,35 @@ body {
   padding: 6px;
   font-size: 20px;
   text-align: center;
-  border: 1.4px solid var(--line);
   border-radius: 4px;
   color: var(--ink);
-  background: #fff;
 }
+/* Editable HIGH RUN: red border to signal "you type here" */
+.trow input:not([readonly]) {
+  background: #fff;
+  border: 1.6px solid var(--red);
+  font-weight: 800;
+  cursor: text;
+}
+.trow input:not([readonly]):hover { background: #fffbfa; }
+.trow input:not([readonly]):focus {
+  outline: 3px solid rgba(198,40,45,0.35);
+  outline-offset: 0;
+}
+/* Calculated fouls/final totals: dashed border, non-interactive look */
 .trow input[readonly] {
   background: #eef3fb;
-  border-color: var(--navy);
+  border: 1.4px dashed var(--navy);
   color: var(--navy);
   font-weight: 800;
+  cursor: default;
 }
-.trow .final input { font-weight: 800; }
+.trow .final input[readonly] {
+  background: var(--navy);
+  color: #fff;
+  border-style: solid;   /* FINAL is the key output; keep solid */
+  font-weight: 900;
+}
 
 .sigblock { margin-top: 14px; padding: 10px 6px 4px; }
 .sigttl { font-weight: 800; letter-spacing: 2px; color: var(--navy); text-align: center; font-size: 12px; }

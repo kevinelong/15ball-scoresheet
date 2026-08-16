@@ -95,14 +95,24 @@
     return app.tournaments.find((t) => t.id === app.activeId) || null;
   }
 
+  // Local-timezone date string in YYYY-MM-DD (avoids UTC drift from toISOString).
+  function todayLocalYMD() {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  }
+
   function makeTournament(name, game) {
     const gid = GAMES[game] ? game : "kball";
     return {
       id: newId(),
       name: name || "New Tournament",
-      date: "",
+      date: todayLocalYMD(),
+      startTime: "14:00",
       game: gid,
-      format: "double",
+      format: "single",
       raceTo: GAMES[gid].defaultRaceTo,
       createdAt: Date.now(),
       updatedAt: Date.now(),
@@ -147,7 +157,7 @@
         if (parsed && parsed.v === 2) {
           const t = makeTournament(parsed.tournament?.name || "Imported Tournament", parsed.tournament?.game || "kball");
           t.date = parsed.tournament?.date || "";
-          t.format = parsed.tournament?.format || "double";
+          t.format = parsed.tournament?.format || "single";
           t.raceTo = parsed.tournament?.raceTo || GAMES[t.game].defaultRaceTo;
           t.participants = parsed.participants || [];
           t.bracket = parsed.bracket || null;
@@ -306,7 +316,7 @@
         else if (parsed && parsed.v === 2) {
           t = makeTournament(parsed.tournament?.name || "Imported");
           t.date = parsed.tournament?.date || "";
-          t.format = parsed.tournament?.format || "double";
+          t.format = parsed.tournament?.format || "single";
           t.raceTo = parsed.tournament?.raceTo || 25;
           t.participants = parsed.participants || [];
           t.bracket = parsed.bracket || null;
@@ -413,7 +423,7 @@
         <div class="rackstats">
           <label>Balls<input type="number" min="0" max="15" readonly
                               data-total data-rack="${rack}" data-side="${side}" /></label>
-          <label>Fouls<input type="number" min="0" step="1"
+          <label>Fouls<input type="number" inputmode="numeric" pattern="[0-9]*" min="0" step="1" enterkeyhint="done"
                               data-foul data-rack="${rack}" data-side="${side}" /></label>
           <label class="racknet">Rack Net<input type="number" readonly
                                      data-racknet data-rack="${rack}" data-side="${side}" /></label>
@@ -563,11 +573,13 @@
     if (!t) return;
     const g = gameOf(t);
     $("#tournamentTitle").textContent = t.name;
-    $("#tournamentTagline").textContent = `${g.name} \u00b7 ${t.format === "double" ? "Double Final" : "Single Final"} \u00b7 ${g.raceLabel} ${t.raceTo}${t.date ? " \u00b7 " + t.date : ""}`;
+    const dt = [t.date, t.startTime].filter(Boolean).join(" ").trim();
+    $("#tournamentTagline").textContent = `${g.name} \u00b7 ${t.format === "double" ? "Double Final" : "Single Final"} \u00b7 ${g.raceLabel} ${t.raceTo}${dt ? " \u00b7 " + dt : ""}`;
     $("#tName").value = t.name || "";
     $("#tDate").value = t.date || "";
+    $("#tTime").value = t.startTime || "";
     $("#tGame").value = t.game || "kball";
-    $("#tFormat").value = t.format || "double";
+    $("#tFormat").value = t.format || "single";
     $("#tRaceTo").value = t.raceTo || g.defaultRaceTo;
     // Sync game-driven UI text
     $("#tGameHint").textContent = g.scoringHint;
@@ -971,9 +983,10 @@
     t.participants = list;
     t.name = $("#tName").value || t.name;
     t.date = $("#tDate").value || t.date;
+    t.startTime = $("#tTime").value || t.startTime || "";
     const chosenGame = $("#tGame").value;
     if (GAMES[chosenGame]) t.game = chosenGame;
-    t.format = $("#tFormat").value || "double";
+    t.format = $("#tFormat").value || "single";
     t.raceTo = parseInt($("#tRaceTo").value, 10) || gameOf(t).defaultRaceTo;
     t.bracket = window.BracketEngine.build(list, { format: t.format });
     t.sheets = {};

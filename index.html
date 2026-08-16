@@ -69,6 +69,10 @@
           <input type="date" id="tDate" />
         </label>
         <label class="field">
+          <span>Start Time</span>
+          <input type="time" id="tTime" step="900" />
+        </label>
+        <label class="field">
           <span>Game</span>
           <select id="tGame">
             <option value="kball">K-Ball / 15-Ball Rotation</option>
@@ -90,7 +94,7 @@
         </label>
         <label class="field">
           <span id="tRaceLabel">Race To</span>
-          <input type="number" id="tRaceTo" min="1" max="999" value="25" />
+          <input type="number" id="tRaceTo" inputmode="numeric" pattern="[0-9]*" min="1" max="999" value="25" />
           <small id="tRaceHint">Points target per match (25 rec / 35 pro).</small>
         </label>
       </div>
@@ -139,6 +143,11 @@
           <header class="hdr">
             <h1 id="sheetGameTitle">15-Ball Rotation (K-Ball)</h1>
             <div class="subhdr"><span class="star">&#9733;</span> MATCH SCORE SHEET <span class="star">&#9733;</span></div>
+            <div class="legend" aria-label="Cell legend">
+              <span class="lg-swatch lg-edit"></span> <span>red = you edit</span>
+              <span class="lg-sep">|</span>
+              <span class="lg-swatch lg-calc"></span> <span>dashed = auto-calculated</span>
+            </div>
           </header>
 
           <section class="players">
@@ -150,7 +159,7 @@
                   <label><input type="radio" name="goalA" value="25" checked /><span>25</span></label>
                   <label><input type="radio" name="goalA" value="50" /><span>50</span></label>
                   <label class="other"><input type="radio" name="goalA" value="other" /><span>OTHER</span>
-                    <input type="number" min="1" max="999" step="1" data-field="goalAOther" aria-label="Other goal for Player A" />
+                    <input type="number" inputmode="numeric" pattern="[0-9]*" min="1" max="999" step="1" data-field="goalAOther" aria-label="Other goal for Player A" />
                   </label>
                 </div>
               </div>
@@ -163,7 +172,7 @@
                   <label><input type="radio" name="goalB" value="25" checked /><span>25</span></label>
                   <label><input type="radio" name="goalB" value="50" /><span>50</span></label>
                   <label class="other"><input type="radio" name="goalB" value="other" /><span>OTHER</span>
-                    <input type="number" min="1" max="999" step="1" data-field="goalBOther" aria-label="Other goal for Player B" />
+                    <input type="number" inputmode="numeric" pattern="[0-9]*" min="1" max="999" step="1" data-field="goalBOther" aria-label="Other goal for Player B" />
                   </label>
                 </div>
               </div>
@@ -176,7 +185,7 @@
             <div class="tcard">
               <h3>PLAYER A TOTALS</h3>
               <div class="trow">
-                <label>HIGH RUN<input type="number" min="0" max="120" step="1" data-field="hrA" /></label>
+                <label>HIGH RUN<input type="number" inputmode="numeric" pattern="[0-9]*" min="0" max="120" step="1" enterkeyhint="done" data-field="hrA" /></label>
                 <label>FOULS<input type="number" min="0" step="1" data-field="foulsA" readonly /></label>
                 <label class="final">FINAL TOTAL<input type="number" data-field="finalA" readonly /></label>
               </div>
@@ -184,7 +193,7 @@
             <div class="tcard">
               <h3>PLAYER B TOTALS</h3>
               <div class="trow">
-                <label>HIGH RUN<input type="number" min="0" max="120" step="1" data-field="hrB" /></label>
+                <label>HIGH RUN<input type="number" inputmode="numeric" pattern="[0-9]*" min="0" max="120" step="1" enterkeyhint="done" data-field="hrB" /></label>
                 <label>FOULS<input type="number" min="0" step="1" data-field="foulsB" readonly /></label>
                 <label class="final">FINAL TOTAL<input type="number" data-field="finalB" readonly /></label>
               </div>
@@ -339,7 +348,7 @@
         </label>
         <label class="field-block">
           <span>Fargo rating (optional)</span>
-          <input type="number" id="lateEntryFargo" min="0" max="999" step="1" placeholder="e.g. 476" />
+          <input type="number" id="lateEntryFargo" inputmode="numeric" pattern="[0-9]*" min="0" max="999" step="1" placeholder="e.g. 476" />
         </label>
         <fieldset class="field-block">
           <legend>Where should they enter the bracket?</legend>
