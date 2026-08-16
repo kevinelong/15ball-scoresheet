@@ -128,7 +128,7 @@ SHEET_TITLE_H      = 24     # big title (subtitle retired; HOW TO SCORE covers t
 SHEET_INSTR_H      = 52     # 6-step mini-instructions strip (self-contained sheet)
 SHEET_INSTR_MARGIN = 6      # breathing room on each side of the strip
 SHEET_INSTR_GAP    = 10     # gap between strip and rules block (reclaimed from subtitle)
-SHEET_RULES_H      = 78     # rules-comparison block + QR to WPA rules PDF
+SHEET_RULES_H      = 56     # K-Ball rules summary block + QR to our rules PDF
 SHEET_RULES_GAP    = 10     # gap between rules block and player-header card
 SHEET_PHDR_H       = 46     # PLAYER A/B name+goal card
 SHEET_PHDR_GAP     = 8
@@ -251,12 +251,13 @@ def draw_scoresheet(c, left, top, width, height, with_instructions=True):
         # Advance past the strip AND the breathing gap before the rules block.
         y0 -= SHEET_INSTR_H + SHEET_INSTR_GAP
 
-    # === Rules-comparison block + WPA rules QR (self-contained sheet) ===
-    # A two-column block:
-    #   Left:  K-BALL rules summary + micro-comparison to 10-ball and 14.1
-    #          (the two WPA disciplines K-Ball borrows from).
-    #   Right: QR code jumping straight to the WPA 10-Ball section, with
-    #          a plain-text URL below for people who prefer to type it.
+    # === K-Ball rules summary + QR to our own rules PDF ===
+    # Two-column block:
+    #   Left:  K-BALL rules summary - K-Ball-only, no cross-discipline
+    #          references. The full K-Ball rulebook lives in the linked
+    #          PDF.
+    #   Right: QR code linking to our K-Ball rules PDF hosted on the site,
+    #          with a plain-text short URL below.
     # The block is skipped when the sheet is embedded in the annotated
     # guide (with_instructions=False) so the guide's callouts drive the
     # explanation instead.
@@ -270,70 +271,43 @@ def draw_scoresheet(c, left, top, width, height, with_instructions=True):
         c.rect(rules_x, rules_top - rules_h, rules_w, rules_h,
                stroke=1, fill=0)
         inner_pad_x = 10
-        inner_pad_top = 10
+        inner_pad_top = 8
 
-        # --- Right column: QR + URLs ---
-        # Right-align the QR block so caption text has room on the left.
-        qr_size = 58
+        # --- Right column: QR + URLs (points at OUR K-Ball rules PDF) ---
+        # Reserve 8pt below the QR for the caption; QR is bottom-aligned
+        # to that reserved space.
+        caption_h = 8
+        qr_size = SHEET_RULES_H - 2 * inner_pad_top - caption_h
+        # Cap at 44pt so the QR does not eat the whole right column.
+        qr_size = min(qr_size, 44)
         qr_x = rules_x + rules_w - inner_pad_x - qr_size
         qr_y_bottom = rules_top - inner_pad_top - qr_size
         draw_qr(c, qr_x, qr_y_bottom, qr_size,
-                "https://wpapool.com/wp-content/uploads/2026/01/2026.01.02-WPA-Rules.pdf#page=24")
-        # Caption directly under the QR.
+                "https://kevinelong.github.io/kball-scoresheet/docs/kball-rules.pdf")
+        # Caption BELOW the QR, clear of the modules.
         c.setFont(FONT_BOLD, 6.5); c.setFillColorRGB(*BLACK)
-        c.drawCentredString(qr_x + qr_size/2, qr_y_bottom - 8, "Scan: WPA 10-Ball rules")
-        c.setFont(FONT_BODY, 5.5); c.setFillColorRGB(*BLACK)
-        c.drawCentredString(qr_x + qr_size/2, qr_y_bottom - 15, "wpapool.com/rules/")
+        c.drawCentredString(qr_x + qr_size/2, qr_y_bottom - caption_h + 1,
+                            "Scan: full K-Ball rules")
 
-        # --- Left column: rules summary ---
-        # Reserve space for the QR + a small gap.
+        # --- Left column: K-Ball-only rules summary ---
         left_x = rules_x + inner_pad_x
         left_w = qr_x - left_x - 10
 
         # Title line
         c.setFont(FONT_BOLD, 8.5); c.setFillColorRGB(*BLACK)
         c.drawString(left_x, rules_top - inner_pad_top - 4, "K-BALL RULES SUMMARY")
-        # Underlying idea
-        c.setFont(FONT_BODY, 7); c.setFillColorRGB(*BLACK)
-        line_y = rules_top - inner_pad_top - 14
-        c.drawString(left_x, line_y,
-                     "K-Ball is a house mashup of 10-Ball (rotation, lowest-ball-first) and 14.1 Continuous Pool (1 pt/ball, race to N).")
-        line_y -= 9
-        c.drawString(left_x, line_y,
-                     "Hit the lowest-numbered ball first (rotation). Any ball pocketed legally scores 1 point. First to the goal wins.")
-        line_y -= 9
-        c.drawString(left_x, line_y,
-                     "Fouls (-1 pt each): scratch, no rail after contact, wrong-ball-first, jump-shot on cue ball, ball off table.")
-        line_y -= 12
 
-        # Micro-comparison table: 3 rows x 4 cols
-        c.setFont(FONT_BOLD, 6.5); c.setFillColorRGB(*BLACK)
-        col_labels = ["", "BALLS", "WIN CONDITION", "CALL SHOTS?"]
-        # Column x positions inside left column
-        col_x = [
-            left_x,
-            left_x + 62,
-            left_x + 108,
-            left_x + 232,
-        ]
-        for cx, lbl in zip(col_x, col_labels):
-            c.drawString(cx, line_y, lbl)
-        line_y -= 8
-        c.setFont(FONT_BOLD, 6.5)
-        rows = [
-            ("K-Ball", "1-15", "first to race-to-N goal", "No (rotation only)"),
-            ("10-Ball", "1-10", "legally pocket the 10", "Yes"),
-            ("14.1",    "1-15", "first to race-to-N goal", "Yes"),
-        ]
-        c.setFont(FONT_BODY, 6.5); c.setFillColorRGB(*BLACK)
-        for name, balls, win, call in rows:
-            c.setFont(FONT_BOLD, 6.5); c.setFillColorRGB(*BLACK)
-            c.drawString(col_x[0], line_y, name)
-            c.setFont(FONT_BODY, 6.5); c.setFillColorRGB(*BLACK)
-            c.drawString(col_x[1], line_y, balls)
-            c.drawString(col_x[2], line_y, win)
-            c.drawString(col_x[3], line_y, call)
-            line_y -= 7.5
+        # Four terse K-Ball-only lines. No mention of 10-Ball or 14.1.
+        c.setFont(FONT_BODY, 7); c.setFillColorRGB(*BLACK)
+        line_y = rules_top - inner_pad_top - 13
+        for txt in [
+            "Rack 15 balls: 1 at apex on foot spot, 8 in center, others random. Break with cue ball above the head string.",
+            "Hit the lowest-numbered ball first every shot. Any ball pocketed legally scores 1 point. Slop counts.",
+            "Fouls (-1 pt): scratch, no rail after contact, wrong-ball-first, ball off table, jump-shot on cue ball.",
+            "First to the goal wins. Extra balls in the winning rack may be recorded to a higher final score.",
+        ]:
+            c.drawString(left_x, line_y, txt)
+            line_y -= 9
 
         y0 -= SHEET_RULES_H + SHEET_RULES_GAP
 
