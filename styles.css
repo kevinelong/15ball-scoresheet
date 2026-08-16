@@ -306,7 +306,8 @@ body {
   border-radius: 4px;
   color: var(--ink);
 }
-/* Editable HIGH RUN: red border to signal "you type here" */
+/* Editable inputs in totals cards (currently none - all fields readonly).
+   Retained selector in case an editable total is ever reintroduced. */
 .trow input:not([readonly]) {
   background: #fff;
   border: 1.6px solid var(--red);

@@ -457,14 +457,13 @@
 
   function recomputeSheet() {
     ["A", "B"].forEach((side) => {
-      let running = 0, totalFouls = 0;
+      let running = 0;
       for (let r = 1; r <= RACKS; r++) {
         const on = $$(`#sheet .ball.on[data-rack="${r}"][data-side="${side}"]`).length;
         const foulEl = $(`#sheet input[data-foul][data-rack="${r}"][data-side="${side}"]`);
         const rackFouls = parseInt(foulEl && foulEl.value, 10) || 0;
         const rackNet = on - rackFouls;
         running += rackNet;
-        totalFouls += rackFouls;
         const t = $(`#sheet input[data-total][data-rack="${r}"][data-side="${side}"]`);
         if (t) t.value = on || "";
         const netEl = $(`#sheet input[data-racknet][data-rack="${r}"][data-side="${side}"]`);
@@ -474,8 +473,6 @@
       }
       const finalEl = $(`#sheet input[data-field="final${side}"]`);
       if (finalEl) finalEl.value = running;
-      const foulsEl = $(`#sheet input[data-field="fouls${side}"]`);
-      if (foulsEl) foulsEl.value = totalFouls || "";
     });
     const t = activeT();
     const target = t ? t.raceTo : 25;
@@ -499,8 +496,6 @@
       goalAOther: $(`#sheet input[data-field="goalAOther"]`).value,
       goalB: ($(`#sheet input[name="goalB"]:checked`) || {}).value || "25",
       goalBOther: $(`#sheet input[data-field="goalBOther"]`).value,
-      hrA: $(`#sheet input[data-field="hrA"]`).value,
-      hrB: $(`#sheet input[data-field="hrB"]`).value,
       sigA: $(`#sheet input[data-field="sigA"]`).value,
       sigB: $(`#sheet input[data-field="sigB"]`).value,
       winner: ($(`#sheet input[name="winner"]:checked`) || {}).value || "",
@@ -550,8 +545,6 @@
 
     if (!sheet) { recomputeSheet(); return; }
 
-    if (sheet.hrA) $(`#sheet input[data-field="hrA"]`).value = sheet.hrA;
-    if (sheet.hrB) $(`#sheet input[data-field="hrB"]`).value = sheet.hrB;
     if (sheet.sigA) $(`#sheet input[data-field="sigA"]`).value = sheet.sigA;
     if (sheet.sigB) $(`#sheet input[data-field="sigB"]`).value = sheet.sigB;
     if (sheet.goalAOther) $(`#sheet input[data-field="goalAOther"]`).value = sheet.goalAOther;

@@ -86,6 +86,7 @@ def draw_ball(c, x, y, num, filled=False, r=5.4):
 SHEET_PAD          = 8      # inner padding inside the outer border
 SHEET_TITLE_H      = 24     # big title
 SHEET_SUBTITLE_H   = 14     # subtitle line
+SHEET_INSTR_H      = 34     # 6-step mini-instructions strip (self-contained sheet)
 SHEET_PHDR_H       = 46     # PLAYER A/B name+goal card
 SHEET_PHDR_GAP     = 8
 SHEET_RACK_HDR_H   = 14     # "RACK / PLAYER A / PLAYER B" column header
@@ -98,22 +99,31 @@ SHEET_WIN_H        = 0.42 * inch
 NUM_RACKS          = 4
 SHEET_RACK_H_MIN   = 30.5   # each rack row (min); grows to fill available height
 
-def sheet_min_height():
-    """Minimum height the score sheet needs to render without clipping."""
-    return (2*SHEET_PAD + SHEET_TITLE_H + SHEET_SUBTITLE_H + SHEET_PHDR_H
+def sheet_min_height(with_instructions=True):
+    """Minimum height the score sheet needs to render without clipping.
+
+    The mini-instructions strip is included by default (self-contained
+    blank sheet). When the sheet is embedded inside the annotated guide,
+    the surrounding callouts already teach the same steps, so the strip
+    is redundant and can be omitted.
+    """
+    instr = SHEET_INSTR_H if with_instructions else 0
+    return (2*SHEET_PAD + SHEET_TITLE_H + SHEET_SUBTITLE_H + instr
+            + SHEET_PHDR_H
             + 8 + SHEET_RACK_HDR_H + SHEET_STATS_HDR_H
             + NUM_RACKS * SHEET_RACK_H_MIN
             + SHEET_TOTALS_GAP + SHEET_TOTALS_HDR_H + SHEET_TOTALS_H
             + SHEET_WIN_GAP + SHEET_WIN_H)
 
-def draw_scoresheet(c, left, top, width, height):
+def draw_scoresheet(c, left, top, width, height, with_instructions=True):
     """The empty score sheet region (for hand-filling).
 
     Layout is fully responsive: rack row height grows to consume any extra
     vertical space so the content fills `height` without clipping. Requires
-    at least `sheet_min_height()` of vertical room; raises if given less.
+    at least `sheet_min_height(with_instructions)` of vertical room; raises
+    if given less.
     """
-    min_h = sheet_min_height()
+    min_h = sheet_min_height(with_instructions=with_instructions)
     if height < min_h:
         raise ValueError(
             f"draw_scoresheet: height={height:.1f}pt is below min {min_h:.1f}pt"
@@ -130,7 +140,9 @@ def draw_scoresheet(c, left, top, width, height):
     inner_w = width - 2*pad
 
     # Compute rack_h so all rows fit the requested height exactly.
-    fixed_h = (SHEET_TITLE_H + SHEET_SUBTITLE_H + SHEET_PHDR_H + 8
+    instr_reserve = SHEET_INSTR_H if with_instructions else 0
+    fixed_h = (SHEET_TITLE_H + SHEET_SUBTITLE_H + instr_reserve
+               + SHEET_PHDR_H + 8
                + SHEET_RACK_HDR_H + SHEET_STATS_HDR_H
                + SHEET_TOTALS_GAP + SHEET_TOTALS_HDR_H + SHEET_TOTALS_H
                + SHEET_WIN_GAP + SHEET_WIN_H)
@@ -145,6 +157,43 @@ def draw_scoresheet(c, left, top, width, height):
     c.setFont(FONT_BODY, 8)
     c.drawCentredString(left + width/2, y0 - 2, "Columbia Cue Club   -   RACK TOTAL = balls made - fouls   -   GAME SUBTOTAL runs like a checkbook balance")
     y0 -= SHEET_SUBTITLE_H
+
+    # === Mini-instructions strip (self-contained sheet) ===
+    # Six one-liners, so a first-time scorer can fill this sheet without
+    # needing the separate guide. Kept short by design; use two hairline
+    # columns of three steps each. Skipped when the sheet is embedded in
+    # the annotated guide - the callouts there already say the same thing.
+    if with_instructions:
+        instr_top = y0
+        instr_h = SHEET_INSTR_H
+        c.setLineWidth(LINE)
+        c.setStrokeColorRGB(*BLACK)
+        c.rect(x0, instr_top - instr_h, inner_w, instr_h, stroke=1, fill=0)
+        # Section label in the top-left corner of the strip.
+        c.setFont(FONT_BOLD, 6.5); c.setFillColorRGB(*BLACK)
+        c.drawString(x0 + 4, instr_top - 8, "HOW TO SCORE")
+        instr_steps = [
+            (1, "Fill NAME and check goal (25 rec / 50 pro)."),
+            (2, "Mark inside a ball's circle when pocketed (dot/slash/X)."),
+            (3, "Write # of fouls per rack in FOULS."),
+            (4, "RACK TOTAL = balls marked - fouls."),
+            (5, "GAME SUBTOTAL = last SUBTOTAL + this RACK TOTAL."),
+            (6, "First to goal wins. Check WINNER, both sign."),
+        ]
+        col_gap = 10
+        col_w = (inner_w - col_gap - 8) / 2  # 4pt padding inside strip
+        step_line_h = (instr_h - 12) / 3     # 3 rows per column
+        step_top = instr_top - 12            # first step line below section label
+        for i, (n, body) in enumerate(instr_steps):
+            col = i // 3
+            row = i % 3
+            sx = x0 + 4 + col * (col_w + col_gap)
+            sy = step_top - row * step_line_h
+            c.setFont(FONT_BOLD, 6.5); c.setFillColorRGB(*BLACK)
+            c.drawString(sx, sy - 6, f"{n}.")
+            c.setFont(FONT_BODY, 6.5)
+            c.drawString(sx + 9, sy - 6, body)
+        y0 -= SHEET_INSTR_H
 
     # === Player header row (blank lines for name/goal) ===
     y_ph = y0
@@ -258,55 +307,41 @@ def draw_scoresheet(c, left, top, width, height):
     y0 -= NUM_RACKS * rack_h
 
     # === Totals row (empty) ===
+    #
+    # Totals are stripped down to just FINAL GAME TOTAL - the one number that
+    # decides the match. HIGH RUN and per-match FOULS totals were removed:
+    # they don't affect the outcome and were distracting from the number that
+    # does. Per-rack FOULS still live in the rack grid above and roll into
+    # RACK TOTAL / GAME SUBTOTAL as expected.
     y0 -= SHEET_TOTALS_GAP
     tot_h = SHEET_TOTALS_H
-    # "PLAYER TOTALS" section label sits above the cards in its own strip so
-    # nothing touches the card borders below. Two-strip layout:
-    #   strip 1: "PLAYER TOTALS" section title on the left, "A / B" hint right
-    #   strip 2: 2-line column labels above each of the 3 columns
     tot_hdr_y = y0
     c.setFont(FONT_BOLD, 6.5); c.setFillColorRGB(*BLACK)
     c.drawString(x0, tot_hdr_y - 6, "PLAYER TOTALS")
     c.setFont(FONT_BOLD, 6)
     c.drawRightString(x0 + inner_w, tot_hdr_y - 6, "left card = PLAYER A   -   right card = PLAYER B")
 
-    # Bottom totals cards get the full page width so single-line labels fit
-    # comfortably. No two-line stacking needed here (unlike the tight per-rack
-    # stats strip above).
+    # Full-page-wide cards, one big centered FINAL GAME TOTAL label + cell.
     tcard_w = (inner_w - gap) / 2
-    col_w_labels = (tcard_w - 12) / 3
-    tot_labels = ["HIGH RUN", "FOULS", "FINAL GAME TOTAL"]
     label_y = tot_hdr_y - 8
-    c.setFont(FONT_BOLD, 7)
+    c.setFont(FONT_BOLD, 8)
     for i in range(2):
         tx = x0 + i * (tcard_w + gap)
-        for j, lbl in enumerate(tot_labels):
-            cx = tx + 6 + j * col_w_labels
-            c.drawCentredString(cx + col_w_labels/2, label_y - 8, lbl)
+        c.drawCentredString(tx + tcard_w / 2, label_y - 8, "FINAL GAME TOTAL")
     y0 -= SHEET_TOTALS_HDR_H
 
+    # Single big thick-bordered cell per card (no more 3-column split).
     tot_row_y = y0
+    cell_h = tot_h - 8
+    cell_w = tcard_w - 24  # generous padding inside each card
     for i in range(2):
         tx = x0 + i * (tcard_w + gap)
         c.setLineWidth(LINE_MED)
         c.rect(tx, tot_row_y - tot_h, tcard_w, tot_h, stroke=1, fill=0)
-        col_w = (tcard_w - 12) / 3
-        for j, (is_edit, is_final) in enumerate([
-            (True,  False),   # HIGH RUN - editable
-            (False, False),   # FOULS    - calc
-            (False, True),    # FINAL    - key output, thick border
-        ]):
-            cx = tx + 6 + j * col_w
-            cy = tot_row_y - tot_h + 4
-            cell_h = tot_h - 8
-            if is_edit:
-                c.setDash(); c.setLineWidth(LINE_MED)
-            elif is_final:
-                c.setDash(); c.setLineWidth(LINE_STRONG)
-            else:
-                c.setDash(2, 2); c.setLineWidth(LINE)
-            c.rect(cx + 2, cy, col_w - 4, cell_h, stroke=1, fill=0)
-            c.setDash()
+        cx = tx + (tcard_w - cell_w) / 2
+        cy = tot_row_y - tot_h + 4
+        c.setLineWidth(LINE_STRONG)
+        c.rect(cx, cy, cell_w, cell_h, stroke=1, fill=0)
 
     y0 = tot_row_y - tot_h - SHEET_WIN_GAP
 
@@ -396,7 +431,10 @@ def build(out_path):
     sheet_w = PAGE_W - 2 * MARGIN
     sheet_h = 5.3 * inch
     sheet_left = MARGIN
-    draw_scoresheet(c, sheet_left, sheet_top, sheet_w, sheet_h)
+    # The annotated guide's callouts already teach these six steps, so
+    # skip the redundant mini-instructions strip inside the embedded sheet.
+    draw_scoresheet(c, sheet_left, sheet_top, sheet_w, sheet_h,
+                    with_instructions=False)
 
     sheet_bottom = sheet_top - sheet_h
 
@@ -411,15 +449,16 @@ def build(out_path):
         return (sheet_inner_left + fx * sheet_inner_w,
                 sheet_inner_top  - fy * sheet_inner_h)
 
+    # Callout list is now 6 items after removing 'Enter High Run at end
+    # of match' - the HIGH RUN column was pulled from the totals row
+    # (see totals section above). Grid below is 2 x 3.
     callouts = [
-        (1, "Write player name & mark goal box",  0.22, 0.16),
-        (2, "Mark each ball as it's pocketed",    0.30, 0.36),
+        (1, "Write player name & mark goal box",             0.22, 0.16),
+        (2, "Mark each ball as it's pocketed",               0.30, 0.36),
         (3, "Write # of fouls this rack",                    0.62, 0.42),
         (4, "RACK TOTAL = balls made - fouls",               0.72, 0.42),
         (5, "GAME SUBTOTAL = last SUBTOTAL + this RACK",     0.94, 0.42),
-        (6, "Enter High Run at end of match",                0.16, 0.86),
-        (7, "Check winner + both sign",           0.10, 0.98),
-        (8, "Photocopy for records; original to Bracket Desk", 0.60, 0.98),
+        (6, "Check winner, both sign, deliver to desk",      0.10, 0.98),
     ]
     for (n, _t, fx, fy) in callouts:
         px, py = anchor(fx, fy)
@@ -432,7 +471,7 @@ def build(out_path):
     col_gap = 10
     col_w = (sheet_w - col_gap) / 2
     row_gap = 6
-    row_h = (co_h_total - 3*row_gap) / 4
+    row_h = (co_h_total - 2 * row_gap) / 3
 
     for i, (n, title, _fx, _fy) in enumerate(callouts):
         col = i % 2
@@ -454,9 +493,7 @@ def build(out_path):
             3: "Write the number of fouls that player committed during this rack in the FOULS cell. Foul = -1 point.",
             4: "RACK TOTAL at the end of each rack: count the balls you marked, subtract fouls, write the result. Like one line's amount in a checkbook.",
             5: "GAME SUBTOTAL = the previous rack's GAME SUBTOTAL + this rack's RACK TOTAL. First rack: GAME SUBTOTAL = RACK TOTAL. It's a running balance, like a checkbook. First player to their goal wins.",
-            6: "HIGH RUN = the most balls marked in a single rack for that player. Write once, at end of match.",
-            7: "Check WINNER box for the player who reached their goal first. Both players sign to certify.",
-            8: "Keep a photocopy in the match binder; the paper original goes to the Bracket Desk for entry into the app.",
+            6: "When a player reaches their goal, check the WINNER box. Both players sign. Keep a photocopy in the match binder; the paper original goes to the Bracket Desk for entry into the app.",
         }
         wrap_text(c, bodies[n], bx + 30, by - 28, col_w - 40, size=7.7, leading=9.4)
 

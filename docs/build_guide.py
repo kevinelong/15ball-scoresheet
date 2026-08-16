@@ -65,8 +65,6 @@ RACKS = [
     ([1,6,8,13,15], 0, [3,5,9],       0),  # A: 5, 0f -> net 5, run 13; B: 3, 0f -> net 3, run 10
     ([2,7,10,11,14,15], 0, [1,4,6,8], 1),  # A: 6, 0f -> net 6, run 19; B: 4, 1f -> net 3, run 13
 ]
-HIGH_RUN_A = 4  # e.g. ran 2,4,10,12 in rack 2? Sample only
-HIGH_RUN_B = 3
 
 # ---------------- Layout ----------------
 PAGE_W, PAGE_H = letter
@@ -221,57 +219,43 @@ def draw_sample_sheet(c):
         draw_rack_side(c, left + rack_col_w + side_w, r_bot, side_w, rack_h, balls_b, fouls_b, net_b, running_b)
 
     # === Totals row ===
+    #
+    # Only FINAL GAME TOTAL lives in the totals card. HIGH RUN and FOULS
+    # totals were removed - neither affects the outcome and they were
+    # distracting from the one number that does. Per-rack FOULS still
+    # live in the rack grid above and roll into RACK TOTAL / GAME SUBTOTAL.
     tot_top = racks_top - 4*rack_h - 0.14*inch
-    # Section header above the boxes
     c.setFont(FONT_SEMI, 7); c.setFillColorRGB(*MUTED)
     c.drawString(left + 6, tot_top, "PLAYER TOTALS")
-    tot_top -= 0.22*inch  # room for PLAYER A/B tag row + 2-line FINAL GAME TOTAL header
+    tot_top -= 0.22*inch
     tot_h = 0.42*inch
     tot_row_y = tot_top
     tcard_w = (width - gap) / 2
-    for (tx, label, hr, fouls_total, final_total) in [
-        (left,              "PLAYER A", HIGH_RUN_A, sum(f for (_,f,_,_) in RACKS), running_a),
-        (left + tcard_w + gap, "PLAYER B", HIGH_RUN_B, sum(f for (_,_,_,f) in RACKS), running_b),
+    for (tx, label, final_total) in [
+        (left,              "PLAYER A", running_a),
+        (left + tcard_w + gap, "PLAYER B", running_b),
     ]:
         c.setStrokeColorRGB(*LINE)
         c.setFillColorRGB(*SOFT_BG)
         c.roundRect(tx, tot_row_y - tot_h, tcard_w, tot_h, 3, stroke=1, fill=1)
-        # Player label above the box on the right side. The FINAL GAME TOTAL
-        # column below wraps to 2 lines, so place the tag well above the card
-        # top to keep them from touching.
+        # Player tag on the right, well above the cell.
         c.setFont(FONT_SEMI, 6.5); c.setFillColorRGB(*NAVY)
         c.drawRightString(tx + tcard_w - 4, tot_row_y + 8, label)
 
-        # 3 columns: HIGH RUN | FOULS | FINAL GAME TOTAL (final highlighted)
-        # Third label wraps to 2 lines to avoid collision with the PLAYER A/B tag.
-        col_w = (tcard_w - 12) / 3
+        # One centered cell: FINAL GAME TOTAL (highlighted).
         val_cell_h = 20
-        for j, (lbl_lines, val, highlight) in enumerate([
-            (["HIGH RUN"],         hr,          False),
-            (["FOULS"],            fouls_total, False),
-            (["FINAL GAME", "TOTAL"], final_total, True),
-        ]):
-            cx = tx + 6 + j*col_w
-            cy = tot_row_y - tot_h + 6  # cell bottom
-            # Column label (above cell) - 1 or 2 lines
-            c.setFillColorRGB(*MUTED)
-            c.setFont(FONT_SEMI, 6.5)
-            if len(lbl_lines) == 2:
-                c.drawCentredString(cx + (col_w - 4)/2, cy + val_cell_h + 8, lbl_lines[0])
-                c.drawCentredString(cx + (col_w - 4)/2, cy + val_cell_h + 2, lbl_lines[1])
-            else:
-                c.drawCentredString(cx + (col_w - 4)/2, cy + val_cell_h + 2, lbl_lines[0])
-            # Cell
-            if highlight:
-                c.setFillColorRGB(*NAVY); c.setStrokeColorRGB(*NAVY)
-                c.roundRect(cx, cy, col_w - 4, val_cell_h, 3, stroke=1, fill=1)
-                c.setFillColorRGB(1,1,1)
-            else:
-                c.setStrokeColorRGB(*LINE); c.setFillColorRGB(1,1,1)
-                c.roundRect(cx, cy, col_w - 4, val_cell_h, 3, stroke=1, fill=1)
-                c.setFillColorRGB(*INK)
-            c.setFont(FONT_BOLD, 13)
-            c.drawCentredString(cx + (col_w - 4)/2, cy + 6, str(val))
+        cell_w = tcard_w - 24
+        cx = tx + (tcard_w - cell_w) / 2
+        cy = tot_row_y - tot_h + 6
+        # Column label (above the cell)
+        c.setFillColorRGB(*MUTED); c.setFont(FONT_SEMI, 6.5)
+        c.drawCentredString(cx + cell_w / 2, cy + val_cell_h + 2, "FINAL GAME TOTAL")
+        # Highlighted cell
+        c.setFillColorRGB(*NAVY); c.setStrokeColorRGB(*NAVY)
+        c.roundRect(cx, cy, cell_w, val_cell_h, 3, stroke=1, fill=1)
+        c.setFillColorRGB(1, 1, 1)
+        c.setFont(FONT_BOLD, 13)
+        c.drawCentredString(cx + cell_w / 2, cy + 6, str(final_total))
 
     # === Winner + signatures row ===
     win_y = tot_row_y - tot_h - 0.14*inch
@@ -405,7 +389,7 @@ CALLOUTS = [
     (6, "Final Total = winning line",
      "The last GAME SUBTOTAL is the FINAL GAME TOTAL. Alice finished at 19 (goal 25 not reached in demo). Winner is decided by whoever reaches the goal first \u2014 in a real match, keep racking.",
      0.30, 0.15),
-    (7, "Circle the winner",
+    (7, "Pick the winner",
      "Only one radio can be selected. Selecting a winner also updates the bracket.",
      0.15, 0.05),
     (8, "Both players sign",
