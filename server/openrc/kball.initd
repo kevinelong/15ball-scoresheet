@@ -1,0 +1,33 @@
+#!/sbin/openrc-run
+# Columbia Cue Club tournament backend (K-Ball). Install to /etc/init.d/kball.
+# Runs the static binary as the unprivileged kball user, loads secrets from the
+# root-owned env file before dropping privileges, and stops gracefully (SIGTERM,
+# 20s deadline matching the server's shutdown budget). Reconciliation #1/#12/#15.
+name="kball"
+description="Columbia Cue Club tournament backend (K-Ball)"
+command="/opt/kball/bin/kball-server"
+command_user="kball:kball"
+command_background=true
+pidfile="/run/kball.pid"
+output_log="/var/log/kball.log"
+error_log="/var/log/kball.log"
+retry="TERM/20/KILL/5"
+
+depend() {
+    need net
+    after nginx
+}
+
+start_pre() {
+    umask 0027
+    # Load the only secret source (root:root 0600) into the environment; the
+    # command inherits it, then start-stop-daemon drops to command_user.
+    if [ -f /etc/kball/kball.env ]; then
+        set -a
+        . /etc/kball/kball.env
+        set +a
+    fi
+    checkpath -d -o kball:kball -m 0750 /var/lib/kball
+    checkpath -d -o kball:kball -m 0750 /var/lib/kball/backups
+    checkpath -f -o kball:kball -m 0640 /var/log/kball.log
+}

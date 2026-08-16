@@ -7,7 +7,11 @@ node_modules/
 __pycache__/
 *.pyc
 
-# Backend (later)
+# Backend
 server/kball-server
+server/bin/
 server/data.db
+server/*.db
+server/*.db-wal
+server/*.db-shm
 server/.env
