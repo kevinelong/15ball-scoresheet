@@ -76,20 +76,62 @@ Pure-function module, standalone testable. Exposes `BracketEngine.build(particip
 ## File layout
 
 ```
-index.html    # markup
-styles.css    # design system + responsive + print styles
-app.js        # state, rendering, persistence, share/export/import
-LICENSE       # MIT
-README.md     # you're reading it
+index.html         # markup
+styles.css         # design system + responsive + print styles
+app.js             # state, rendering, persistence, share/export/import
+bracket.js         # pure bracket engine (SE + DE builds, advancement)
+bracket.test.js    # bracket engine tests
+tables.js          # table roster parser + factory (see below)
+tables.test.js     # table roster tests
+docs/              # printable PDF guides + generators
+LICENSE            # MIT
+README.md          # you're reading it
 ```
+
+## Tables (venue playing surfaces)
+
+Every tournament owns a fixed roster of **tables** — the physical playing
+surfaces in your venue. Tables are declared at tournament creation via two
+fields on the setup form:
+
+- **Number of Tables** — how many playing surfaces (default: `6`, Columbia
+  Cue Club's setup)
+- **Table Numbering** — optional. Three input styles:
+  1. **Blank** → `Table 1, Table 2, …, Table N`
+  2. **Offset range** like `7-12` → `Table 7, Table 8, …, Table 12`
+     (useful when your venue's tables aren't numbered from 1)
+  3. **Comma list** like `Stream, A, B` → `Stream, Table A, Table B`
+     (bare numbers/letters get the `Table` prefix; multi-word tokens
+     like `Stream` are used verbatim)
+
+Each table becomes a record shaped like:
+
+```js
+{ id: "t_abc12345", name: "Table 1", state: "empty" }
+```
+
+Parsing lives in `tables.js` (`Tables.parseNaming`, `Tables.buildTables`).
+Run `node tables.test.js` to verify the parser — 25 unit tests cover the
+blank/range/comma paths plus edge cases (empty input, hyphens in names,
+fractional counts).
+
+### Roadmap: state machine
+
+`state` is currently always `"empty"`. Phase 2 introduces a strict state
+machine (`empty → reserved → active → dirty → empty`, plus a `locked`
+escape hatch for director overrides) enforced through a single module,
+which prevents the "ghost match" / double-assignment glitches that plague
+other tournament platforms.
 
 ## Roadmap ideas
 
+- Table assignment state machine + assign-to-open-table auto-queue
+- Lock-table override with save-or-restart modal for in-flight matches
+- Big-screen "venue view" URL for casting active matches + on-deck queue
 - Optional break tracker + inning counter
 - Sound effects on ball toggle (opt-in)
 - Match history browser (list saved JSON files)
 - QR code render of the share link so you can scan it from the table
-- Tournament bracket wrapper that hosts multiple sheets
 
 ## License
 

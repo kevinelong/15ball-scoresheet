@@ -13,7 +13,9 @@
   const RACKS = 4;
   const STRIPES = [9, 10, 11, 12, 13, 14, 15];
   const EIGHT = [8];
-  const STORAGE_KEY = "kball.app.v3";
+  // Storage schema: v3 (pre-tables) is auto-migrated to v4 (with tables[]).
+  const STORAGE_KEY = "kball.app.v3";  // key stays v3 to preserve existing local data;
+                                        // records get a `tables` array via backfill.
   const LEGACY_KEY_V2 = "kball.tournament.v1";
 
   // ---------- safe storage adapter ----------
@@ -104,8 +106,14 @@
     return `${y}-${m}-${day}`;
   }
 
-  function makeTournament(name, game) {
+  // Default table count for Columbia Cue Club's venue setup.
+  const DEFAULT_TABLE_COUNT = 6;
+
+  function makeTournament(name, game, tableOpts) {
     const gid = GAMES[game] ? game : "kball";
+    const count = tableOpts?.count ?? DEFAULT_TABLE_COUNT;
+    const naming = tableOpts?.naming ?? "";
+    const tables = (window.Tables ? window.Tables.buildTables(count, naming) : []);
     return {
       id: newId(),
       name: name || "New Tournament",
@@ -118,7 +126,8 @@
       updatedAt: Date.now(),
       participants: [],
       bracket: null,
-      sheets: {}
+      sheets: {},
+      tables
     };
   }
 
@@ -143,8 +152,15 @@
         const parsed = JSON.parse(raw);
         if (parsed && parsed.v === 3 && Array.isArray(parsed.tournaments)) {
           app = parsed;
-          // Backfill: existing v3 tournaments predate the game field.
-          app.tournaments.forEach((t) => { if (!t.game) t.game = "kball"; });
+          // Backfill: older v3 records may predate several fields.
+          app.tournaments.forEach((t) => {
+            if (!t.game) t.game = "kball";
+            if (!Array.isArray(t.tables) || t.tables.length === 0) {
+              t.tables = window.Tables
+                ? window.Tables.buildTables(DEFAULT_TABLE_COUNT, "")
+                : [];
+            }
+          });
           return true;
         }
       }
@@ -579,6 +595,14 @@
     $("#tDate").value = t.date || "";
     $("#tTime").value = t.startTime || "";
     $("#tGame").value = t.game || "kball";
+    $("#tTableCount").value = Array.isArray(t.tables) ? t.tables.length : DEFAULT_TABLE_COUNT;
+    $("#tTableNaming").placeholder = window.Tables ? window.Tables.namingPlaceholder(t.tables?.length || DEFAULT_TABLE_COUNT) : "1-6";
+    // Show the *current* naming as a hint only when the user has customized it.
+    // Blank input keeps the placeholder visible.
+    const currentNames = Array.isArray(t.tables) ? t.tables.map(x => x.name) : [];
+    const defaultNames = window.Tables ? window.Tables._defaultNames(1, currentNames.length) : [];
+    const isDefaultNaming = JSON.stringify(currentNames) === JSON.stringify(defaultNames);
+    $("#tTableNaming").value = isDefaultNaming ? "" : currentNames.join(", ");
     $("#tFormat").value = t.format || "single";
     $("#tRaceTo").value = t.raceTo || g.defaultRaceTo;
     // Sync game-driven UI text
@@ -984,6 +1008,16 @@
     t.name = $("#tName").value || t.name;
     t.date = $("#tDate").value || t.date;
     t.startTime = $("#tTime").value || t.startTime || "";
+    // Table roster: rebuild only if count OR naming actually changed, so
+    // existing table IDs (referenced by future assignments) are preserved
+    // whenever possible.
+    const desiredCount = Math.max(1, Math.min(64, parseInt($("#tTableCount").value, 10) || DEFAULT_TABLE_COUNT));
+    const desiredNaming = $("#tTableNaming").value.trim();
+    const wantNames = window.Tables ? window.Tables.parseNaming(desiredCount, desiredNaming) : [];
+    const haveNames = (t.tables || []).map(x => x.name);
+    if (JSON.stringify(wantNames) !== JSON.stringify(haveNames)) {
+      t.tables = window.Tables.buildTables(desiredCount, desiredNaming);
+    }
     const chosenGame = $("#tGame").value;
     if (GAMES[chosenGame]) t.game = chosenGame;
     t.format = $("#tFormat").value || "single";
@@ -1068,6 +1102,11 @@
       $("#tRaceLabel").textContent = g.raceLabel;
       $("#tRaceHint").textContent = g.raceHint;
       $("#tRaceTo").value = g.defaultRaceTo;
+    });
+    // Table count → live placeholder update on the naming field.
+    $("#tTableCount").addEventListener("input", () => {
+      const n = Math.max(1, Math.min(64, parseInt($("#tTableCount").value, 10) || DEFAULT_TABLE_COUNT));
+      $("#tTableNaming").placeholder = window.Tables ? window.Tables.namingPlaceholder(n) : `1-${n}`;
     });
     // Counter increment/decrement + jump buttons (delegated)
     document.body.addEventListener("click", (ev) => {

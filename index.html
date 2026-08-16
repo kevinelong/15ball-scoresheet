@@ -20,7 +20,8 @@
           <button type="button" data-action="new-tournament" class="primary-hdr">+ New Tournament</button>
           <button type="button" data-action="import-tournament-home">Import JSON</button>
           <a class="hdr-guide-link" href="docs/score-sheet-guide.pdf" target="_blank" rel="noopener" title="Printable score-sheet guide (PDF, color)">Score-sheet guide &#8599;</a>
-          <a class="hdr-guide-link" href="docs/paper-score-sheet-guide.pdf" target="_blank" rel="noopener" title="Printable blank paper score sheet (B&amp;W, photocopy-friendly)">Paper sheet &#8599;</a>
+          <a class="hdr-guide-link" href="docs/paper-score-sheet-guide.pdf" target="_blank" rel="noopener" title="Annotated paper score-sheet guide (B&amp;W, photocopy-friendly)">Paper guide &#8599;</a>
+          <a class="hdr-guide-link" href="docs/paper-score-sheet-blank.pdf" target="_blank" rel="noopener" title="Blank printable paper score sheet, 2-up (B&amp;W, photocopy-friendly)">Blank sheet &#8599;</a>
           <input type="file" id="importTournamentHomeFile" accept="application/json" hidden />
         </div>
       </div>
@@ -53,7 +54,8 @@
           <button type="button" data-action="open-export-menu" title="Export or push to Challonge">Export &hellip;</button>
           <button type="button" data-action="import-tournament">Import</button>
           <a class="hdr-guide-link" href="docs/score-sheet-guide.pdf" target="_blank" rel="noopener" title="Printable score-sheet guide (PDF, color)">Guide &#8599;</a>
-          <a class="hdr-guide-link" href="docs/paper-score-sheet-guide.pdf" target="_blank" rel="noopener" title="Printable blank paper score sheet (B&amp;W, photocopy-friendly)">Paper &#8599;</a>
+          <a class="hdr-guide-link" href="docs/paper-score-sheet-guide.pdf" target="_blank" rel="noopener" title="Annotated paper score-sheet guide (B&amp;W, photocopy-friendly)">Paper &#8599;</a>
+          <a class="hdr-guide-link" href="docs/paper-score-sheet-blank.pdf" target="_blank" rel="noopener" title="Blank printable paper score sheet, 2-up (B&amp;W, photocopy-friendly)">Blank &#8599;</a>
           <input type="file" id="importTournamentFile" accept="application/json" hidden />
         </div>
       </div>
@@ -73,6 +75,16 @@
         <label class="field">
           <span>Start Time</span>
           <input type="time" id="tTime" step="900" />
+        </label>
+        <label class="field">
+          <span>Number of Tables</span>
+          <input type="number" id="tTableCount" inputmode="numeric" pattern="[0-9]*" min="1" max="64" step="1" value="6" />
+          <small>How many physical playing surfaces in the venue.</small>
+        </label>
+        <label class="field">
+          <span>Table Numbering <em style="font-weight:400;color:var(--muted);font-style:normal;">(optional)</em></span>
+          <input type="text" id="tTableNaming" placeholder="1-6" />
+          <small>Blank = Table 1&hellip;N. Or an offset range like <code>7-12</code>, or a comma list like <code>Stream, A, B</code>.</small>
         </label>
         <label class="field">
           <span>Game</span>
@@ -382,6 +394,7 @@
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
   <script src="bracket.js"></script>
+  <script src="tables.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

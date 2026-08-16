@@ -67,35 +67,83 @@ def draw_ball(c, x, y, num, filled=False, r=5.4):
         c.setFillColorRGB(*WHITE)
         c.circle(x, y, r, stroke=1, fill=1)
         c.setFillColorRGB(*BLACK)
-    c.setFont(FONT_BOLD, 6.2)
-    c.drawCentredString(x, y - 2.0, str(num))
+    # Keep the numeral comfortably inside the smallest responsive cells.
+    # At the 2-up size the circle is intentionally compact, so scale the
+    # numeral slightly rather than allowing it to touch the outline.
+    num_size = min(6.2, max(5.3, r * 1.75))
+    c.setFont(FONT_BOLD, num_size)
+    c.drawCentredString(x, y - num_size * 0.32, str(num))
+
+# ---------- responsive sheet geometry ----------
+# Fixed sizes for every non-rack region. The rack grid absorbs any leftover
+# space so the sheet always fills its bounding box exactly with no clipping.
+SHEET_PAD          = 8      # inner padding inside the outer border
+SHEET_TITLE_H      = 24     # big title
+SHEET_SUBTITLE_H   = 14     # subtitle line
+SHEET_PHDR_H       = 46     # PLAYER A/B name+goal card
+SHEET_PHDR_GAP     = 8
+SHEET_RACK_HDR_H   = 14     # "RACK / PLAYER A / PLAYER B" column header
+SHEET_STATS_HDR_H  = 12     # BALLS / FOULS / NET / RUN label strip (above racks)
+SHEET_TOTALS_HDR_H = 20     # two clear rows: player tag, then column labels
+SHEET_TOTALS_H     = 0.42 * inch
+SHEET_TOTALS_GAP   = 4      # gap between racks and totals labels
+SHEET_WIN_GAP      = 6      # gap between totals and winner row
+SHEET_WIN_H        = 0.42 * inch
+NUM_RACKS          = 4
+SHEET_RACK_H_MIN   = 31.5   # each rack row (min); grows to fill available height
+
+def sheet_min_height():
+    """Minimum height the score sheet needs to render without clipping."""
+    return (2*SHEET_PAD + SHEET_TITLE_H + SHEET_SUBTITLE_H + SHEET_PHDR_H
+            + 8 + SHEET_RACK_HDR_H + SHEET_STATS_HDR_H
+            + NUM_RACKS * SHEET_RACK_H_MIN
+            + SHEET_TOTALS_GAP + SHEET_TOTALS_HDR_H + SHEET_TOTALS_H
+            + SHEET_WIN_GAP + SHEET_WIN_H)
 
 def draw_scoresheet(c, left, top, width, height):
-    """The empty score sheet region (for hand-filling)."""
+    """The empty score sheet region (for hand-filling).
+
+    Layout is fully responsive: rack row height grows to consume any extra
+    vertical space so the content fills `height` without clipping. Requires
+    at least `sheet_min_height()` of vertical room; raises if given less.
+    """
+    min_h = sheet_min_height()
+    if height < min_h:
+        raise ValueError(
+            f"draw_scoresheet: height={height:.1f}pt is below min {min_h:.1f}pt"
+        )
+
     # Outer heavy black border
     c.setStrokeColorRGB(*BLACK)
     c.setLineWidth(LINE_STRONG)
     c.rect(left, top - height, width, height, stroke=1, fill=0)
 
-    # Sheet inner padding
-    pad = 8
+    pad = SHEET_PAD
     x0 = left + pad
     y0 = top - pad
     inner_w = width - 2*pad
 
+    # Compute rack_h so all rows fit the requested height exactly.
+    fixed_h = (SHEET_TITLE_H + SHEET_SUBTITLE_H + SHEET_PHDR_H + 8
+               + SHEET_RACK_HDR_H + SHEET_STATS_HDR_H
+               + SHEET_TOTALS_GAP + SHEET_TOTALS_HDR_H + SHEET_TOTALS_H
+               + SHEET_WIN_GAP + SHEET_WIN_H)
+    avail_for_racks = (height - 2*pad) - fixed_h
+    rack_h = avail_for_racks / NUM_RACKS
+
     # === Title bar (inside the sheet) ===
     c.setFont(FONT_BOLD, 12)
     c.setFillColorRGB(*BLACK)
-    c.drawCentredString(left + width/2, y0 - 12, "15-BALL ROTATION (K-BALL) - MATCH SCORE SHEET")
-    y0 -= 24
+    c.drawCentredString(left + width/2, y0 - 14, "15-BALL ROTATION (K-BALL) - MATCH SCORE SHEET")
+    y0 -= SHEET_TITLE_H
     c.setFont(FONT_BODY, 8)
-    c.drawCentredString(left + width/2, y0, "Columbia Cue Club   -   Rack Net = Balls - Fouls   -   Running = sum of Rack Nets")
-    y0 -= 12
+    c.drawCentredString(left + width/2, y0 - 2, "Columbia Cue Club   -   Rack Net = Balls - Fouls   -   Running = sum of Rack Nets")
+    y0 -= SHEET_SUBTITLE_H
 
     # === Player header row (blank lines for name/goal) ===
     y_ph = y0
-    ph_h = 0.55 * inch
-    gap = 8
+    ph_h = SHEET_PHDR_H
+    gap = SHEET_PHDR_GAP
     pcard_w = (inner_w - gap) / 2
     for i, label in enumerate(["PLAYER A", "PLAYER B"]):
         px = x0 + i * (pcard_w + gap)
@@ -103,48 +151,56 @@ def draw_scoresheet(c, left, top, width, height):
         c.rect(px, y_ph - ph_h, pcard_w, ph_h, stroke=1, fill=0)
         c.setFont(FONT_BOLD, 7); c.drawString(px + 6, y_ph - 10, label)
         # Name: blank line
-        c.setFont(FONT_BOLD, 8); c.drawString(px + 6, y_ph - 24, "NAME:")
+        c.setFont(FONT_BOLD, 8); c.drawString(px + 6, y_ph - 22, "NAME:")
         c.setLineWidth(0.8)
-        c.line(px + 40, y_ph - 25, px + pcard_w - 8, y_ph - 25)
+        c.line(px + 40, y_ph - 23, px + pcard_w - 8, y_ph - 23)
         # Goal: 25 / 50 / Other checkboxes
-        c.drawString(px + 6, y_ph - 40, "GOAL:")
+        c.drawString(px + 6, y_ph - 37, "GOAL:")
         cx = px + 40
         for lbl in ["25", "50"]:
-            c.rect(cx, y_ph - 46, 10, 10, stroke=1, fill=0)
-            c.setFont(FONT_BODY, 8); c.drawString(cx + 14, y_ph - 43, lbl)
+            c.rect(cx, y_ph - 42, 8, 8, stroke=1, fill=0)
+            c.setFont(FONT_BODY, 8); c.drawString(cx + 12, y_ph - 40, lbl)
             c.setFont(FONT_BOLD, 8)
-            cx += 32
-        c.rect(cx, y_ph - 46, 10, 10, stroke=1, fill=0)
-        c.setFont(FONT_BODY, 8); c.drawString(cx + 14, y_ph - 43, "OTHER:")
-        c.setLineWidth(0.8); c.line(cx + 45, y_ph - 45, px + pcard_w - 8, y_ph - 45)
+            cx += 30
+        c.rect(cx, y_ph - 42, 8, 8, stroke=1, fill=0)
+        c.setFont(FONT_BODY, 8); c.drawString(cx + 12, y_ph - 40, "OTHER:")
+        c.setLineWidth(0.8); c.line(cx + 43, y_ph - 41, px + pcard_w - 8, y_ph - 41)
     y0 = y_ph - ph_h - 8
 
     # === Rack grid ===
-    # Layout: RACK column (left), PLAYER A ball grid + Balls/Fouls/RackNet/Running, then PLAYER B same
-    NUM_RACKS = 4
     rack_col_w = 22
     side_w = (inner_w - rack_col_w) / 2
-
-    # Ball grid: 5 cols x 3 rows = 15 balls; then a stats strip below the grid
-    #   |--- 5 cols of balls ---|--- stats strip (Balls/Fouls/RackNet/Running) ---|
-    stats_strip_w = 78
+    stats_strip_w = 96  # 24pt per label keeps BALLS / FOULS / NET / RUN distinct
     balls_w = side_w - stats_strip_w
     ball_cols = 5
     ball_rows = 3
     ball_cell_w = balls_w / ball_cols
-    ball_cell_h = 14
-    rack_h = ball_rows * ball_cell_h + 4  # a hair of padding
 
-    # Column header row
-    hdr_h = 14
+    # Column header row (RACK / PLAYER A / PLAYER B)
     c.setFont(FONT_BOLD, 7)
     c.setFillColorRGB(*BLACK)
-    c.drawString(x0 + 2, y0 - 10, "RACK")
-    c.drawString(x0 + rack_col_w + 4, y0 - 10, "PLAYER A")
-    c.drawString(x0 + rack_col_w + side_w + 4, y0 - 10, "PLAYER B")
-    y0 -= hdr_h
+    c.drawCentredString(x0 + rack_col_w / 2, y0 - 10, "RACK")
+    c.drawCentredString(x0 + rack_col_w + side_w / 2, y0 - 10, "PLAYER A")
+    c.drawCentredString(x0 + rack_col_w + side_w + side_w / 2, y0 - 10, "PLAYER B")
+    y0 -= SHEET_RACK_HDR_H
+
+    # Stats-strip label row (BALLS FOULS NET RUN) - drawn ABOVE the racks so
+    # labels never overlap cells or borders.
+    stats_hdr_y = y0
+    n_stats = 4
+    stat_w = stats_strip_w / n_stats
+    stat_labels = ["BALLS", "FOULS", "NET", "RUN"]
+    c.setFont(FONT_BOLD, 6)
+    for side_i in range(2):
+        strip_x = x0 + rack_col_w + side_i * side_w + balls_w
+        for si in range(n_stats):
+            sx = strip_x + si * stat_w
+            c.drawCentredString(sx + stat_w/2, stats_hdr_y - 9, stat_labels[si])
+    y0 -= SHEET_STATS_HDR_H
 
     # Racks
+    ball_cell_h = (rack_h - 4) / ball_rows
+    ball_radius = min(5.0, ball_cell_h * 0.36, ball_cell_w * 0.36)
     for r in range(NUM_RACKS):
         r_top = y0 - r * rack_h
         r_bot = r_top - rack_h
@@ -158,91 +214,87 @@ def draw_scoresheet(c, left, top, width, height):
         # Both sides
         for side_i in range(2):
             side_x = x0 + rack_col_w + side_i * side_w
-            # side outer
             c.setLineWidth(LINE_MED)
             c.rect(side_x, r_bot, side_w, rack_h, stroke=1, fill=0)
 
-            # 15 ball circles in 3 rows x 5 cols, empty (to be filled by hand)
+            # 15 ball circles - centered in the ball area
             for i in range(15):
                 col = i % ball_cols
                 row = i // ball_cols
                 bx = side_x + col * ball_cell_w + ball_cell_w/2
                 by = r_top - row * ball_cell_h - ball_cell_h/2 - 1
-                draw_ball(c, bx, by, i+1, filled=False, r=5.0)
+                draw_ball(c, bx, by, i+1, filled=False, r=ball_radius)
 
-            # Stats strip (right side): 4 boxes stacked in 2x2 for compactness OR side-by-side
+            # Stats strip - vertical divider + 4 cells (no label inside cells)
             strip_x = side_x + balls_w
             c.setLineWidth(LINE)
             c.line(strip_x, r_bot, strip_x, r_top)
 
-            # 4 mini cells side-by-side inside the strip
-            n_stats = 4
-            stat_w = stats_strip_w / n_stats
-            stat_labels = ["BALLS", "FOULS", "NET", "RUN"]
-            # Editable vs calculated: BALLS and FOULS are what the scorer writes;
-            # NET and RUN are calculated. Show that difference with a solid border
-            # (write here) vs a dashed border (calculated).
+            # Editable BALLS/FOULS = solid; calculated NET/RUN = dashed.
             editable = [True, True, False, False]
             for si in range(n_stats):
                 sx = strip_x + si * stat_w
-                # Cell
                 if editable[si]:
-                    c.setDash()  # solid
-                    c.setLineWidth(LINE_MED)
+                    c.setDash(); c.setLineWidth(LINE_MED)
                 else:
-                    c.setDash(2, 2)
-                    c.setLineWidth(LINE)
+                    c.setDash(2, 2); c.setLineWidth(LINE)
                 c.rect(sx + 1, r_bot + 2, stat_w - 2, rack_h - 4, stroke=1, fill=0)
                 c.setDash()
-                # Label at top of cell
-                c.setFont(FONT_BOLD, 5.5)
-                c.setFillColorRGB(*BLACK)
-                c.drawCentredString(sx + stat_w/2, r_top - 6, stat_labels[si])
 
     y0 -= NUM_RACKS * rack_h
 
     # === Totals row (empty) ===
-    y0 -= 8
-    tot_h = 0.44 * inch
-    tot_row_y = y0
+    y0 -= SHEET_TOTALS_GAP
+    tot_h = SHEET_TOTALS_H
+    # "PLAYER TOTALS" section label sits above the cards in its own strip so
+    # nothing touches the card borders below.
+    tot_hdr_y = y0
     c.setFont(FONT_BOLD, 7); c.setFillColorRGB(*BLACK)
-    c.drawString(x0, tot_row_y + 2, "PLAYER TOTALS")
+    c.drawString(x0, tot_hdr_y - 7, "PLAYER TOTALS")
 
     tcard_w = (inner_w - gap) / 2
-    for i, label in enumerate(["PLAYER A", "PLAYER B"]):
+    # HIGH RUN / FOULS / FINAL labels centered above each column of each card.
+    col_w_labels = (tcard_w - 12) / 3
+    for i in range(2):
+        tx = x0 + i * (tcard_w + gap)
+        # Player letter tag lives in the label strip on the right of each card.
+        letter = "PLAYER A" if i == 0 else "PLAYER B"
+        c.setFont(FONT_BOLD, 6)
+        c.drawRightString(tx + tcard_w - 4, tot_hdr_y - 7, letter)
+        # Column labels
+        c.setFont(FONT_BOLD, 6)
+        for j, col_label in enumerate(["HIGH RUN", "FOULS", "FINAL"]):
+            cx = tx + 6 + j * col_w_labels
+            c.drawCentredString(cx + col_w_labels/2, tot_hdr_y - 16, col_label)
+    y0 -= SHEET_TOTALS_HDR_H
+
+    tot_row_y = y0
+    for i in range(2):
         tx = x0 + i * (tcard_w + gap)
         c.setLineWidth(LINE_MED)
         c.rect(tx, tot_row_y - tot_h, tcard_w, tot_h, stroke=1, fill=0)
-        # 3 columns: HIGH RUN (editable) | FOULS (calc) | FINAL (calc, but the KEY output)
         col_w = (tcard_w - 12) / 3
-        for j, (col_label, is_edit, is_final) in enumerate([
-            ("HIGH RUN", True,  False),
-            ("FOULS",    False, False),
-            ("FINAL",    False, True),
+        for j, (is_edit, is_final) in enumerate([
+            (True,  False),   # HIGH RUN - editable
+            (False, False),   # FOULS    - calc
+            (False, True),    # FINAL    - key output, thick border
         ]):
             cx = tx + 6 + j * col_w
-            cy = tot_row_y - tot_h + 6
-            cell_h = tot_h - 10
+            cy = tot_row_y - tot_h + 4
+            cell_h = tot_h - 8
             if is_edit:
                 c.setDash(); c.setLineWidth(LINE_MED)
-                c.rect(cx + 2, cy, col_w - 4, cell_h, stroke=1, fill=0)
             elif is_final:
-                # emphasize with thick solid border (this is the key output)
                 c.setDash(); c.setLineWidth(LINE_STRONG)
-                c.rect(cx + 2, cy, col_w - 4, cell_h, stroke=1, fill=0)
             else:
                 c.setDash(2, 2); c.setLineWidth(LINE)
-                c.rect(cx + 2, cy, col_w - 4, cell_h, stroke=1, fill=0)
+            c.rect(cx + 2, cy, col_w - 4, cell_h, stroke=1, fill=0)
             c.setDash()
-            c.setFont(FONT_BOLD, 5.5)
-            c.drawCentredString(cx + col_w/2, cy + cell_h + 2, col_label)
-        # Player letter tag
-        c.setFont(FONT_BOLD, 6); c.drawRightString(tx + tcard_w - 4, tot_row_y + 2, label)
 
-    y0 = tot_row_y - tot_h - 10
+    y0 = tot_row_y - tot_h - SHEET_WIN_GAP
 
     # === Winner + Signatures row ===
-    win_h = 0.34 * inch
+    win_h = SHEET_WIN_H
     c.setFont(FONT_BOLD, 8); c.setFillColorRGB(*BLACK)
     c.drawString(x0, y0 - 8, "WINNER:")
     # Two checkboxes
@@ -254,22 +306,22 @@ def draw_scoresheet(c, left, top, width, height):
         c.setFont(FONT_BOLD, 8)
         wx += 90
 
-    # Signatures - two blank lines on the right
+    # Signatures - two blank lines on the right, labels UNDER the lines with
+    # comfortable spacing so nothing collides with anything else.
     sig_end_x = x0 + inner_w
-    sig_line_w = 88
-    sig_gap = 10
+    sig_line_w = 96
+    sig_gap = 12
     sig_b_x = sig_end_x - sig_line_w
     sig_a_x = sig_b_x - sig_gap - sig_line_w
     c.setFont(FONT_BOLD, 7); c.setFillColorRGB(*BLACK)
-    c.drawString(sig_a_x - 68, y0 - 8, "SIGNATURES:")
+    # "SIGNATURES:" label - place it to the left of the lines with room to breathe.
+    c.drawString(sig_a_x - 74, y0 - 11, "SIGNATURES:")
     c.setLineWidth(0.9)
-    c.line(sig_a_x, y0 - 12, sig_a_x + sig_line_w, y0 - 12)
-    c.line(sig_b_x, y0 - 12, sig_b_x + sig_line_w, y0 - 12)
+    c.line(sig_a_x, y0 - 14, sig_a_x + sig_line_w, y0 - 14)
+    c.line(sig_b_x, y0 - 14, sig_b_x + sig_line_w, y0 - 14)
     c.setFont(FONT_BODY, 6)
-    c.drawString(sig_a_x, y0 - 22, "PLAYER A")
-    c.drawString(sig_b_x, y0 - 22, "PLAYER B")
-
-    y0 -= win_h + 6
+    c.drawCentredString(sig_a_x + sig_line_w/2, y0 - 24, "PLAYER A")
+    c.drawCentredString(sig_b_x + sig_line_w/2, y0 - 24, "PLAYER B")
 
 def draw_callout(c, num, x, y, tw):
     """Draw a numbered marker circle at (x,y). Solid black circle w/ white number."""
@@ -301,7 +353,10 @@ def wrap_text(c, text, x, y, w, font=FONT_BODY, size=8, leading=10):
     return yy
 
 def main():
-    c = canvas.Canvas(OUT, pagesize=letter)
+    build(OUT)
+
+def build(out_path):
+    c = canvas.Canvas(out_path, pagesize=letter)
     c.setAuthor("Perplexity Computer")
     c.setTitle("K-Ball Paper Score-Sheet Guide (B&W, printable)")
     c.setSubject("Print-first, photocopy-friendly, hand-fillable guide for the K-Ball paper score sheet.")
@@ -396,7 +451,7 @@ def main():
 
     c.showPage()
     c.save()
-    print(f"Wrote {OUT}")
+    print(f"Wrote {out_path}")
 
 if __name__ == "__main__":
     main()

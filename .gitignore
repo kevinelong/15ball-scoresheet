@@ -4,3 +4,10 @@ node_modules/
 *.log
 .vscode/
 .idea/
+__pycache__/
+*.pyc
+
+# Backend (later)
+server/kball-server
+server/data.db
+server/.env
