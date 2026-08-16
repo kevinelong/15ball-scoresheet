@@ -55,7 +55,7 @@ When a match result is saved:
 
 ### Printable sheet content
 
-Reuses the paper-sheet visual language from `docs/build_paper_guide.py` (single sheet, HOW TO SCORE strip retained on every printed sheet, 4 racks, totals, signatures) but rendered as HTML/CSS with `@page { size: letter; margin: 0.5in }`.
+Reuses the paper-sheet visual language from `docs/_scoresheet_draw.py` (single sheet, HOW TO SCORE strip and K-BALL RULES SUMMARY retained on every printed sheet, 4 racks, totals, signatures) but rendered as HTML/CSS with `@page { size: letter; margin: 0.5in }`.
 
 Pre-filled at print time:
 

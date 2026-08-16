@@ -1,28 +1,24 @@
 """
-K-Ball / 15-Ball Rotation - Paper Score-Sheet Guide (B&W, print-first)
+K-Ball / 15-Ball Rotation - Score-Sheet Drawing Primitives
 
-Photocopy-friendly one-page 8.5x11 letter PDF. Pure black on white; no
-color reliance. Designed to be printed on plain paper, filled by hand
-with a pen, and photocopied back into the tournament binder.
+Shared drawing module used by every paper-score-sheet build script.
+Provides pure-black-on-white drawing primitives + the top-level
+draw_scoresheet() function that lays out one complete blank sheet
+at a given (left, top, width, height).
 
-Distinct from docs/build_guide.py (which is the on-screen / app-linked
-color version). This paper version has:
-  * Empty cells (nothing pre-filled) - a real blank score sheet
-  * Numbered callouts pointing at each region
-  * Explicit "fill this in by hand" cues (empty lines, __ blanks)
-  * No small light grays - anything meaningful is pure black
-  * A thicker black grid so a fax/photocopy still reads cleanly
+This is not a runnable script - it's imported by:
+  * build_paper_sheet.py       (one full sheet per letter page)
+  * build_paper_sheet_2up.py   (two side-by-side sheets per landscape page)
 
-Run: python3 docs/build_paper_guide.py
-Output: docs/paper-score-sheet-guide.pdf
+The sheet is self-teaching: it has a HOW TO SCORE mini-instructions strip
+and a K-BALL RULES SUMMARY block with a QR to the WPA rules PDF, so no
+separate annotated "guide" PDF is required.
 """
 from __future__ import annotations
 import os, sys
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.units import inch
-
-OUT = os.path.join(os.path.dirname(__file__), "paper-score-sheet-guide.pdf")
 
 # Print colors: pure black on white. Grays only for very light backgrounds
 # that copy well (>= 90% white). We avoid mid-grays entirely.
@@ -55,6 +51,50 @@ def draw_star(c, x, y, r):
     c.setFillColorRGB(*BLACK)
     c.drawPath(p, fill=1, stroke=0)
 
+def draw_qr(c, x, y_bottom, size_pt, data):
+    """Draw a QR code as filled rectangles at the given canvas position.
+
+    (x, y_bottom) is the bottom-left corner of the QR square. `size_pt` is
+    the outer edge length in points. Uses medium error correction; auto-
+    sizes the version to fit `data`. Returns the number of modules per side
+    so callers can lay out captions relative to the true QR size.
+    """
+    try:
+        import qrcode
+        from qrcode.constants import ERROR_CORRECT_M
+    except ImportError:
+        # Draw a placeholder if qrcode isn't installed on the build machine.
+        c.setStrokeColorRGB(*BLACK); c.setLineWidth(0.6)
+        c.rect(x, y_bottom, size_pt, size_pt, stroke=1, fill=0)
+        c.setFont(FONT_BODY, 5)
+        c.drawCentredString(x + size_pt/2, y_bottom + size_pt/2, "QR")
+        return 0
+    q = qrcode.QRCode(version=None, box_size=1, border=0,
+                      error_correction=ERROR_CORRECT_M)
+    q.add_data(data); q.make(fit=True)
+    m = q.get_matrix()
+    n = len(m)
+    module = size_pt / n
+    c.setFillColorRGB(*BLACK)
+    c.setStrokeColorRGB(*BLACK)
+    for r, row in enumerate(m):
+        # y coordinate for this row's TOP
+        py = y_bottom + (n - r) * module
+        # Coalesce contiguous filled modules in this row into a single rect
+        # to keep the PDF light.
+        col = 0
+        while col < n:
+            if not row[col]:
+                col += 1; continue
+            start = col
+            while col < n and row[col]:
+                col += 1
+            run = col - start
+            c.rect(x + start * module, py - module,
+                   run * module, module, stroke=0, fill=1)
+    return n
+
+
 def draw_ball(c, x, y, num, filled=False, r=5.4):
     """Ball marker: filled black circle with white number, or outlined circle with black number.
 
@@ -84,11 +124,12 @@ def draw_ball(c, x, y, num, filled=False, r=5.4):
 # Fixed sizes for every non-rack region. The rack grid absorbs any leftover
 # space so the sheet always fills its bounding box exactly with no clipping.
 SHEET_PAD          = 8      # inner padding inside the outer border
-SHEET_TITLE_H      = 24     # big title
-SHEET_SUBTITLE_H   = 14     # subtitle line
+SHEET_TITLE_H      = 24     # big title (subtitle retired; HOW TO SCORE covers the formulas)
 SHEET_INSTR_H      = 52     # 6-step mini-instructions strip (self-contained sheet)
 SHEET_INSTR_MARGIN = 6      # breathing room on each side of the strip
-SHEET_INSTR_GAP    = 8      # gap between strip and the player-header card below
+SHEET_INSTR_GAP    = 10     # gap between strip and rules block (reclaimed from subtitle)
+SHEET_RULES_H      = 78     # rules-comparison block + QR to WPA rules PDF
+SHEET_RULES_GAP    = 10     # gap between rules block and player-header card
 SHEET_PHDR_H       = 46     # PLAYER A/B name+goal card
 SHEET_PHDR_GAP     = 8
 SHEET_RACK_HDR_H   = 14     # "RACK / PLAYER A / PLAYER B" column header
@@ -104,13 +145,16 @@ SHEET_RACK_H_MIN   = 30.5   # each rack row (min); grows to fill available heigh
 def sheet_min_height(with_instructions=True):
     """Minimum height the score sheet needs to render without clipping.
 
-    The mini-instructions strip is included by default (self-contained
-    blank sheet). When the sheet is embedded inside the annotated guide,
-    the surrounding callouts already teach the same steps, so the strip
-    is redundant and can be omitted.
+    The mini-instructions strip AND the rules-comparison block are
+    included by default (self-contained blank sheet). When the sheet
+    is embedded inside the annotated guide, the surrounding callouts
+    already teach these steps, so both are omitted.
     """
-    instr = (SHEET_INSTR_H + SHEET_INSTR_GAP) if with_instructions else 0
-    return (2*SHEET_PAD + SHEET_TITLE_H + SHEET_SUBTITLE_H + instr
+    extras = 0
+    if with_instructions:
+        extras += SHEET_INSTR_H + SHEET_INSTR_GAP
+        extras += SHEET_RULES_H + SHEET_RULES_GAP
+    return (2*SHEET_PAD + SHEET_TITLE_H + extras
             + SHEET_PHDR_H
             + 8 + SHEET_RACK_HDR_H + SHEET_STATS_HDR_H
             + NUM_RACKS * SHEET_RACK_H_MIN
@@ -142,8 +186,11 @@ def draw_scoresheet(c, left, top, width, height, with_instructions=True):
     inner_w = width - 2*pad
 
     # Compute rack_h so all rows fit the requested height exactly.
-    instr_reserve = (SHEET_INSTR_H + SHEET_INSTR_GAP) if with_instructions else 0
-    fixed_h = (SHEET_TITLE_H + SHEET_SUBTITLE_H + instr_reserve
+    extras_reserve = 0
+    if with_instructions:
+        extras_reserve += SHEET_INSTR_H + SHEET_INSTR_GAP
+        extras_reserve += SHEET_RULES_H + SHEET_RULES_GAP
+    fixed_h = (SHEET_TITLE_H + extras_reserve
                + SHEET_PHDR_H + 8
                + SHEET_RACK_HDR_H + SHEET_STATS_HDR_H
                + SHEET_TOTALS_GAP + SHEET_TOTALS_HDR_H + SHEET_TOTALS_H
@@ -152,13 +199,13 @@ def draw_scoresheet(c, left, top, width, height, with_instructions=True):
     rack_h = avail_for_racks / NUM_RACKS
 
     # === Title bar (inside the sheet) ===
+    # Subtitle retired: RACK TOTAL / GAME SUBTOTAL formulas moved to the
+    # HOW TO SCORE strip (steps 4 & 5) so they aren't duplicated. The
+    # Columbia Cue Club branding lives in the footer of each build script.
     c.setFont(FONT_BOLD, 12)
     c.setFillColorRGB(*BLACK)
     c.drawCentredString(left + width/2, y0 - 14, "15-BALL ROTATION (K-BALL) - MATCH SCORE SHEET")
     y0 -= SHEET_TITLE_H
-    c.setFont(FONT_BODY, 8)
-    c.drawCentredString(left + width/2, y0 - 2, "Columbia Cue Club   -   RACK TOTAL = balls made - fouls   -   GAME SUBTOTAL runs like a checkbook balance")
-    y0 -= SHEET_SUBTITLE_H
 
     # === Mini-instructions strip (self-contained sheet) ===
     # Six one-liners, so a first-time scorer can fill this sheet without
@@ -182,9 +229,9 @@ def draw_scoresheet(c, left, top, width, height, with_instructions=True):
         c.drawString(strip_x + inner_pad_x, instr_top - 10, "HOW TO SCORE")
         instr_steps = [
             (1, "Fill NAME and check goal (25 rec / 50 pro)."),
-            (2, "Mark inside a ball's circle when pocketed (dot/slash/X)."),
+            (2, "Mark each ball's circle when pocketed - OR write count in BALLS MADE."),
             (3, "Write # of fouls per rack in FOULS."),
-            (4, "RACK TOTAL = balls marked - fouls."),
+            (4, "RACK TOTAL = BALLS MADE - fouls."),
             (5, "GAME SUBTOTAL = last SUBTOTAL + this RACK TOTAL."),
             (6, "First to goal wins. Check WINNER, both sign."),
         ]
@@ -201,8 +248,94 @@ def draw_scoresheet(c, left, top, width, height, with_instructions=True):
             c.drawString(sx, sy - 6, f"{n}.")
             c.setFont(FONT_BODY, 7)
             c.drawString(sx + 10, sy - 6, body)
-        # Advance past the strip AND the breathing gap before the player card.
+        # Advance past the strip AND the breathing gap before the rules block.
         y0 -= SHEET_INSTR_H + SHEET_INSTR_GAP
+
+    # === Rules-comparison block + WPA rules QR (self-contained sheet) ===
+    # A two-column block:
+    #   Left:  K-BALL rules summary + micro-comparison to 10-ball and 14.1
+    #          (the two WPA disciplines K-Ball borrows from).
+    #   Right: QR code jumping straight to the WPA 10-Ball section, with
+    #          a plain-text URL below for people who prefer to type it.
+    # The block is skipped when the sheet is embedded in the annotated
+    # guide (with_instructions=False) so the guide's callouts drive the
+    # explanation instead.
+    if with_instructions:
+        rules_top = y0
+        rules_h = SHEET_RULES_H
+        rules_x = x0 + SHEET_INSTR_MARGIN
+        rules_w = inner_w - 2 * SHEET_INSTR_MARGIN
+        c.setLineWidth(LINE)
+        c.setStrokeColorRGB(*BLACK)
+        c.rect(rules_x, rules_top - rules_h, rules_w, rules_h,
+               stroke=1, fill=0)
+        inner_pad_x = 10
+        inner_pad_top = 10
+
+        # --- Right column: QR + URLs ---
+        # Right-align the QR block so caption text has room on the left.
+        qr_size = 58
+        qr_x = rules_x + rules_w - inner_pad_x - qr_size
+        qr_y_bottom = rules_top - inner_pad_top - qr_size
+        draw_qr(c, qr_x, qr_y_bottom, qr_size,
+                "https://wpapool.com/wp-content/uploads/2026/01/2026.01.02-WPA-Rules.pdf#page=24")
+        # Caption directly under the QR.
+        c.setFont(FONT_BOLD, 6.5); c.setFillColorRGB(*BLACK)
+        c.drawCentredString(qr_x + qr_size/2, qr_y_bottom - 8, "Scan: WPA 10-Ball rules")
+        c.setFont(FONT_BODY, 5.5); c.setFillColorRGB(*BLACK)
+        c.drawCentredString(qr_x + qr_size/2, qr_y_bottom - 15, "wpapool.com/rules/")
+
+        # --- Left column: rules summary ---
+        # Reserve space for the QR + a small gap.
+        left_x = rules_x + inner_pad_x
+        left_w = qr_x - left_x - 10
+
+        # Title line
+        c.setFont(FONT_BOLD, 8.5); c.setFillColorRGB(*BLACK)
+        c.drawString(left_x, rules_top - inner_pad_top - 4, "K-BALL RULES SUMMARY")
+        # Underlying idea
+        c.setFont(FONT_BODY, 7); c.setFillColorRGB(*BLACK)
+        line_y = rules_top - inner_pad_top - 14
+        c.drawString(left_x, line_y,
+                     "K-Ball is a house mashup of 10-Ball (rotation, lowest-ball-first) and 14.1 Continuous Pool (1 pt/ball, race to N).")
+        line_y -= 9
+        c.drawString(left_x, line_y,
+                     "Hit the lowest-numbered ball first (rotation). Any ball pocketed legally scores 1 point. First to the goal wins.")
+        line_y -= 9
+        c.drawString(left_x, line_y,
+                     "Fouls (-1 pt each): scratch, no rail after contact, wrong-ball-first, jump-shot on cue ball, ball off table.")
+        line_y -= 12
+
+        # Micro-comparison table: 3 rows x 4 cols
+        c.setFont(FONT_BOLD, 6.5); c.setFillColorRGB(*BLACK)
+        col_labels = ["", "BALLS", "WIN CONDITION", "CALL SHOTS?"]
+        # Column x positions inside left column
+        col_x = [
+            left_x,
+            left_x + 62,
+            left_x + 108,
+            left_x + 232,
+        ]
+        for cx, lbl in zip(col_x, col_labels):
+            c.drawString(cx, line_y, lbl)
+        line_y -= 8
+        c.setFont(FONT_BOLD, 6.5)
+        rows = [
+            ("K-Ball", "1-15", "first to race-to-N goal", "No (rotation only)"),
+            ("10-Ball", "1-10", "legally pocket the 10", "Yes"),
+            ("14.1",    "1-15", "first to race-to-N goal", "Yes"),
+        ]
+        c.setFont(FONT_BODY, 6.5); c.setFillColorRGB(*BLACK)
+        for name, balls, win, call in rows:
+            c.setFont(FONT_BOLD, 6.5); c.setFillColorRGB(*BLACK)
+            c.drawString(col_x[0], line_y, name)
+            c.setFont(FONT_BODY, 6.5); c.setFillColorRGB(*BLACK)
+            c.drawString(col_x[1], line_y, balls)
+            c.drawString(col_x[2], line_y, win)
+            c.drawString(col_x[3], line_y, call)
+            line_y -= 7.5
+
+        y0 -= SHEET_RULES_H + SHEET_RULES_GAP
 
     # === Player header row (blank lines for name/goal) ===
     y_ph = y0
@@ -417,137 +550,3 @@ def draw_scoresheet(c, left, top, width, height, with_instructions=True):
     c.drawCentredString(sig_a_x + sig_line_w/2, y0 - 24, "PLAYER A")
     c.drawCentredString(sig_b_x + sig_line_w/2, y0 - 24, "PLAYER B")
 
-def draw_callout(c, num, x, y, tw):
-    """Draw a numbered marker circle at (x,y). Solid black circle w/ white number."""
-    r = 8
-    c.setStrokeColorRGB(*BLACK); c.setFillColorRGB(*BLACK)
-    c.setLineWidth(1.0)
-    c.circle(x, y, r, stroke=1, fill=1)
-    c.setFillColorRGB(*WHITE); c.setFont(FONT_BOLD, 8.5)
-    c.drawCentredString(x, y - 3, str(num))
-    c.setFillColorRGB(*BLACK)
-
-def wrap_text(c, text, x, y, w, font=FONT_BODY, size=8, leading=10):
-    """Very small text wrapper."""
-    from reportlab.pdfbase.pdfmetrics import stringWidth
-    words = text.split()
-    line = ""
-    yy = y
-    for w_ in words:
-        cand = line + (" " if line else "") + w_
-        if stringWidth(cand, font, size) <= w:
-            line = cand
-        else:
-            c.setFont(font, size); c.drawString(x, yy, line)
-            yy -= leading
-            line = w_
-    if line:
-        c.setFont(font, size); c.drawString(x, yy, line)
-        yy -= leading
-    return yy
-
-def main():
-    build(OUT)
-
-def build(out_path):
-    c = canvas.Canvas(out_path, pagesize=letter)
-    c.setAuthor("Perplexity Computer")
-    c.setTitle("K-Ball Paper Score-Sheet Guide (B&W, printable)")
-    c.setSubject("Print-first, photocopy-friendly, hand-fillable guide for the K-Ball paper score sheet.")
-    c.setCreator("kball-scoresheet docs/build_paper_guide.py")
-
-    # === Top title bar (B&W: thick black border, no fill) ===
-    top_bar_h = 0.55 * inch
-    bar_y = PAGE_H - MARGIN - top_bar_h
-    c.setStrokeColorRGB(*BLACK); c.setLineWidth(LINE_STRONG)
-    c.rect(MARGIN, bar_y, PAGE_W - 2*MARGIN, top_bar_h, stroke=1, fill=0)
-    c.setFont(FONT_BOLD, 16); c.setFillColorRGB(*BLACK)
-    c.drawString(MARGIN + 10, bar_y + top_bar_h - 20, "K-BALL PAPER SCORE-SHEET GUIDE")
-    c.setFont(FONT_BODY, 8.5)
-    c.drawString(MARGIN + 10, bar_y + 8, "Columbia Cue Club  -  Print this sheet, fill by hand, photocopy for records.")
-    c.setFont(FONT_BOLD, 8.5)
-    c.drawRightString(PAGE_W - MARGIN - 10, bar_y + 8, "ColumbiaCueClub.com")
-
-    # === Score sheet region ===
-    sheet_top = bar_y - 12
-    sheet_w = PAGE_W - 2 * MARGIN
-    sheet_h = 5.3 * inch
-    sheet_left = MARGIN
-    # The annotated guide's callouts already teach these six steps, so
-    # skip the redundant mini-instructions strip inside the embedded sheet.
-    draw_scoresheet(c, sheet_left, sheet_top, sheet_w, sheet_h,
-                    with_instructions=False)
-
-    sheet_bottom = sheet_top - sheet_h
-
-    # === Callouts on the sheet ===
-    # Coordinates chosen to point at the empty cells in the blank sheet.
-    # (fx, fy) are fractions relative to the sheet's inner content region.
-    sheet_inner_left = sheet_left + 8
-    sheet_inner_top = sheet_top - 8
-    sheet_inner_w = sheet_w - 16
-    sheet_inner_h = sheet_h - 16
-    def anchor(fx, fy):
-        return (sheet_inner_left + fx * sheet_inner_w,
-                sheet_inner_top  - fy * sheet_inner_h)
-
-    # Callout list is now 6 items after removing 'Enter High Run at end
-    # of match' - the HIGH RUN column was pulled from the totals row
-    # (see totals section above). Grid below is 2 x 3.
-    callouts = [
-        (1, "Write player name & mark goal box",             0.22, 0.16),
-        (2, "Mark each ball as it's pocketed",               0.30, 0.36),
-        (3, "Write # of fouls this rack",                    0.62, 0.42),
-        (4, "RACK TOTAL = balls made - fouls",               0.72, 0.42),
-        (5, "GAME SUBTOTAL = last SUBTOTAL + this RACK",     0.94, 0.42),
-        (6, "Check winner, both sign, deliver to desk",      0.10, 0.98),
-    ]
-    for (n, _t, fx, fy) in callouts:
-        px, py = anchor(fx, fy)
-        draw_callout(c, n, px, py, 0)
-
-    # === Callout descriptions (bottom half of page, 2 x 4 grid) ===
-    co_top = sheet_bottom - 12
-    co_bottom = MARGIN + 0.28 * inch
-    co_h_total = co_top - co_bottom
-    col_gap = 10
-    col_w = (sheet_w - col_gap) / 2
-    row_gap = 6
-    row_h = (co_h_total - 2 * row_gap) / 3
-
-    for i, (n, title, _fx, _fy) in enumerate(callouts):
-        col = i % 2
-        row = i // 2
-        bx = MARGIN + col * (col_w + col_gap)
-        by = co_top - row * (row_h + row_gap)
-        # Card box (white with black outline)
-        c.setLineWidth(LINE_MED); c.setStrokeColorRGB(*BLACK); c.setFillColorRGB(*WHITE)
-        c.rect(bx, by - row_h, col_w, row_h, stroke=1, fill=0)
-        # Numbered marker
-        draw_callout(c, n, bx + 14, by - 14, 0)
-        # Title
-        c.setFont(FONT_BOLD, 9.5); c.setFillColorRGB(*BLACK)
-        c.drawString(bx + 30, by - 15, title)
-        # Body text - short explanation
-        bodies = {
-            1: "Write the player's name on the NAME line. Check the 25 (rec) or 50 (pro) box, or write a custom goal on OTHER.",
-            2: "When a player pockets a ball, mark inside its circle in that rack row (a dot, slash, or X - whatever's fastest). Unmarked = not pocketed. Balls are worth 1 point each.",
-            3: "Write the number of fouls that player committed during this rack in the FOULS cell. Foul = -1 point.",
-            4: "RACK TOTAL at the end of each rack: count the balls you marked, subtract fouls, write the result. Like one line's amount in a checkbook.",
-            5: "GAME SUBTOTAL = the previous rack's GAME SUBTOTAL + this rack's RACK TOTAL. First rack: GAME SUBTOTAL = RACK TOTAL. It's a running balance, like a checkbook. First player to their goal wins.",
-            6: "When a player reaches their goal, check the WINNER box. Both players sign. Keep a photocopy in the match binder; the paper original goes to the Bracket Desk for entry into the app.",
-        }
-        wrap_text(c, bodies[n], bx + 30, by - 28, col_w - 40, size=7.7, leading=9.4)
-
-    # Footer
-    c.setFont(FONT_BODY, 7); c.setFillColorRGB(*BLACK)
-    c.drawString(MARGIN, MARGIN - 4,
-                 "Solid borders = you write here.   Dashed borders = calculated (you also compute these by hand).   Thick border = final total.")
-    c.drawRightString(PAGE_W - MARGIN, MARGIN - 4, "Paper Score-Sheet Guide v1")
-
-    c.showPage()
-    c.save()
-    print(f"Wrote {out_path}")
-
-if __name__ == "__main__":
-    main()

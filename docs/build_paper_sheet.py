@@ -1,8 +1,8 @@
 """
 K-Ball Paper Score-Sheet - blank printable (matches the annotated guide)
 
-Uses the SAME draw_scoresheet() function as build_paper_guide.py so the
-blank printable and its annotated tutorial can never drift.
+Uses the shared draw_scoresheet() from _scoresheet_draw.py so this
+printable and any other paper variant stay in lockstep.
 
 Layout: ONE full-page blank score sheet per letter page. Uses the whole
 vertical budget so ball circles are large enough to hand-mark comfortably.
@@ -23,9 +23,8 @@ sys.path.insert(0, HERE)
 from reportlab.pdfgen import canvas  # noqa: E402
 from reportlab.lib.pagesizes import letter  # noqa: E402
 
-# Reuse the guide's drawing primitives so the blank matches the annotated
-# version pixel-for-pixel.
-from build_paper_guide import (  # noqa: E402
+# Shared drawing primitives so every paper variant renders identically.
+from _scoresheet_draw import (  # noqa: E402
     draw_scoresheet,
     BLACK,
     FONT_BODY,
