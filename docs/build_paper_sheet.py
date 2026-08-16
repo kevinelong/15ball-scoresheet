@@ -70,7 +70,7 @@ def build(out_path):
     # Available printable height: PAGE_H - 2*MARGIN.
     # We stack 2 sheets vertically with a small gap for the cut line.
     usable_h = PAGE_H - 2 * MARGIN
-    gap = 18  # points between the two half-pages
+    gap = 8  # points between the two half-pages (kept tight so each sheet has room)
     sheet_h = (usable_h - gap) / 2
     sheet_w = PAGE_W - 2 * MARGIN
 

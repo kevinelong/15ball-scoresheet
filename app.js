@@ -437,13 +437,13 @@
           ${[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15].map((n) => ballBtn(rack, side, n)).join("")}
         </div>
         <div class="rackstats">
-          <label>Balls<input type="number" min="0" max="15" readonly
+          <label>Balls Made<input type="number" min="0" max="15" readonly
                               data-total data-rack="${rack}" data-side="${side}" /></label>
           <label>Fouls<input type="number" inputmode="numeric" pattern="[0-9]*" min="0" step="1" enterkeyhint="done"
                               data-foul data-rack="${rack}" data-side="${side}" /></label>
-          <label class="racknet">Rack Net<input type="number" readonly
+          <label class="racknet">Rack Total<input type="number" readonly
                                      data-racknet data-rack="${rack}" data-side="${side}" /></label>
-          <label class="running">Running<input type="number" readonly
+          <label class="running">Game Subtotal<input type="number" readonly
                                      data-running data-rack="${rack}" data-side="${side}" /></label>
         </div>
       </div>`;

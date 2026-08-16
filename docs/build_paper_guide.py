@@ -83,14 +83,14 @@ SHEET_SUBTITLE_H   = 14     # subtitle line
 SHEET_PHDR_H       = 46     # PLAYER A/B name+goal card
 SHEET_PHDR_GAP     = 8
 SHEET_RACK_HDR_H   = 14     # "RACK / PLAYER A / PLAYER B" column header
-SHEET_STATS_HDR_H  = 12     # BALLS / FOULS / NET / RUN label strip (above racks)
+SHEET_STATS_HDR_H  = 20     # 2-line plain-English label strip (above racks)
 SHEET_TOTALS_HDR_H = 20     # two clear rows: player tag, then column labels
 SHEET_TOTALS_H     = 0.42 * inch
 SHEET_TOTALS_GAP   = 4      # gap between racks and totals labels
 SHEET_WIN_GAP      = 6      # gap between totals and winner row
 SHEET_WIN_H        = 0.42 * inch
 NUM_RACKS          = 4
-SHEET_RACK_H_MIN   = 31.5   # each rack row (min); grows to fill available height
+SHEET_RACK_H_MIN   = 30.5   # each rack row (min); grows to fill available height
 
 def sheet_min_height():
     """Minimum height the score sheet needs to render without clipping."""
@@ -137,7 +137,7 @@ def draw_scoresheet(c, left, top, width, height):
     c.drawCentredString(left + width/2, y0 - 14, "15-BALL ROTATION (K-BALL) - MATCH SCORE SHEET")
     y0 -= SHEET_TITLE_H
     c.setFont(FONT_BODY, 8)
-    c.drawCentredString(left + width/2, y0 - 2, "Columbia Cue Club   -   Rack Net = Balls - Fouls   -   Running = sum of Rack Nets")
+    c.drawCentredString(left + width/2, y0 - 2, "Columbia Cue Club   -   RACK TOTAL = balls made - fouls   -   GAME SUBTOTAL runs like a checkbook balance")
     y0 -= SHEET_SUBTITLE_H
 
     # === Player header row (blank lines for name/goal) ===
@@ -170,7 +170,7 @@ def draw_scoresheet(c, left, top, width, height):
     # === Rack grid ===
     rack_col_w = 22
     side_w = (inner_w - rack_col_w) / 2
-    stats_strip_w = 96  # 24pt per label keeps BALLS / FOULS / NET / RUN distinct
+    stats_strip_w = 128  # 32pt/column fits 2-line labels (BALLS MADE, RACK TOTAL, GAME SUBTOTAL)
     balls_w = side_w - stats_strip_w
     ball_cols = 5
     ball_rows = 3
@@ -184,18 +184,25 @@ def draw_scoresheet(c, left, top, width, height):
     c.drawCentredString(x0 + rack_col_w + side_w + side_w / 2, y0 - 10, "PLAYER B")
     y0 -= SHEET_RACK_HDR_H
 
-    # Stats-strip label row (BALLS FOULS NET RUN) - drawn ABOVE the racks so
-    # labels never overlap cells or borders.
+    # Stats-strip label row - two-line plain-English labels above each column.
+    # Line 1 / Line 2 stacked so labels are readable at 5th-grade level and
+    # nothing overlaps the tight column widths.
     stats_hdr_y = y0
     n_stats = 4
     stat_w = stats_strip_w / n_stats
-    stat_labels = ["BALLS", "FOULS", "NET", "RUN"]
-    c.setFont(FONT_BOLD, 6)
+    # (line1, line2) per column. Empty line2 = single-line label centered vertically.
+    stat_labels = [("BALLS", "MADE"), ("FOULS", ""), ("RACK", "TOTAL"), ("GAME", "SUBTOTAL")]
+    c.setFont(FONT_BOLD, 5.5)
     for side_i in range(2):
         strip_x = x0 + rack_col_w + side_i * side_w + balls_w
         for si in range(n_stats):
             sx = strip_x + si * stat_w
-            c.drawCentredString(sx + stat_w/2, stats_hdr_y - 9, stat_labels[si])
+            l1, l2 = stat_labels[si]
+            if l2:
+                c.drawCentredString(sx + stat_w/2, stats_hdr_y - 8, l1)
+                c.drawCentredString(sx + stat_w/2, stats_hdr_y - 15, l2)
+            else:
+                c.drawCentredString(sx + stat_w/2, stats_hdr_y - 12, l1)
     y0 -= SHEET_STATS_HDR_H
 
     # Racks
@@ -247,25 +254,29 @@ def draw_scoresheet(c, left, top, width, height):
     y0 -= SHEET_TOTALS_GAP
     tot_h = SHEET_TOTALS_H
     # "PLAYER TOTALS" section label sits above the cards in its own strip so
-    # nothing touches the card borders below.
+    # nothing touches the card borders below. Two-strip layout:
+    #   strip 1: "PLAYER TOTALS" section title on the left, "A / B" hint right
+    #   strip 2: 2-line column labels above each of the 3 columns
     tot_hdr_y = y0
-    c.setFont(FONT_BOLD, 7); c.setFillColorRGB(*BLACK)
-    c.drawString(x0, tot_hdr_y - 7, "PLAYER TOTALS")
+    c.setFont(FONT_BOLD, 6.5); c.setFillColorRGB(*BLACK)
+    c.drawString(x0, tot_hdr_y - 6, "PLAYER TOTALS")
+    c.setFont(FONT_BOLD, 6)
+    c.drawRightString(x0 + inner_w, tot_hdr_y - 6, "left card = PLAYER A   -   right card = PLAYER B")
 
     tcard_w = (inner_w - gap) / 2
-    # HIGH RUN / FOULS / FINAL labels centered above each column of each card.
     col_w_labels = (tcard_w - 12) / 3
+    tot_labels = [("HIGH", "RUN"), ("FOULS", ""), ("FINAL GAME", "TOTAL")]
+    label_y = tot_hdr_y - 8  # start just below the PLAYER TOTALS title strip
+    c.setFont(FONT_BOLD, 5.5)
     for i in range(2):
         tx = x0 + i * (tcard_w + gap)
-        # Player letter tag lives in the label strip on the right of each card.
-        letter = "PLAYER A" if i == 0 else "PLAYER B"
-        c.setFont(FONT_BOLD, 6)
-        c.drawRightString(tx + tcard_w - 4, tot_hdr_y - 7, letter)
-        # Column labels
-        c.setFont(FONT_BOLD, 6)
-        for j, col_label in enumerate(["HIGH RUN", "FOULS", "FINAL"]):
+        for j, (l1, l2) in enumerate(tot_labels):
             cx = tx + 6 + j * col_w_labels
-            c.drawCentredString(cx + col_w_labels/2, tot_hdr_y - 16, col_label)
+            if l2:
+                c.drawCentredString(cx + col_w_labels/2, label_y - 5, l1)
+                c.drawCentredString(cx + col_w_labels/2, label_y - 11, l2)
+            else:
+                c.drawCentredString(cx + col_w_labels/2, label_y - 8, l1)
     y0 -= SHEET_TOTALS_HDR_H
 
     tot_row_y = y0
@@ -397,10 +408,10 @@ def build(out_path):
     callouts = [
         (1, "Write player name & mark goal box",  0.22, 0.16),
         (2, "Circle each ball as it's pocketed",  0.30, 0.36),
-        (3, "Write # of fouls this rack",         0.62, 0.42),
-        (4, "Net = balls circled - fouls",        0.72, 0.42),
-        (5, "Running = last Running + this Net",  0.94, 0.42),
-        (6, "Enter High Run at end of match",     0.16, 0.86),
+        (3, "Write # of fouls this rack",                    0.62, 0.42),
+        (4, "RACK TOTAL = balls made - fouls",               0.72, 0.42),
+        (5, "GAME SUBTOTAL = last SUBTOTAL + this RACK",     0.94, 0.42),
+        (6, "Enter High Run at end of match",                0.16, 0.86),
         (7, "Check winner + both sign",           0.10, 0.98),
         (8, "Photocopy for records; original to Bracket Desk", 0.60, 0.98),
     ]
@@ -435,8 +446,8 @@ def build(out_path):
             1: "Write the player's name on the NAME line. Check the 25 (rec) or 50 (pro) box, or write a custom goal on OTHER.",
             2: "When a player pockets a ball, circle its number in that rack row. Empty circle = not pocketed. Balls are worth 1 point each.",
             3: "Write the number of fouls that player committed during this rack in the FOULS cell. Foul = -1 point.",
-            4: "Compute NET at the end of each rack: count circled balls, subtract fouls, write the result in the NET cell.",
-            5: "RUNNING = the previous rack's RUNNING + this rack's NET. First rack: RUNNING = NET. First to their goal wins.",
+            4: "RACK TOTAL at the end of each rack: count balls made (circled), subtract fouls, write the result. Like one line's amount in a checkbook.",
+            5: "GAME SUBTOTAL = the previous rack's GAME SUBTOTAL + this rack's RACK TOTAL. First rack: GAME SUBTOTAL = RACK TOTAL. It's a running balance, like a checkbook. First player to their goal wins.",
             6: "HIGH RUN = the most balls circled in a single rack for that player. Write once, at end of match.",
             7: "Check WINNER box for the player who reached their goal first. Both players sign to certify.",
             8: "Keep a photocopy in the match binder; the paper original goes to the Bracket Desk for entry into the app.",

@@ -103,7 +103,7 @@ def draw_page_header(c):
     c.setFont(FONT_BODY, 9)
     c.setFillColorRGB(0.85, 0.87, 0.95)
     c.drawRightString(PAGE_W - MARGIN, PAGE_H - 0.46*inch, "ColumbiaCueClub.com")
-    c.drawRightString(PAGE_W - MARGIN, PAGE_H - 0.62*inch, "Rack Net = Balls - Fouls   |   Running = sum of Rack Nets")
+    # Sheet-math tagline is on the sheet itself in the subtitle; keep the top header clean.
 
 # ---------------- Helpers ----------------
 def draw_star(c, cx, cy, r):
@@ -225,7 +225,7 @@ def draw_sample_sheet(c):
     # Section header above the boxes
     c.setFont(FONT_SEMI, 7); c.setFillColorRGB(*MUTED)
     c.drawString(left + 6, tot_top, "PLAYER TOTALS")
-    tot_top -= 0.10*inch
+    tot_top -= 0.22*inch  # room for PLAYER A/B tag row + 2-line FINAL GAME TOTAL header
     tot_h = 0.42*inch
     tot_row_y = tot_top
     tcard_w = (width - gap) / 2
@@ -236,24 +236,31 @@ def draw_sample_sheet(c):
         c.setStrokeColorRGB(*LINE)
         c.setFillColorRGB(*SOFT_BG)
         c.roundRect(tx, tot_row_y - tot_h, tcard_w, tot_h, 3, stroke=1, fill=1)
-        # Player label above the box on the right side
+        # Player label above the box on the right side. The FINAL GAME TOTAL
+        # column below wraps to 2 lines, so place the tag well above the card
+        # top to keep them from touching.
         c.setFont(FONT_SEMI, 6.5); c.setFillColorRGB(*NAVY)
-        c.drawRightString(tx + tcard_w - 4, tot_row_y + 2, label)
+        c.drawRightString(tx + tcard_w - 4, tot_row_y + 8, label)
 
-        # 3 columns: HIGH RUN | FOULS | FINAL TOTAL (final highlighted)
+        # 3 columns: HIGH RUN | FOULS | FINAL GAME TOTAL (final highlighted)
+        # Third label wraps to 2 lines to avoid collision with the PLAYER A/B tag.
         col_w = (tcard_w - 12) / 3
         val_cell_h = 20
-        for j, (lbl, val, highlight) in enumerate([
-            ("HIGH RUN", hr, False),
-            ("FOULS",   fouls_total, False),
-            ("FINAL",   final_total, True),
+        for j, (lbl_lines, val, highlight) in enumerate([
+            (["HIGH RUN"],         hr,          False),
+            (["FOULS"],            fouls_total, False),
+            (["FINAL GAME", "TOTAL"], final_total, True),
         ]):
             cx = tx + 6 + j*col_w
             cy = tot_row_y - tot_h + 6  # cell bottom
-            # Column label (above cell)
+            # Column label (above cell) - 1 or 2 lines
             c.setFillColorRGB(*MUTED)
             c.setFont(FONT_SEMI, 6.5)
-            c.drawCentredString(cx + (col_w - 4)/2, cy + val_cell_h + 2, lbl)
+            if len(lbl_lines) == 2:
+                c.drawCentredString(cx + (col_w - 4)/2, cy + val_cell_h + 8, lbl_lines[0])
+                c.drawCentredString(cx + (col_w - 4)/2, cy + val_cell_h + 2, lbl_lines[1])
+            else:
+                c.drawCentredString(cx + (col_w - 4)/2, cy + val_cell_h + 2, lbl_lines[0])
             # Cell
             if highlight:
                 c.setFillColorRGB(*NAVY); c.setStrokeColorRGB(*NAVY)
@@ -310,9 +317,9 @@ def draw_sample_sheet(c):
     return (left, bottom, width, height)
 
 def draw_rack_side(c, x, y, w, h, balls, fouls, net, running):
-    """Draw one side (Player A or B) of a rack: balls grid + Balls/Fouls/RackNet/Running column."""
+    """Draw one side (Player A or B) of a rack: balls grid + Balls Made / Fouls / Rack Total / Game Subtotal column."""
     # Left area = ball buttons (5x3 grid). Right area = 4 stat cells
-    stats_w = 0.85*inch
+    stats_w = 1.05*inch  # wide enough to fit "GAME SUBTOTAL" without clipping into the value
     balls_area_w = w - stats_w - 12  # padding
     balls_area_x = x + 6
     balls_area_y_top = y + h - 6
@@ -339,15 +346,15 @@ def draw_rack_side(c, x, y, w, h, balls, fouls, net, running):
         c.setFillColorRGB(1,1,1) if on else c.setFillColorRGB(*INK)
         c.drawCentredString(cx, cy - 2, str(n))
 
-    # Stats: 4 cells (Balls, Fouls, Rack Net, Running)
+    # Stats: 4 cells (Balls Made, Fouls, Rack Total, Game Subtotal)
     stats_x = x + w - stats_w - 4
     stat_h = (h - 8) / 4
     stat_gap = 1.5
     for i, (lbl, val, kind) in enumerate([
-        ("BALLS",    len(balls), "plain"),
-        ("FOULS",    fouls,      "plain"),
-        ("RACK NET", net,        "gold"),
-        ("RUNNING",  running,    "navy"),
+        ("BALLS MADE",    len(balls), "plain"),
+        ("FOULS",         fouls,      "plain"),
+        ("RACK TOTAL",    net,        "gold"),
+        ("GAME SUBTOTAL", running,    "navy"),
     ]):
         sy = y + h - 4 - (i+1)*stat_h - i*stat_gap
         # Cell
@@ -389,14 +396,14 @@ CALLOUTS = [
     (3, "Record fouls per rack",
      "Type foul count for this rack in the Fouls cell. Bob committed 1 foul in Rack 1.",
      0.75, 0.65),
-    (4, "Rack Net = Balls \u2212 Fouls",
+    (4, "RACK TOTAL = Balls Made \u2212 Fouls",
      "Auto-computed per rack per player. Alice R1: 5 balls \u2212 0 fouls = 5. Bob R1: 4 \u2212 1 = 3.",
      0.35, 0.52),
-    (5, "Running total carries down",
-     "Cumulative sum of Rack Nets so far. Alice: 5, 8, 13, 19. First to the goal wins.",
+    (5, "GAME SUBTOTAL is a running balance",
+     "Cumulative sum of Rack Totals so far, like a checkbook balance. Alice: 5, 8, 13, 19. First to the goal wins.",
      0.85, 0.36),
     (6, "Final Total = winning line",
-     "The last Running total. Alice finished at 19 net points (goal 25 not reached in demo). Winner is decided by whoever reaches the goal first \u2014 in a real match, keep racking.",
+     "The last GAME SUBTOTAL is the FINAL GAME TOTAL. Alice finished at 19 (goal 25 not reached in demo). Winner is decided by whoever reaches the goal first \u2014 in a real match, keep racking.",
      0.30, 0.15),
     (7, "Circle the winner",
      "Only one radio can be selected. Selecting a winner also updates the bracket.",
