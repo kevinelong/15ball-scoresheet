@@ -1,26 +1,19 @@
 <!-- ============================================================= -->
-<!-- RECONCILE BEFORE WRITING GO — see server/SPEC-REVIEW.md        -->
+<!-- SUPERSEDED IN PLACES — read SPEC-DESIGN-RECONCILED.md first    -->
 <!-- ============================================================= -->
-> **⚠️ Open review not yet addressed.** `server/SPEC-REVIEW.md` has **17 unanswered
-> `Decision:` items** from the deploy/ops side. This DESIGN.md does not reference
-> it, and conflicts with it on two points that block deployment as written:
+> **📌 Read `server/SPEC-DESIGN-RECONCILED.md` before implementing.** It is the
+> accepted single source of truth for backend decisions. All 17 `Decision:` items
+> from `server/SPEC-REVIEW.md` are answered there, and both deploy blockers are
+> resolved (OpenRC init instead of systemd; same-origin `/kball/` + `/kball/api/`
+> → `127.0.0.1:8093` instead of GitHub Pages + separate absolute API origin).
 >
-> 1. **Service manager.** DESIGN.md specs a **systemd** unit (`ProtectSystem`,
->    `DynamicUser`, `/opt/kball`). The **actual host is Alpine Linux + OpenRC +
->    doas** — systemd is not present. The service must be an OpenRC init (like the
->    box's existing `apid`/`huntd`). See SPEC-REVIEW #1.
-> 2. **Frontend origin.** DESIGN.md assumes GitHub Pages + a **separate absolute
->    API origin** and rejects same-origin. The frontend is **already live
->    same-origin** at `codeonline.io/kball/` with the API slot reserved at
->    `/kball/api/` → `127.0.0.1:8093` (no CORS). See SPEC-REVIEW #17.
->
-> Also unaddressed anywhere in this doc: single-use magic-link tokens, session
-> revocation on signout, CSRF, `request-link` rate limiting, Challonge re-export
-> idempotency, a health endpoint, graceful shutdown (SPEC-REVIEW #5–#15).
->
-> **Please answer the `Decision:` lines in SPEC-REVIEW.md and reconcile the two
-> points above before implementing.** This banner is a pointer only — the design
-> content below is unchanged.
+> Sections of THIS document are being rewritten to match. Trust a section only
+> when its box in the “DESIGN.md delta” checklist at the bottom of the
+> reconciliation is checked (`[x]`); unchecked sections may still reflect the
+> pre-reconciliation assumptions (systemd, separate API origin, no CSRF, signed
+> session tokens, no rate limits, no health endpoint, best-effort Challonge
+> export). See also `server/AGENTS.md` for the design/implementation handoff
+> protocol between the two agents working on this repo.
 
 ## 1. Table roster + assignment state on the server side
 
