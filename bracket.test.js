@@ -101,4 +101,16 @@ function assert(cond, msg) {
   assert(after.slots[0].name === w1m1Before.slot0 && after.slots[1].name === w1m1Before.slot1, "decided W1M1 slots unchanged");
 }
 
+// --- 8-Ball match: recordWinner accepts arbitrary score summary ---
+{
+  const players = [1, 2].map((n) => ({ name: "P" + n }));
+  const s = B.build(players, { format: "double" });
+  // Simulate a games-won result posted from the counter modal (7-3)
+  B.recordWinner(s, "W1M1", 1, { score: "3-7" });
+  assert(s.matches["W1M1"].winner === 1, "counter-modal winner recorded (slot 1)");
+  assert(s.matches["W1M1"].score === "3-7", "counter-modal score string persisted verbatim");
+  // Winner advances to GF1
+  assert(s.matches["GF1"].slots[0]?.name === "P2", "W1 winner (P2) feeds GF1 slot 0 in 2-player double");
+}
+
 console.log("\nAll bracket tests passed.");

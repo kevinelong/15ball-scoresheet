@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>15-Ball Rotation (K-Ball) &mdash; Tournament Bracket &amp; Score Sheets</title>
-<meta name="description" content="Double-elimination bracket, seeded from a participant list, with the K-Ball score sheet as the per-match editor. ColumbiaCueClub.com." />
+<title>Columbia Cue Club &mdash; Tournament Bracket &amp; Score Sheets</title>
+<meta name="description" content="Double-elimination brackets for 8-Ball, 9-Ball, 10-Ball, One Pocket, Straight Pool (14.1), Bank Pool, and K-Ball. Manage participants, record match scores, and export to Challonge. ColumbiaCueClub.com." />
 <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -48,9 +48,8 @@
         </div>
         <div class="hdr-actions">
           <button type="button" data-action="rename-tournament" title="Rename this tournament">Rename</button>
-          <button type="button" data-action="save-tournament">Save</button>
-          <button type="button" data-action="export-tournament">Export JSON</button>
-          <button type="button" data-action="import-tournament">Import JSON</button>
+          <button type="button" data-action="open-export-menu" title="Export or push to Challonge">Export &hellip;</button>
+          <button type="button" data-action="import-tournament">Import</button>
           <input type="file" id="importTournamentFile" accept="application/json" hidden />
         </div>
       </div>
@@ -68,6 +67,19 @@
           <input type="date" id="tDate" />
         </label>
         <label class="field">
+          <span>Game</span>
+          <select id="tGame">
+            <option value="kball">K-Ball / 15-Ball Rotation</option>
+            <option value="8ball">8-Ball</option>
+            <option value="9ball">9-Ball</option>
+            <option value="10ball">10-Ball</option>
+            <option value="onepocket">One Pocket</option>
+            <option value="14_1">Straight Pool (14.1)</option>
+            <option value="banks">Bank Pool</option>
+          </select>
+          <small id="tGameHint">Rotation scoring by pocketed ball value.</small>
+        </label>
+        <label class="field">
           <span>Grand Final Format</span>
           <select id="tFormat">
             <option value="double">Double Final (must beat twice)</option>
@@ -75,9 +87,9 @@
           </select>
         </label>
         <label class="field">
-          <span>Race To</span>
-          <input type="number" id="tRaceTo" min="1" max="99" value="25" />
-          <small>Points target per match (25 rec / 35 pro).</small>
+          <span id="tRaceLabel">Race To</span>
+          <input type="number" id="tRaceTo" min="1" max="999" value="25" />
+          <small id="tRaceHint">Points target per match (25 rec / 35 pro).</small>
         </label>
       </div>
       <div class="col">
@@ -107,7 +119,7 @@
     </section>
   </main>
 
-  <!-- =============================== SCORE SHEET MODAL =============================== -->
+  <!-- =============================== KBALL SCORE SHEET MODAL =============================== -->
   <div class="modal" id="matchModal" hidden aria-modal="true" role="dialog" aria-labelledby="matchTitle">
     <div class="modal-scrim" data-action="close-match"></div>
     <div class="modal-card">
@@ -120,10 +132,10 @@
       </div>
 
       <div class="modal-body">
-        <!-- The paper-style score sheet, scoped to one match -->
+        <!-- The paper-style K-Ball score sheet, scoped to one match -->
         <main class="sheet" id="sheet">
           <header class="hdr">
-            <h1>15-Ball Rotation (K-Ball)</h1>
+            <h1 id="sheetGameTitle">15-Ball Rotation (K-Ball)</h1>
             <div class="subhdr"><span class="star">&#9733;</span> MATCH SCORE SHEET <span class="star">&#9733;</span></div>
           </header>
 
@@ -198,6 +210,111 @@
         <div class="spacer"></div>
         <button type="button" data-action="close-match" class="ghost">Cancel</button>
         <button type="button" data-action="save-match" class="primary">Save Result</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =============================== SIMPLE COUNTER SCORE SHEET (8/9/10-ball) =============================== -->
+  <div class="modal" id="counterModal" hidden aria-modal="true" role="dialog" aria-labelledby="counterTitle">
+    <div class="modal-scrim" data-action="close-counter"></div>
+    <div class="modal-card modal-card-md">
+      <div class="modal-hdr">
+        <div>
+          <div class="modal-eyebrow" id="counterEyebrow">Match</div>
+          <h2 id="counterTitle">A vs B</h2>
+        </div>
+        <button type="button" class="iconbtn" data-action="close-counter" aria-label="Close">&times;</button>
+      </div>
+      <div class="modal-body counter-body">
+        <div class="counter-grid">
+          <div class="counter-side" data-side="A">
+            <div class="counter-label">Player A</div>
+            <div class="counter-name" id="counterANm">&mdash;</div>
+            <div class="counter-controls">
+              <button type="button" class="counter-btn" data-counter-dec="A" aria-label="Decrement Player A">&minus;</button>
+              <div class="counter-num" id="counterAScore">0</div>
+              <button type="button" class="counter-btn" data-counter-inc="A" aria-label="Increment Player A">+</button>
+            </div>
+            <div class="counter-jumps" data-counter-jumps="A" hidden>
+              <button type="button" class="counter-jump" data-counter-jump="A" data-delta="5">+5</button>
+              <button type="button" class="counter-jump" data-counter-jump="A" data-delta="10">+10</button>
+              <button type="button" class="counter-jump" data-counter-jump="A" data-delta="-5">&minus;5</button>
+            </div>
+            <label class="counter-check">
+              <input type="radio" name="counterWinner" value="A" /> Declare winner
+            </label>
+          </div>
+          <div class="counter-vs">vs</div>
+          <div class="counter-side" data-side="B">
+            <div class="counter-label">Player B</div>
+            <div class="counter-name" id="counterBNm">&mdash;</div>
+            <div class="counter-controls">
+              <button type="button" class="counter-btn" data-counter-dec="B" aria-label="Decrement Player B">&minus;</button>
+              <div class="counter-num" id="counterBScore">0</div>
+              <button type="button" class="counter-btn" data-counter-inc="B" aria-label="Increment Player B">+</button>
+            </div>
+            <div class="counter-jumps" data-counter-jumps="B" hidden>
+              <button type="button" class="counter-jump" data-counter-jump="B" data-delta="5">+5</button>
+              <button type="button" class="counter-jump" data-counter-jump="B" data-delta="10">+10</button>
+              <button type="button" class="counter-jump" data-counter-jump="B" data-delta="-5">&minus;5</button>
+            </div>
+            <label class="counter-check">
+              <input type="radio" name="counterWinner" value="B" /> Declare winner
+            </label>
+          </div>
+        </div>
+        <div class="counter-target" id="counterTarget">Race to 7</div>
+        <p class="hint">Tap +/&minus; to record games won. Winner auto-selects once a player hits the race target. You can also override manually.</p>
+      </div>
+      <div class="modal-actions">
+        <button type="button" data-action="clear-counter" class="ghost">Clear</button>
+        <div class="spacer"></div>
+        <button type="button" data-action="close-counter" class="ghost">Cancel</button>
+        <button type="button" data-action="save-counter" class="primary">Save Result</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =============================== EXPORT MENU MODAL =============================== -->
+  <div class="modal" id="exportModal" hidden aria-modal="true" role="dialog" aria-labelledby="exportTitle">
+    <div class="modal-scrim" data-action="close-export"></div>
+    <div class="modal-card modal-card-sm">
+      <div class="modal-hdr">
+        <div>
+          <div class="modal-eyebrow">Export</div>
+          <h2 id="exportTitle">Export tournament</h2>
+        </div>
+        <button type="button" class="iconbtn" data-action="close-export" aria-label="Close">&times;</button>
+      </div>
+      <div class="modal-body pad">
+        <div class="export-option">
+          <div>
+            <strong>Download JSON</strong>
+            <p>Full tournament state as a portable JSON file. Re-importable into this app.</p>
+          </div>
+          <button type="button" data-action="export-json" class="primary">Download</button>
+        </div>
+        <div class="export-option">
+          <div>
+            <strong>Challonge CSV</strong>
+            <p>Player list formatted for Challonge's CSV import (Name, Seed, Misc). Paste into a new Challonge tournament's participants panel.</p>
+          </div>
+          <button type="button" data-action="export-challonge-csv" class="primary">Download CSV</button>
+        </div>
+        <div class="export-option">
+          <div>
+            <strong>Push to Challonge <span class="pill-soon">requires backend</span></strong>
+            <p>Create the tournament on Challonge, bulk-add participants with seeds, and post match scores via API. Needs the Cue Club backend to be running.</p>
+          </div>
+          <button type="button" data-action="push-challonge" class="primary" disabled>Push</button>
+        </div>
+        <div class="export-option">
+          <div>
+            <strong>Match scores as CSV</strong>
+            <p>One row per decided match: Winner, Loser, WinnerScore, LoserScore, Game, Round. Useful for FargoRate submission (email support@fargorate.com with this attached).</p>
+          </div>
+          <button type="button" data-action="export-matches-csv" class="primary">Download CSV</button>
+        </div>
       </div>
     </div>
   </div>

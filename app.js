@@ -63,6 +63,18 @@
     return "t_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 6);
   }
 
+  // Curated game catalog. sheetType: "kball" = existing rack grid; "counter" = simple games-won/points counter.
+  const GAMES = {
+    kball:      { id: "kball",      name: "K-Ball / 15-Ball Rotation", sheetType: "kball",   defaultRaceTo: 25,  raceLabel: "Points to win", raceHint: "Points target per match (25 rec / 35 pro).",                  scoringHint: "Rotation scoring by pocketed ball value." },
+    "8ball":    { id: "8ball",    name: "8-Ball",                    sheetType: "counter", defaultRaceTo: 7,   raceLabel: "Race to",       raceHint: "Games needed to win the match (typical: 5 / 7 / 9).",           scoringHint: "Games won \u2014 first to the race target." },
+    "9ball":    { id: "9ball",    name: "9-Ball",                    sheetType: "counter", defaultRaceTo: 7,   raceLabel: "Race to",       raceHint: "Games needed to win the match (typical: 7 / 9 / 11).",          scoringHint: "Games won \u2014 first to the race target." },
+    "10ball":   { id: "10ball",   name: "10-Ball",                   sheetType: "counter", defaultRaceTo: 7,   raceLabel: "Race to",       raceHint: "Games needed to win the match (typical: 7 / 9).",              scoringHint: "Games won \u2014 first to the race target." },
+    "onepocket":{ id: "onepocket",name: "One Pocket",                sheetType: "counter", defaultRaceTo: 3,   raceLabel: "Race to",       raceHint: "Balls-in-pocket to win the match (typical: 3 / 4).",            scoringHint: "Games won \u2014 first to the race target of pocketed-in-your-pocket wins." },
+    "14_1":     { id: "14_1",     name: "Straight Pool (14.1 Continuous)", sheetType: "counter", defaultRaceTo: 100, raceLabel: "Points to",     raceHint: "Point target per match (typical: 75 / 100 / 125 / 150).",       scoringHint: "Continuous points \u2014 first to the point target." },
+    "banks":    { id: "banks",    name: "Bank Pool",                 sheetType: "counter", defaultRaceTo: 5,   raceLabel: "Race to",       raceHint: "Banked-ball games to win the match (typical: 3 / 5).",          scoringHint: "Banked wins \u2014 first to the race target." }
+  };
+  function gameOf(t) { return GAMES[t?.game] || GAMES.kball; }
+
   const SIGNUPS_SEPT7 = [
     { name: "Tyler Layton", fargo: 476, notes: "Under 500 division" },
     { name: "David Scarth", fargo: null, notes: "" },
@@ -83,13 +95,15 @@
     return app.tournaments.find((t) => t.id === app.activeId) || null;
   }
 
-  function makeTournament(name) {
+  function makeTournament(name, game) {
+    const gid = GAMES[game] ? game : "kball";
     return {
       id: newId(),
       name: name || "New Tournament",
       date: "",
+      game: gid,
       format: "double",
-      raceTo: 25,
+      raceTo: GAMES[gid].defaultRaceTo,
       createdAt: Date.now(),
       updatedAt: Date.now(),
       participants: [],
@@ -119,6 +133,8 @@
         const parsed = JSON.parse(raw);
         if (parsed && parsed.v === 3 && Array.isArray(parsed.tournaments)) {
           app = parsed;
+          // Backfill: existing v3 tournaments predate the game field.
+          app.tournaments.forEach((t) => { if (!t.game) t.game = "kball"; });
           return true;
         }
       }
@@ -129,10 +145,10 @@
       if (legacy) {
         const parsed = JSON.parse(legacy);
         if (parsed && parsed.v === 2) {
-          const t = makeTournament(parsed.tournament?.name || "Imported Tournament");
+          const t = makeTournament(parsed.tournament?.name || "Imported Tournament", parsed.tournament?.game || "kball");
           t.date = parsed.tournament?.date || "";
           t.format = parsed.tournament?.format || "double";
-          t.raceTo = parsed.tournament?.raceTo || 25;
+          t.raceTo = parsed.tournament?.raceTo || GAMES[t.game].defaultRaceTo;
           t.participants = parsed.participants || [];
           t.bracket = parsed.bracket || null;
           t.sheets = parsed.sheets || {};
@@ -205,9 +221,11 @@
         <span>&middot;</span>
         <span>${t.participants.length} players</span>
         <span>&middot;</span>
+        <span>${escapeHtml(gameOf(t).name)}</span>
+        <span>&middot;</span>
         <span>${t.format === "double" ? "Double Final" : "Single Final"}</span>
         <span>&middot;</span>
-        <span>Race to ${t.raceTo}</span>
+        <span>${escapeHtml(gameOf(t).raceLabel)} ${t.raceTo}</span>
       </div>
       <div class="progress"><span style="width:${pct}%"></span></div>
       <div class="status-line">${status}</div>
@@ -537,12 +555,19 @@
   function applyTournamentToSetup() {
     const t = activeT();
     if (!t) return;
+    const g = gameOf(t);
     $("#tournamentTitle").textContent = t.name;
-    $("#tournamentTagline").textContent = `${t.format === "double" ? "Double Final" : "Single Final"} \u00b7 Race to ${t.raceTo}${t.date ? " \u00b7 " + t.date : ""}`;
+    $("#tournamentTagline").textContent = `${g.name} \u00b7 ${t.format === "double" ? "Double Final" : "Single Final"} \u00b7 ${g.raceLabel} ${t.raceTo}${t.date ? " \u00b7 " + t.date : ""}`;
     $("#tName").value = t.name || "";
     $("#tDate").value = t.date || "";
+    $("#tGame").value = t.game || "kball";
     $("#tFormat").value = t.format || "double";
-    $("#tRaceTo").value = t.raceTo || 25;
+    $("#tRaceTo").value = t.raceTo || g.defaultRaceTo;
+    // Sync game-driven UI text
+    $("#tGameHint").textContent = g.scoringHint;
+    $("#tRaceLabel").textContent = g.raceLabel;
+    $("#tRaceHint").textContent = g.raceHint;
+    $("#sheetGameTitle").textContent = g.name;
     $("#participantList").value = participantsToText(t.participants);
     refreshParticipantCount();
   }
@@ -576,7 +601,8 @@
 
     const played = Object.values(t.bracket.matches).filter((m) => m.winner !== null && !m.resolvedAutoBye).length;
     const total = Object.values(t.bracket.matches).filter((m) => !m.conditional || (m.slots[0] && m.slots[1])).length;
-    $("#statusText").textContent = `${t.participants.length} players \u00b7 ${played} of ${total} matches decided \u00b7 ${t.format === "double" ? "Double Final" : "Single Final"} \u00b7 Race to ${t.raceTo}`;
+    const g = gameOf(t);
+    $("#statusText").textContent = `${g.name} \u00b7 ${t.participants.length} players \u00b7 ${played} of ${total} matches decided \u00b7 ${t.format === "double" ? "Double Final" : "Single Final"} \u00b7 ${g.raceLabel} ${t.raceTo}`;
 
     const banner = $("#champBanner");
     if (t.bracket.champion) {
@@ -693,6 +719,8 @@
   function openMatch(matchId) {
     const t = activeT();
     if (!t) return;
+    const g = gameOf(t);
+    if (g.sheetType === "counter") { openCounterModal(matchId); return; }
     activeMatchId = matchId;
     const match = t.bracket.matches[matchId];
     const info = { matchId, playerA: match.slots[0], playerB: match.slots[1] };
@@ -705,8 +733,174 @@
 
   function matchLabel(match) {
     const t = activeT();
+    const g = gameOf(t);
     const round = roundTitle(match.bracket, match.round, t.bracket);
-    return `${t.name} \u2022 ${round} \u2022 ${match.id} \u2022 Race to ${t.raceTo}`;
+    return `${t.name} \u2022 ${round} \u2022 ${match.id} \u2022 ${g.raceLabel} ${t.raceTo}`;
+  }
+
+  // ============================================================
+  // Counter modal (games-won sheet for 8/9/10-ball etc.)
+  // ============================================================
+  let activeCounterMatchId = null;
+  function openCounterModal(matchId) {
+    const t = activeT();
+    if (!t) return;
+    const match = t.bracket.matches[matchId];
+    if (!match || !match.slots[0] || !match.slots[1]) return;
+    activeCounterMatchId = matchId;
+    const g = gameOf(t);
+    $("#counterEyebrow").textContent = matchLabel(match);
+    $("#counterTitle").textContent = `${match.slots[0].name}  vs.  ${match.slots[1].name}`;
+    $("#counterANm").textContent = match.slots[0].name;
+    $("#counterBNm").textContent = match.slots[1].name;
+    $("#counterTarget").textContent = `${g.raceLabel} ${t.raceTo}`;
+    // Show +5 / +10 quick-add buttons for point-style games (Straight Pool / K-Ball-style targets).
+    const pointsMode = (t.raceTo || g.defaultRaceTo) >= 50;
+    $$("[data-counter-jumps]").forEach((el) => { el.hidden = !pointsMode; });
+    const existing = t.sheets[matchId] || null;
+    const a = existing && Number.isInteger(existing.finalA) ? existing.finalA : 0;
+    const b = existing && Number.isInteger(existing.finalB) ? existing.finalB : 0;
+    counterSet("A", a);
+    counterSet("B", b);
+    $$("input[name=\"counterWinner\"]").forEach((r) => {
+      r.checked = existing && existing.winner === r.value;
+    });
+    $("#counterModal").hidden = false;
+    document.body.style.overflow = "hidden";
+  }
+  function closeCounterModal() {
+    $("#counterModal").hidden = true;
+    document.body.style.overflow = "";
+    activeCounterMatchId = null;
+  }
+  function counterGet(side) {
+    return parseInt($(`#counter${side}Score`).textContent, 10) || 0;
+  }
+  function counterSet(side, n) {
+    const v = Math.max(0, Math.min(999, n | 0));
+    $(`#counter${side}Score`).textContent = String(v);
+    // Auto-select winner when a side reaches the race target
+    const t = activeT();
+    if (!t) return;
+    const race = t.raceTo || gameOf(t).defaultRaceTo;
+    const other = side === "A" ? counterGet("B") : counterGet("A");
+    if (v >= race && v > other) {
+      const rb = $(`input[name="counterWinner"][value="${side}"]`);
+      if (rb && !$$("input[name=\"counterWinner\"]").some((r) => r.checked)) rb.checked = true;
+    }
+  }
+  function counterInc(side) { counterSet(side, counterGet(side) + 1); }
+  function counterDec(side) { counterSet(side, counterGet(side) - 1); }
+  function saveCounterMatch() {
+    if (!activeCounterMatchId) return;
+    const t = activeT();
+    if (!t) return;
+    const winner = ($$("input[name=\"counterWinner\"]").find((r) => r.checked) || {}).value || null;
+    const finalA = counterGet("A");
+    const finalB = counterGet("B");
+    const sheet = {
+      _kind: "counter",
+      game: t.game,
+      matchId: activeCounterMatchId,
+      finalA, finalB,
+      winner: winner
+    };
+    if (!winner) {
+      if (!confirm("No winner is selected. Save this counter sheet as in-progress (bracket won't advance)?")) return;
+      t.sheets[activeCounterMatchId] = sheet;
+      persist();
+      renderBracket();
+      toast("Saved (no winner set)");
+      return;
+    }
+    t.sheets[activeCounterMatchId] = sheet;
+    const winnerSlot = winner === "A" ? 0 : 1;
+    window.BracketEngine.recordWinner(t.bracket, activeCounterMatchId, winnerSlot, { score: `${finalA}-${finalB}` });
+    persist();
+    renderBracket();
+    closeCounterModal();
+    toast("Result recorded");
+  }
+  function clearCounterMatch() {
+    if (!activeCounterMatchId) return;
+    const t = activeT();
+    if (!t) return;
+    if (!confirm("Clear this match? Also removes the winner from the bracket.")) return;
+    delete t.sheets[activeCounterMatchId];
+    const m = t.bracket.matches[activeCounterMatchId];
+    if (m && m.winner !== null) {
+      m.winner = null;
+      m.score = null;
+      rebuildFromParticipants();
+    }
+    counterSet("A", 0);
+    counterSet("B", 0);
+    $$("input[name=\"counterWinner\"]").forEach((r) => { r.checked = false; });
+    persist();
+    renderBracket();
+    toast("Cleared");
+  }
+
+  // ============================================================
+  // Export helpers
+  // ============================================================
+  function openExportMenu() {
+    if (!activeT()) return;
+    $("#exportModal").hidden = false;
+    document.body.style.overflow = "hidden";
+  }
+  function closeExportMenu() {
+    $("#exportModal").hidden = true;
+    document.body.style.overflow = "";
+  }
+  function downloadBlob(filename, mime, data) {
+    const blob = new Blob([data], { type: mime });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1500);
+  }
+  function csvCell(s) {
+    if (s == null) return "";
+    const str = String(s);
+    return /[",\n]/.test(str) ? '"' + str.replace(/"/g, '""') + '"' : str;
+  }
+  function exportChallongeCsv(t) {
+    // Challonge participants CSV: Name, Seed, Misc
+    const lines = ["Name,Seed,Misc"];
+    (t.participants || []).forEach((p, i) => {
+      lines.push([csvCell(p.name), csvCell(p.seed || i + 1), csvCell(p.fargo ? `Fargo ${p.fargo}` : "")].join(","));
+    });
+    const fn = `${t.name.replace(/[^\w\-]+/g, "_")}_challonge_participants.csv`;
+    downloadBlob(fn, "text/csv;charset=utf-8", lines.join("\n"));
+    toast("Downloaded Challonge CSV");
+  }
+  function exportMatchesCsv(t) {
+    if (!t.bracket) { alert("Build the bracket first."); return; }
+    const g = gameOf(t);
+    const rows = [["Match", "Round", "Winner", "Loser", "WinnerScore", "LoserScore", "Game", "Bracket"]];
+    Object.values(t.bracket.matches).forEach((m) => {
+      if (m.winner === null || m.resolvedAutoBye) return;
+      const wSlot = m.slots[m.winner];
+      const lSlot = m.slots[m.winner === 0 ? 1 : 0];
+      if (!wSlot || !lSlot || wSlot.isBye || lSlot.isBye) return;
+      const sh = t.sheets ? t.sheets[m.id] : null;
+      let wScore = "", lScore = "";
+      if (sh) {
+        wScore = m.winner === 0 ? (sh.finalA ?? "") : (sh.finalB ?? "");
+        lScore = m.winner === 0 ? (sh.finalB ?? "") : (sh.finalA ?? "");
+      }
+      const roundLabel = roundTitle(m.bracket, m.round, t.bracket);
+      rows.push([m.id, roundLabel, wSlot.name, lSlot.name, wScore, lScore, g.name, m.bracket]);
+    });
+    if (rows.length === 1) { alert("No decided matches yet."); return; }
+    const csv = rows.map((r) => r.map(csvCell).join(",")).join("\n");
+    const fn = `${t.name.replace(/[^\w\-]+/g, "_")}_matches.csv`;
+    downloadBlob(fn, "text/csv;charset=utf-8", csv);
+    toast("Downloaded matches CSV");
   }
 
   function closeMatch() {
@@ -771,8 +965,10 @@
     t.participants = list;
     t.name = $("#tName").value || t.name;
     t.date = $("#tDate").value || t.date;
+    const chosenGame = $("#tGame").value;
+    if (GAMES[chosenGame]) t.game = chosenGame;
     t.format = $("#tFormat").value || "double";
-    t.raceTo = parseInt($("#tRaceTo").value, 10) || 25;
+    t.raceTo = parseInt($("#tRaceTo").value, 10) || gameOf(t).defaultRaceTo;
     t.bracket = window.BracketEngine.build(list, { format: t.format });
     t.sheets = {};
     applyTournamentToSetup();
@@ -845,6 +1041,29 @@
   // ============================================================
   function wireUp() {
     $("#participantList").addEventListener("input", refreshParticipantCount);
+    // Game selector: update hints and default race-to when user changes game
+    $("#tGame").addEventListener("change", () => {
+      const gid = $("#tGame").value;
+      const g = GAMES[gid] || GAMES.kball;
+      $("#tGameHint").textContent = g.scoringHint;
+      $("#tRaceLabel").textContent = g.raceLabel;
+      $("#tRaceHint").textContent = g.raceHint;
+      $("#tRaceTo").value = g.defaultRaceTo;
+    });
+    // Counter increment/decrement + jump buttons (delegated)
+    document.body.addEventListener("click", (ev) => {
+      const inc = ev.target.closest("[data-counter-inc]");
+      if (inc) { counterInc(inc.dataset.counterInc); return; }
+      const dec = ev.target.closest("[data-counter-dec]");
+      if (dec) { counterDec(dec.dataset.counterDec); return; }
+      const jump = ev.target.closest("[data-counter-jump]");
+      if (jump) {
+        const side = jump.dataset.counterJump;
+        const delta = parseInt(jump.dataset.delta, 10) || 0;
+        counterSet(side, counterGet(side) + delta);
+        return;
+      }
+    });
     document.body.addEventListener("click", (ev) => {
       const el = ev.target.closest("[data-action]");
       if (!el) return;
@@ -865,6 +1084,8 @@
     document.addEventListener("keydown", (ev) => {
       if (ev.key === "Escape") {
         if (!$("#matchModal").hidden) closeMatch();
+        else if (!$("#counterModal").hidden) closeCounterModal();
+        else if (!$("#exportModal").hidden) closeExportMenu();
         else if (!$("#lateEntryModal").hidden) closeLateEntry();
       }
     });
@@ -930,6 +1151,19 @@
       case "save-tournament": persist(0); toast("Saved"); break;
       case "export-tournament": { const t = activeT(); if (t) exportTournament(t); break; }
       case "import-tournament": $("#importTournamentFile").click(); break;
+
+      // ---- export menu
+      case "open-export-menu": openExportMenu(); break;
+      case "close-export": closeExportMenu(); break;
+      case "export-json": { const t = activeT(); if (t) { exportTournament(t); closeExportMenu(); } break; }
+      case "export-challonge-csv": { const t = activeT(); if (t) { exportChallongeCsv(t); closeExportMenu(); } break; }
+      case "export-matches-csv": { const t = activeT(); if (t) { exportMatchesCsv(t); closeExportMenu(); } break; }
+      case "push-challonge": alert("Push-to-Challonge requires the Cue Club backend. See RESEARCH.md and the /server directory for the Go service that provides this."); break;
+
+      // ---- counter modal (games-won sheet)
+      case "close-counter": closeCounterModal(); break;
+      case "save-counter": saveCounterMatch(); break;
+      case "clear-counter": clearCounterMatch(); break;
 
       // ---- bracket
       case "add-late-entry": openLateEntry(); break;

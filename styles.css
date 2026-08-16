@@ -711,3 +711,86 @@ body { padding: 0; }
 .radio-tile strong { display: block; color: var(--navy); font-size: 14px; margin-bottom: 3px; }
 .radio-tile p { margin: 0; color: var(--muted); font-size: 12px; }
 .hint { color: var(--muted); font-size: 12px; margin: 8px 0 0; }
+
+/* =============================== COUNTER MODAL (8/9/10-ball) =============================== */
+.modal-card-md { max-width: 720px; }
+.counter-body { background: #fff; border-radius: 10px; border: 1px solid var(--line); padding: 24px 20px; }
+.counter-grid {
+  display: grid; grid-template-columns: 1fr auto 1fr; gap: 20px; align-items: center;
+  margin-bottom: 16px;
+}
+.counter-side {
+  text-align: center; padding: 20px 12px; border: 1.6px solid var(--line);
+  border-radius: 10px; background: #fafbfc;
+}
+.counter-side[data-side="A"] { border-color: rgba(196, 30, 58, 0.35); }
+.counter-side[data-side="B"] { border-color: rgba(11, 42, 79, 0.35); }
+.counter-label {
+  font-size: 11px; letter-spacing: 1.6px; text-transform: uppercase;
+  color: var(--muted); font-weight: 700; margin-bottom: 6px;
+}
+.counter-name {
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 22px; font-weight: 700; color: var(--navy); margin-bottom: 14px;
+  min-height: 30px; word-break: break-word;
+}
+.counter-controls {
+  display: flex; align-items: center; justify-content: center; gap: 14px; margin-bottom: 12px;
+}
+.counter-btn {
+  width: 44px; height: 44px; border-radius: 50%; border: 2px solid var(--navy);
+  background: #fff; color: var(--navy); font-size: 22px; font-weight: 700; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; padding: 0;
+  transition: background 120ms ease, color 120ms ease;
+}
+.counter-btn:hover { background: var(--navy); color: #fff; }
+.counter-num {
+  font-family: "Playfair Display", Georgia, serif; font-size: 44px; font-weight: 700;
+  color: var(--red); min-width: 60px; line-height: 1;
+}
+.counter-check {
+  display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--navy);
+  cursor: pointer;
+}
+.counter-vs {
+  font-family: "Playfair Display", Georgia, serif; font-style: italic;
+  font-size: 24px; color: var(--muted); font-weight: 700;
+}
+.counter-target {
+  text-align: center; font-size: 13px; font-weight: 700; color: var(--muted);
+  letter-spacing: 1px; text-transform: uppercase; margin: 8px 0 0;
+}
+
+@media (max-width: 620px) {
+  .counter-grid { grid-template-columns: 1fr; }
+  .counter-vs { display: none; }
+}
+
+/* =============================== EXPORT MODAL =============================== */
+.export-option {
+  display: flex; align-items: center; gap: 14px; padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+}
+.export-option:last-child { border-bottom: 0; }
+.export-option > div:first-child { flex: 1; }
+.export-option strong { display: block; color: var(--navy); font-size: 15px; margin-bottom: 4px; }
+.export-option p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.4; }
+.export-option button { white-space: nowrap; }
+.export-option button:disabled { opacity: 0.5; cursor: not-allowed; }
+.pill-soon {
+  display: inline-block; font-size: 10px; letter-spacing: 1px; text-transform: uppercase;
+  background: #fef3c7; color: #92400e; padding: 2px 6px; border-radius: 4px;
+  font-weight: 700; margin-left: 6px; vertical-align: middle;
+}
+
+/* Counter jump buttons (for point-scored games like 14.1) */
+.counter-jumps {
+  display: flex; justify-content: center; gap: 6px; margin-bottom: 10px;
+}
+.counter-jump {
+  padding: 4px 10px; font-size: 12px; font-weight: 700; letter-spacing: 0.5px;
+  border: 1.4px solid var(--line); border-radius: 5px; background: #fff;
+  color: var(--navy); cursor: pointer; min-width: 40px;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+.counter-jump:hover { background: var(--navy); color: #fff; border-color: var(--navy); }
