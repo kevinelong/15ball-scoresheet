@@ -391,7 +391,7 @@ CALLOUTS = [
      "Enter the player's name; select 25 (rec) or 50 (pro), or type a custom goal.",
      0.16, 0.85),
     (2, "Tap balls when pocketed",
-     "Filled circle = this player pocketed that ball this rack. Rack 1 shows Alice pocketed 1, 3, 5, 7, 9.",
+     "Tap a ball to mark it. Filled = pocketed, unmarked = not pocketed. Rack 1 shows Alice pocketed 1, 3, 5, 7, 9.",
      0.25, 0.68),
     (3, "Record fouls per rack",
      "Type foul count for this rack in the Fouls cell. Bob committed 1 foul in Rack 1.",
