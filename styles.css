@@ -671,6 +671,7 @@ body { padding: 0; }
 .tcard-tourney .actions button.danger:hover { background: var(--red); color: #fff; }
 
 .emptyState { padding: 40px 0; display: flex; justify-content: center; }
+.emptyState[hidden] { display: none; }
 .emptyCard {
   background: #fff; border: 1.4px solid var(--line-strong); border-radius: 12px;
   padding: 32px 32px 28px; text-align: center; max-width: 480px;
