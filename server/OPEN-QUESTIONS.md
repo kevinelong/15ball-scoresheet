@@ -18,6 +18,15 @@ Each item:
   - **Options considered:** (a) auto-create membership as `viewer` on first sign-in, admins promote later; (b) auto-create as `director` (small trusted club) `(lean)`; (c) no auto-provision — seed memberships explicitly, sign-in without one yields an authenticated user with no club access (read-nothing).
   - **Impact if wrong:** too-permissive default hands club-wide edit/export to anyone allowlisted; too-restrictive means a fresh sign-in can't do anything until manual seeding. Raised by the implementation agent from `internal/auth` (users created without membership).
 
+- **Q:** The Challonge export design (reconciliation #13 + config) assumes the **classic API v1 static `CHALLONGE_API_KEY`**. Kevin has instead decided to use a **Challonge Connect OAuth2** app. The reconciliation's Challonge auth model needs updating. Resolved technical facts (verified from Challonge docs, 2026-08-16):
+  - **Grant:** `client_credentials` IS supported (machine-to-machine, no user interaction) — good fit for the single shared-club, headless server. No auth-code/consent, no redirect callback needed for server-side export.
+  - **Flow:** POST `client_id`+`client_secret` with `grant_type=client_credentials` to the token endpoint → `access_token` (~1 week TTL) → `Authorization: Bearer <token>` on Tournament API calls. Cache the token and refresh on expiry/401.
+  - **Scopes** available: `me tournaments:read tournaments:write matches:read matches:write participants:read participants:write`.
+  - **App is currently SANDBOX** (500 requests/month) — export must stay well under that; a production upgrade is a later step.
+  - **New env vars** (replace `CHALLONGE_API_KEY`): `CHALLONGE_CLIENT_ID`, `CHALLONGE_CLIENT_SECRET`, `CHALLONGE_TOKEN_URL`, `CHALLONGE_API_BASE` (sandbox vs prod), keep `CHALLONGE_SUBDOMAIN`. Secrets live only in `/etc/kball/kball.env` (VPS), never in the repo.
+  - **Design impact:** the idempotency design (#13, `challonge_exports` table, create-vs-update, resumable steps) is unchanged; only the auth layer swaps from a static key to a cached OAuth token. **Ask for the design agent:** confirm this OAuth2-client-credentials model and update the reconciliation's Challonge section + config accordingly.
+  - **Impact if wrong:** implementing against the classic-key model would need rework; the concrete facts above let the export slice be built directly against Connect.
+
 *(reconciliation covers everything else through 2026-08-16.)*
 
 ## Recently answered
