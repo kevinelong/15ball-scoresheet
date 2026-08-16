@@ -86,7 +86,9 @@ def draw_ball(c, x, y, num, filled=False, r=5.4):
 SHEET_PAD          = 8      # inner padding inside the outer border
 SHEET_TITLE_H      = 24     # big title
 SHEET_SUBTITLE_H   = 14     # subtitle line
-SHEET_INSTR_H      = 34     # 6-step mini-instructions strip (self-contained sheet)
+SHEET_INSTR_H      = 52     # 6-step mini-instructions strip (self-contained sheet)
+SHEET_INSTR_MARGIN = 6      # breathing room on each side of the strip
+SHEET_INSTR_GAP    = 8      # gap between strip and the player-header card below
 SHEET_PHDR_H       = 46     # PLAYER A/B name+goal card
 SHEET_PHDR_GAP     = 8
 SHEET_RACK_HDR_H   = 14     # "RACK / PLAYER A / PLAYER B" column header
@@ -107,7 +109,7 @@ def sheet_min_height(with_instructions=True):
     the surrounding callouts already teach the same steps, so the strip
     is redundant and can be omitted.
     """
-    instr = SHEET_INSTR_H if with_instructions else 0
+    instr = (SHEET_INSTR_H + SHEET_INSTR_GAP) if with_instructions else 0
     return (2*SHEET_PAD + SHEET_TITLE_H + SHEET_SUBTITLE_H + instr
             + SHEET_PHDR_H
             + 8 + SHEET_RACK_HDR_H + SHEET_STATS_HDR_H
@@ -140,7 +142,7 @@ def draw_scoresheet(c, left, top, width, height, with_instructions=True):
     inner_w = width - 2*pad
 
     # Compute rack_h so all rows fit the requested height exactly.
-    instr_reserve = SHEET_INSTR_H if with_instructions else 0
+    instr_reserve = (SHEET_INSTR_H + SHEET_INSTR_GAP) if with_instructions else 0
     fixed_h = (SHEET_TITLE_H + SHEET_SUBTITLE_H + instr_reserve
                + SHEET_PHDR_H + 8
                + SHEET_RACK_HDR_H + SHEET_STATS_HDR_H
@@ -166,12 +168,18 @@ def draw_scoresheet(c, left, top, width, height, with_instructions=True):
     if with_instructions:
         instr_top = y0
         instr_h = SHEET_INSTR_H
+        # Inset the strip so it doesn't crowd the outer sheet border.
+        strip_x = x0 + SHEET_INSTR_MARGIN
+        strip_w = inner_w - 2 * SHEET_INSTR_MARGIN
         c.setLineWidth(LINE)
         c.setStrokeColorRGB(*BLACK)
-        c.rect(x0, instr_top - instr_h, inner_w, instr_h, stroke=1, fill=0)
+        c.rect(strip_x, instr_top - instr_h, strip_w, instr_h, stroke=1, fill=0)
+        # Interior padding inside the strip so text doesn't hug the frame.
+        inner_pad_x = 10
+        inner_pad_top = 12
         # Section label in the top-left corner of the strip.
-        c.setFont(FONT_BOLD, 6.5); c.setFillColorRGB(*BLACK)
-        c.drawString(x0 + 4, instr_top - 8, "HOW TO SCORE")
+        c.setFont(FONT_BOLD, 7); c.setFillColorRGB(*BLACK)
+        c.drawString(strip_x + inner_pad_x, instr_top - 10, "HOW TO SCORE")
         instr_steps = [
             (1, "Fill NAME and check goal (25 rec / 50 pro)."),
             (2, "Mark inside a ball's circle when pocketed (dot/slash/X)."),
@@ -180,20 +188,21 @@ def draw_scoresheet(c, left, top, width, height, with_instructions=True):
             (5, "GAME SUBTOTAL = last SUBTOTAL + this RACK TOTAL."),
             (6, "First to goal wins. Check WINNER, both sign."),
         ]
-        col_gap = 10
-        col_w = (inner_w - col_gap - 8) / 2  # 4pt padding inside strip
-        step_line_h = (instr_h - 12) / 3     # 3 rows per column
-        step_top = instr_top - 12            # first step line below section label
+        col_gap = 18
+        col_w = (strip_w - col_gap - 2 * inner_pad_x) / 2
+        step_line_h = (instr_h - inner_pad_top - 10) / 3   # 3 rows per column
+        step_top = instr_top - inner_pad_top - 6           # first step line below section label
         for i, (n, body) in enumerate(instr_steps):
             col = i // 3
             row = i % 3
-            sx = x0 + 4 + col * (col_w + col_gap)
+            sx = strip_x + inner_pad_x + col * (col_w + col_gap)
             sy = step_top - row * step_line_h
-            c.setFont(FONT_BOLD, 6.5); c.setFillColorRGB(*BLACK)
+            c.setFont(FONT_BOLD, 7); c.setFillColorRGB(*BLACK)
             c.drawString(sx, sy - 6, f"{n}.")
-            c.setFont(FONT_BODY, 6.5)
-            c.drawString(sx + 9, sy - 6, body)
-        y0 -= SHEET_INSTR_H
+            c.setFont(FONT_BODY, 7)
+            c.drawString(sx + 10, sy - 6, body)
+        # Advance past the strip AND the breathing gap before the player card.
+        y0 -= SHEET_INSTR_H + SHEET_INSTR_GAP
 
     # === Player header row (blank lines for name/goal) ===
     y_ph = y0
@@ -225,11 +234,18 @@ def draw_scoresheet(c, left, top, width, height, with_instructions=True):
     # === Rack grid ===
     rack_col_w = 22
     side_w = (inner_w - rack_col_w) / 2
-    stats_strip_w = 128  # 32pt/column fits 2-line labels (BALLS MADE, RACK TOTAL, GAME SUBTOTAL)
+    stats_strip_w = 116  # 29pt/column fits 2-line labels (BALLS MADE, RACK TOTAL, GAME SUBTOTAL)
     balls_w = side_w - stats_strip_w
-    ball_cols = 5
-    ball_rows = 3
+    # Ball grid: two tight rows. Row 1 = balls 1-8 (8 cells across); Row 2 =
+    # balls 9-15 (7 balls, centered by shifting half a cell right so the
+    # visual weight stays balanced under the top row).
+    ball_cols = 8
+    ball_rows = 2
     ball_cell_w = balls_w / ball_cols
+    # Row spacing pulls the two rows together so the balls almost touch.
+    # Effective row spacing = ball_cell_h * ROW_PACK, where < 1.0 means rows
+    # overlap vertically. Tuned so a 12pt-radius circle nearly kisses.
+    BALL_ROW_PACK = 0.68
 
     # Column header row (RACK / PLAYER A / PLAYER B)
     c.setFont(FONT_BOLD, 7)
@@ -262,8 +278,17 @@ def draw_scoresheet(c, left, top, width, height, with_instructions=True):
 
     # Racks - ball circles scale with cell size so the sheet fills whatever
     # vertical room is available (single-page = big circles for hand marking).
+    # With 2 tightly-packed rows we get more vertical breathing room per
+    # cell, so circles cap at 12pt and the extra height becomes padding
+    # above/below each row.
     ball_cell_h = (rack_h - 4) / ball_rows
-    ball_radius = min(12.0, ball_cell_h * 0.40, ball_cell_w * 0.40)
+    # Radius cap raised to 14pt now that we only have 2 rows and each row
+    # gets more vertical breathing room. Horizontal share also grew after
+    # trimming stats_strip_w from 128 -> 116pt.
+    # Radius cap raised to 14pt for a 2-row layout. Horizontal factor 0.48
+    # (up from 0.42) since 8-across leaves cells narrower - we want the balls
+    # to nearly touch horizontally too.
+    ball_radius = min(14.0, ball_cell_h * 0.42, ball_cell_w * 0.48)
     for r in range(NUM_RACKS):
         r_top = y0 - r * rack_h
         r_bot = r_top - rack_h
@@ -280,12 +305,29 @@ def draw_scoresheet(c, left, top, width, height, with_instructions=True):
             c.setLineWidth(LINE_MED)
             c.rect(side_x, r_bot, side_w, rack_h, stroke=1, fill=0)
 
-            # 15 ball circles - centered in the ball area
+            # 15 ball circles arranged as two tight rows:
+            #   Row 1: balls 1..8  (full 8-col row)
+            #   Row 2: balls 9..15 (7 balls; shift right half a cell to center)
+            # Rows are packed tighter than a full ball_cell_h using BALL_ROW_PACK
+            # so the two rows visually belong together as one rack marker.
+            row_pitch = ball_cell_h * BALL_ROW_PACK
+            # Center the whole 2-row block within the rack side vertically.
+            rack_content_h = row_pitch + 2 * ball_radius
+            top_pad = (rack_h - rack_content_h) / 2
+            row1_y = r_top - top_pad - ball_radius
+            row2_y = row1_y - row_pitch
             for i in range(15):
-                col = i % ball_cols
-                row = i // ball_cols
-                bx = side_x + col * ball_cell_w + ball_cell_w/2
-                by = r_top - row * ball_cell_h - ball_cell_h/2 - 1
+                if i < 8:
+                    col = i          # 0..7 across
+                    bx = side_x + col * ball_cell_w + ball_cell_w/2
+                    by = row1_y
+                else:
+                    # Row 2: 7 balls, indices 8..14 (labels 9..15).
+                    # Shift right by half a cell so 7 balls span cols 0.5..6.5,
+                    # visually centered under the 8-wide top row.
+                    col = (i - 8)
+                    bx = side_x + (col + 0.5) * ball_cell_w + ball_cell_w/2
+                    by = row2_y
                 draw_ball(c, bx, by, i+1, filled=False, r=ball_radius)
 
             # Stats strip - vertical divider + 4 cells (no label inside cells)

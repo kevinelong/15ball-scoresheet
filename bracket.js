@@ -101,7 +101,17 @@
           score: null,      // free-form score summary, set by score sheet
           feedsWinnerTo: null,
           feedsLoserTo: null,
-          resolvedAutoBye: false
+          resolvedAutoBye: false,
+          // -- Printable-sheet lifecycle (decision 018) --
+          // sheetIssuedAt bumps to Date.now() each time a paper sheet is
+          // generated. sheetIssueVersion starts at 0, increments each regen
+          // (so v1 is the first print, v2 the first reprint, etc.).
+          // sheetPlayersSnapshot captures the names printed on the last
+          // issued sheet so we can tell when a downstream sheet has gone
+          // stale after a winner edit.
+          sheetIssuedAt: null,
+          sheetIssueVersion: 0,
+          sheetPlayersSnapshot: null
         };
         if (round === 1) {
           match.slots[0] = slots[(m - 1) * 2];
@@ -266,6 +276,51 @@
     }
   }
 
+  // -- Printable-sheet helpers (decision 018) --------------------------
+  // A match is "ready for sheet" when both slots resolve to concrete,
+  // non-BYE players and no prior BYE auto-advanced the match.
+  function isMatchReady(match) {
+    if (!match) return false;
+    if (match.resolvedAutoBye) return false;
+    const [a, b] = match.slots;
+    return !!(a && b && !a.isBye && !b.isBye);
+  }
+
+  // A previously-issued sheet is stale when the names now sitting in the
+  // match's slots differ from the snapshot captured at issue time.
+  function sheetIsStale(match) {
+    if (!match || !match.sheetIssuedAt) return false;
+    if (!isMatchReady(match)) return false;
+    const snap = match.sheetPlayersSnapshot || [null, null];
+    return snap[0] !== match.slots[0].name || snap[1] !== match.slots[1].name;
+  }
+
+  // Mark a match as having had its sheet printed (or re-printed). Callers
+  // pass an optional `now` for deterministic tests; production uses Date.now.
+  function markSheetIssued(match, now) {
+    if (!match) return match;
+    match.sheetIssueVersion = (match.sheetIssueVersion || 0) + 1;
+    match.sheetIssuedAt = typeof now === "number" ? now : Date.now();
+    match.sheetPlayersSnapshot = [
+      match.slots[0] ? match.slots[0].name : null,
+      match.slots[1] ? match.slots[1].name : null
+    ];
+    return match;
+  }
+
+  // When an upstream winner is edited, downstream slots are cleared by
+  // clearDownstream(). Any downstream match that had a printed sheet needs
+  // to be flagged so the UI shows "reprint" once the slots refill. We do
+  // this by clearing sheetPlayersSnapshot so sheetIsStale() returns true
+  // the moment new player names populate.
+  function markSheetStaleIfIssued(match) {
+    if (match && match.sheetIssuedAt) {
+      // Keep sheetIssuedAt + version so the UI can say "printed v2, needs
+      // reprint", but null the snapshot to force stale-detection.
+      match.sheetPlayersSnapshot = null;
+    }
+  }
+
   function propagate(state, match, winnerSlotIdx) {
     const winner = match.slots[winnerSlotIdx];
     const loser = match.slots[1 - winnerSlotIdx];
@@ -323,6 +378,9 @@
           t.slots[m.feedsWinnerTo.slot] = null;
           t.winner = null;
           t.score = null;
+          // If this downstream match had a printed sheet, flag the sheet
+          // as needing a reprint once new players populate its slots.
+          markSheetStaleIfIssued(t);
           walk(t);
         }
       }
@@ -332,6 +390,7 @@
           t.slots[m.feedsLoserTo.slot] = null;
           t.winner = null;
           t.score = null;
+          markSheetStaleIfIssued(t);
           walk(t);
         }
       }
@@ -450,5 +509,9 @@
     return { placed: true, matchId: target.id, slot: slotIdx };
   }
 
-  global.BracketEngine = { build, recordWinner, matchesInOrder, seedOrder, nextPow2, addLateEntry };
+  global.BracketEngine = {
+    build, recordWinner, matchesInOrder, seedOrder, nextPow2, addLateEntry,
+    // Printable-sheet lifecycle (decision 018)
+    isMatchReady, sheetIsStale, markSheetIssued
+  };
 })(typeof window !== "undefined" ? window : globalThis);
