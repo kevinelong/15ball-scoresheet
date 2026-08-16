@@ -450,7 +450,7 @@ def build(out_path):
         # Body text - short explanation
         bodies = {
             1: "Write the player's name on the NAME line. Check the 25 (rec) or 50 (pro) box, or write a custom goal on OTHER.",
-            2: "When a player pockets a ball, mark inside its circle in that rack row (a dot, slash, or X - whatever's fastest). Empty circle = not pocketed. Balls are worth 1 point each.",
+            2: "When a player pockets a ball, mark inside its circle in that rack row (a dot, slash, or X - whatever's fastest). Unmarked = not pocketed. Balls are worth 1 point each.",
             3: "Write the number of fouls that player committed during this rack in the FOULS cell. Foul = -1 point.",
             4: "RACK TOTAL at the end of each rack: count the balls you marked, subtract fouls, write the result. Like one line's amount in a checkbook.",
             5: "GAME SUBTOTAL = the previous rack's GAME SUBTOTAL + this rack's RACK TOTAL. First rack: GAME SUBTOTAL = RACK TOTAL. It's a running balance, like a checkbook. First player to their goal wins.",
