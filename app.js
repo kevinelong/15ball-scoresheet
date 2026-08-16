@@ -411,11 +411,13 @@
           ${[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15].map((n) => ballBtn(rack, side, n)).join("")}
         </div>
         <div class="rackstats">
-          <label>Rack Total<input type="number" min="0" max="15" readonly
-                                  data-total data-rack="${rack}" data-side="${side}" /></label>
+          <label>Balls<input type="number" min="0" max="15" readonly
+                              data-total data-rack="${rack}" data-side="${side}" /></label>
           <label>Fouls<input type="number" min="0" step="1"
                               data-foul data-rack="${rack}" data-side="${side}" /></label>
-          <label>Running Total<input type="number" readonly
+          <label class="racknet">Rack Net<input type="number" readonly
+                                     data-racknet data-rack="${rack}" data-side="${side}" /></label>
+          <label class="running">Running<input type="number" readonly
                                      data-running data-rack="${rack}" data-side="${side}" /></label>
         </div>
       </div>`;
@@ -432,13 +434,17 @@
       let running = 0, totalFouls = 0;
       for (let r = 1; r <= RACKS; r++) {
         const on = $$(`#sheet .ball.on[data-rack="${r}"][data-side="${side}"]`).length;
-        running += on;
+        const foulEl = $(`#sheet input[data-foul][data-rack="${r}"][data-side="${side}"]`);
+        const rackFouls = parseInt(foulEl && foulEl.value, 10) || 0;
+        const rackNet = on - rackFouls;
+        running += rackNet;
+        totalFouls += rackFouls;
         const t = $(`#sheet input[data-total][data-rack="${r}"][data-side="${side}"]`);
         if (t) t.value = on || "";
+        const netEl = $(`#sheet input[data-racknet][data-rack="${r}"][data-side="${side}"]`);
+        if (netEl) netEl.value = (on === 0 && rackFouls === 0) ? "" : rackNet;
         const runEl = $(`#sheet input[data-running][data-rack="${r}"][data-side="${side}"]`);
-        if (runEl) runEl.value = running || "";
-        const foulEl = $(`#sheet input[data-foul][data-rack="${r}"][data-side="${side}"]`);
-        totalFouls += (parseInt(foulEl && foulEl.value, 10) || 0);
+        if (runEl) runEl.value = (on === 0 && rackFouls === 0 && running === 0) ? "" : running;
       }
       const finalEl = $(`#sheet input[data-field="final${side}"]`);
       if (finalEl) finalEl.value = running;

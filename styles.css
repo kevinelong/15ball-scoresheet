@@ -198,8 +198,8 @@ body {
 
 .rackstats {
   display: grid;
-  grid-template-rows: auto auto auto;
-  gap: 4px;
+  grid-template-rows: auto auto auto auto;
+  gap: 3px;
   font-size: 10px;
   letter-spacing: 1px;
   color: var(--muted);
@@ -208,8 +208,8 @@ body {
 .rackstats label { display: block; }
 .rackstats input {
   width: 96px;
-  padding: 4px 6px;
-  font-size: 14px;
+  padding: 3px 6px;
+  font-size: 13px;
   text-align: right;
   border: 1.4px solid var(--line);
   border-radius: 4px;
@@ -221,6 +221,17 @@ body {
   color: var(--navy);
   font-weight: 700;
   border-color: var(--line-strong);
+}
+.rackstats label.racknet input[readonly] {
+  background: #fff7e6;
+  border-color: #d89b3d;
+  color: #7a4a00;
+}
+.rackstats label.running input[readonly] {
+  background: var(--navy);
+  color: #fff;
+  border-color: var(--navy);
+  font-size: 15px;
 }
 
 .totals { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
@@ -419,6 +430,19 @@ body { padding: 0; }
   border-radius: 6px; cursor: pointer;
 }
 .hdr-actions button:hover { background: var(--red); color: #fff; border-color: var(--red); }
+.hdr-guide-link {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 10px;
+  background: transparent;
+  color: #fff;
+  border: 1px solid rgba(255,255,255,0.35);
+  border-radius: 6px;
+  font-size: 13px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.hdr-guide-link:hover { background: rgba(255,255,255,0.15); border-color: #fff; }
 
 .setup {
   display: grid; grid-template-columns: 1fr 1.4fr; gap: 16px;
