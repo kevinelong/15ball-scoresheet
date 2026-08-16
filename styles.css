@@ -393,3 +393,321 @@ body {
   .ball:hover { transform: none; box-shadow: none; }
   a { color: inherit; text-decoration: none; }
 }
+
+/* ============================================================
+   App frame (bracket view)
+   ============================================================ */
+
+body { padding: 0; }
+.app { max-width: 1400px; margin: 0 auto; padding: 16px 16px 32px; }
+
+.apphdr { margin-bottom: 14px; }
+.brandbar {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; flex-wrap: wrap;
+  background: linear-gradient(180deg, var(--navy) 0%, var(--navy-2) 100%);
+  color: #fff; padding: 14px 18px; border-radius: 12px;
+  border: 6px solid var(--red);
+  box-shadow: var(--shadow);
+}
+.brandbar h1 { margin: 0; font-size: clamp(20px, 2.4vw, 26px); letter-spacing: .3px; }
+.brandbar .tagline { color: #dbe4fb; font-size: 12px; letter-spacing: 3px; text-transform: uppercase; margin-top: 4px; }
+.hdr-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.hdr-actions button {
+  background: #fff; color: var(--navy); border: 1.5px solid #fff;
+  padding: 6px 12px; font-weight: 700; font-size: 12px; letter-spacing: 1px;
+  border-radius: 6px; cursor: pointer;
+}
+.hdr-actions button:hover { background: var(--red); color: #fff; border-color: var(--red); }
+
+.setup {
+  display: grid; grid-template-columns: 1fr 1.4fr; gap: 16px;
+  background: #fff; padding: 16px; border-radius: 12px;
+  border: 1px solid var(--line-strong); box-shadow: var(--shadow);
+  margin-bottom: 16px;
+}
+.setup h3 {
+  margin: 0 0 10px; font-size: 12px; letter-spacing: 2px; color: var(--navy);
+  border-bottom: 2px solid var(--red); padding-bottom: 6px;
+}
+.setup .col { display: flex; flex-direction: column; gap: 8px; }
+.setup .field { display: flex; flex-direction: column; gap: 3px; font-size: 12px; letter-spacing: 1px; color: var(--muted); }
+.setup .field span { font-weight: 700; color: var(--navy); }
+.setup .field input, .setup .field select {
+  padding: 6px 8px; font-size: 14px; border: 1.4px solid var(--line);
+  border-radius: 5px; background: #fff; color: var(--ink);
+}
+.setup .field small { color: var(--muted); font-size: 11px; font-weight: normal; letter-spacing: 0; }
+.setup textarea {
+  width: 100%; padding: 8px; font-size: 13px; line-height: 1.4;
+  border: 1.4px solid var(--line); border-radius: 5px;
+  font-family: "SFMono-Regular", ui-monospace, Menlo, Consolas, monospace;
+  resize: vertical; min-height: 140px;
+}
+.setup .hint { margin: 0; font-size: 11px; color: var(--muted); }
+.setup .hint code { background: #f1f4fb; padding: 1px 4px; border-radius: 3px; }
+.setup .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+.setup button {
+  padding: 8px 14px; font-size: 12px; letter-spacing: 1.4px; font-weight: 700;
+  border-radius: 5px; cursor: pointer;
+  background: #fff; color: var(--navy); border: 1.5px solid var(--navy);
+}
+.setup button:hover { background: var(--navy); color: #fff; }
+.setup button.primary { background: var(--red); border-color: var(--red); color: #fff; }
+.setup button.primary:hover { background: var(--red-dark); border-color: var(--red-dark); }
+
+.pill {
+  display: inline-block; min-width: 24px; text-align: center;
+  background: var(--red); color: #fff; padding: 1px 8px; border-radius: 999px;
+  font-size: 11px; margin-left: 6px;
+}
+
+.bracketWrap {
+  background: #fff; padding: 14px; border-radius: 12px;
+  border: 1px solid var(--line-strong); box-shadow: var(--shadow);
+  overflow: auto;
+}
+.statusbar {
+  display: flex; justify-content: space-between; align-items: center;
+  padding-bottom: 10px; margin-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+}
+.statusbar button {
+  padding: 6px 12px; font-size: 12px; font-weight: 700; letter-spacing: 1px;
+  border-radius: 5px; cursor: pointer;
+  background: #fff; color: var(--navy); border: 1.5px solid var(--navy);
+  margin-left: 4px;
+}
+.statusbar button:hover { background: var(--navy); color: #fff; }
+.statusbar button.danger { border-color: var(--red); color: var(--red); }
+.statusbar button.danger:hover { background: var(--red); color: #fff; }
+
+/* ============================================================
+   Bracket rendering
+   ============================================================ */
+.bracket {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 24px;
+  min-width: 900px;
+}
+.bracket-section-title {
+  font-weight: 800; letter-spacing: 3px; color: var(--navy); font-size: 12px;
+  text-transform: uppercase; margin: 0 0 8px;
+  padding: 6px 10px; background: #eef3fb; border-left: 4px solid var(--red);
+  border-radius: 4px;
+}
+.bracket-rounds {
+  display: flex; gap: 32px; overflow-x: auto; padding-bottom: 10px;
+  align-items: flex-start;
+}
+.bracket-round {
+  display: flex; flex-direction: column; justify-content: space-around;
+  min-width: 200px; gap: 12px;
+}
+.bracket-round-title {
+  font-size: 11px; font-weight: 800; letter-spacing: 2px; color: var(--muted);
+  text-transform: uppercase; text-align: center; margin-bottom: 4px;
+}
+.match-card {
+  border: 1.4px solid var(--line-strong); border-radius: 8px;
+  background: #fff; overflow: hidden;
+  cursor: pointer; transition: transform 100ms ease, box-shadow 120ms ease, border-color 120ms ease;
+  position: relative;
+}
+.match-card:hover { transform: translateY(-1px); box-shadow: 0 6px 18px rgba(20,35,71,.15); border-color: var(--navy); }
+.match-card.playable { border-color: var(--red); }
+.match-card.decided { background: #fbfcff; }
+.match-card.pending { opacity: .55; cursor: default; pointer-events: none; }
+.match-card.pending:hover { transform: none; box-shadow: none; border-color: var(--line-strong); }
+.match-id {
+  position: absolute; top: 3px; right: 6px; font-size: 9px; color: var(--muted);
+  letter-spacing: 1px; font-weight: 700;
+}
+.slot {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 6px 10px; font-size: 13px;
+  border-bottom: 1px solid var(--line);
+}
+.slot:last-child { border-bottom: 0; }
+.slot .nm { font-weight: 600; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.slot .sd { font-size: 10px; color: var(--muted); margin-right: 6px; letter-spacing: .5px; }
+.slot .sc { color: var(--muted); font-weight: 700; font-size: 13px; min-width: 24px; text-align: right; }
+.slot.winner { background: #eefbe9; }
+.slot.winner .nm { color: var(--hit-ink); font-weight: 800; }
+.slot.winner .sc { color: var(--hit-ink); }
+.slot.loser .nm { color: var(--muted); }
+.slot.bye { color: var(--muted); font-style: italic; }
+.slot.empty .nm { color: #cbd5e1; }
+
+.gf-region .match-card { border-color: var(--red); background: linear-gradient(180deg, #fff 0%, #fff5f5 100%); }
+.gf-region .bracket-round-title { color: var(--red); }
+.gf2-note { font-size: 10px; color: var(--muted); text-align: center; margin-top: 4px; font-style: italic; }
+
+.champBanner {
+  margin-top: 16px; padding: 16px; text-align: center;
+  background: linear-gradient(180deg, var(--red) 0%, var(--red-dark) 100%);
+  color: #fff; border-radius: 8px;
+  font-size: 20px; font-weight: 800; letter-spacing: 2px;
+  box-shadow: var(--shadow);
+}
+
+/* ============================================================
+   Match modal
+   ============================================================ */
+.modal {
+  position: fixed; inset: 0; z-index: 100;
+  display: flex; align-items: center; justify-content: center;
+  padding: 16px;
+}
+.modal[hidden] { display: none; }
+.modal-scrim {
+  position: absolute; inset: 0;
+  background: rgba(14, 26, 52, .55);
+  backdrop-filter: blur(3px);
+}
+.modal-card {
+  position: relative; background: transparent; z-index: 1;
+  max-width: 960px; width: 100%;
+  max-height: 92vh; overflow: auto;
+  border-radius: 12px; box-shadow: 0 30px 60px rgba(0,0,0,.35);
+  background: #f6f8fc; padding: 8px;
+}
+.modal-hdr {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 10px 12px; background: #fff; border-radius: 10px;
+  margin-bottom: 8px; border: 1px solid var(--line);
+}
+.modal-eyebrow { font-size: 10px; letter-spacing: 3px; color: var(--muted); font-weight: 700; }
+.modal-hdr h2 { margin: 2px 0 0; font-size: 20px; color: var(--navy); }
+.iconbtn {
+  background: transparent; border: 0; font-size: 24px;
+  color: var(--muted); cursor: pointer; padding: 4px 10px;
+}
+.iconbtn:hover { color: var(--red); }
+.modal-body .sheet { max-width: 100%; margin: 0; }
+.modal-actions {
+  display: flex; gap: 8px; align-items: center;
+  background: #fff; padding: 10px 12px; border-radius: 10px;
+  border: 1px solid var(--line); margin-top: 8px;
+}
+.modal-actions .spacer { flex: 1; }
+.modal-actions button {
+  padding: 8px 14px; font-size: 12px; letter-spacing: 1.4px; font-weight: 700;
+  border-radius: 5px; cursor: pointer;
+}
+.modal-actions button.primary { background: var(--red); color: #fff; border: 1.5px solid var(--red); }
+.modal-actions button.primary:hover { background: var(--red-dark); border-color: var(--red-dark); }
+.modal-actions button.ghost { background: #fff; color: var(--navy); border: 1.5px solid var(--navy); }
+.modal-actions button.ghost:hover { background: var(--navy); color: #fff; }
+
+/* Hide the original bottom toolbar in the sheet-in-modal context */
+.modal .toolbar { display: none; }
+
+@media (max-width: 720px) {
+  .setup { grid-template-columns: 1fr; }
+  .bracket { min-width: 100%; }
+  .bracket-rounds { flex-direction: column; }
+  .bracket-round { min-width: 100%; }
+}
+
+/* Print bracket only */
+@media print {
+  .modal, .setup, .hdr-actions, .statusbar { display: none !important; }
+  .app { padding: 0; }
+  .brandbar { border: 3px solid var(--red); }
+  .bracketWrap { box-shadow: none; border: 0; }
+  .bracket-rounds { flex-direction: row; overflow: visible; }
+}
+
+/* ============================================================
+   Home view: tournaments list
+   ============================================================ */
+.brand-titles { display: flex; flex-direction: column; gap: 2px; }
+.backlink {
+  background: transparent; border: 0; color: #dbe4fb; cursor: pointer;
+  font-size: 12px; letter-spacing: 1.5px; text-transform: uppercase;
+  padding: 0; margin-bottom: 2px; text-align: left;
+}
+.backlink:hover { color: #fff; }
+.primary-hdr {
+  background: var(--red) !important; color: #fff !important; border: 1.5px solid var(--red) !important;
+}
+.primary-hdr:hover { background: var(--red-dark) !important; border-color: var(--red-dark) !important; }
+
+.tourneys {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 14px; margin-bottom: 20px;
+}
+.tcard-tourney {
+  background: #fff; border: 1.4px solid var(--line-strong); border-radius: 10px;
+  padding: 14px 16px; box-shadow: var(--shadow);
+  display: flex; flex-direction: column; gap: 8px;
+  transition: transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease;
+}
+.tcard-tourney:hover { transform: translateY(-1px); box-shadow: 0 8px 22px rgba(20,35,71,.15); border-color: var(--navy); }
+.tcard-tourney h3 {
+  margin: 0; font-size: 17px; color: var(--navy);
+  border-bottom: 2px solid var(--red); padding-bottom: 6px;
+}
+.tcard-tourney .meta { display: flex; gap: 10px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+.tcard-tourney .meta strong { color: var(--ink); font-weight: 700; }
+.tcard-tourney .progress {
+  background: #eef3fb; border-radius: 999px; height: 8px; overflow: hidden; position: relative;
+}
+.tcard-tourney .progress > span { display: block; height: 100%; background: linear-gradient(90deg, var(--red) 0%, var(--red-dark) 100%); }
+.tcard-tourney .status-line { font-size: 12px; color: var(--muted); }
+.tcard-tourney .champ { font-size: 13px; color: var(--hit-ink); font-weight: 700; }
+.tcard-tourney .actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+.tcard-tourney .actions button {
+  padding: 6px 10px; font-size: 11px; letter-spacing: 1px; font-weight: 700;
+  border-radius: 5px; cursor: pointer;
+  background: #fff; color: var(--navy); border: 1.5px solid var(--navy);
+}
+.tcard-tourney .actions button:hover { background: var(--navy); color: #fff; }
+.tcard-tourney .actions button.open { background: var(--red); border-color: var(--red); color: #fff; }
+.tcard-tourney .actions button.open:hover { background: var(--red-dark); border-color: var(--red-dark); }
+.tcard-tourney .actions button.danger { border-color: var(--red); color: var(--red); }
+.tcard-tourney .actions button.danger:hover { background: var(--red); color: #fff; }
+
+.emptyState { padding: 40px 0; display: flex; justify-content: center; }
+.emptyCard {
+  background: #fff; border: 1.4px solid var(--line-strong); border-radius: 12px;
+  padding: 32px 32px 28px; text-align: center; max-width: 480px;
+  box-shadow: var(--shadow);
+}
+.emptyCard h2 { margin: 0 0 8px; color: var(--navy); }
+.emptyCard p { color: var(--muted); margin: 0 0 16px; font-size: 14px; }
+.emptyCard .primary {
+  padding: 10px 20px; font-size: 13px; letter-spacing: 1.4px; font-weight: 700;
+  background: var(--red); color: #fff; border: 1.5px solid var(--red); border-radius: 5px; cursor: pointer;
+}
+.emptyCard .primary:hover { background: var(--red-dark); border-color: var(--red-dark); }
+
+/* Late entry modal */
+.modal-card-sm { max-width: 520px; }
+.modal-body.pad { padding: 16px 18px; background: #fff; border-radius: 10px; border: 1px solid var(--line); }
+.field-block {
+  display: block; margin-bottom: 14px;
+}
+.field-block > span, .field-block > legend {
+  display: block; font-size: 12px; letter-spacing: 1.5px; font-weight: 700;
+  color: var(--navy); margin-bottom: 5px; text-transform: uppercase;
+}
+.field-block input[type="text"], .field-block input[type="number"] {
+  width: 100%; padding: 8px 10px; font-size: 14px; border: 1.4px solid var(--line);
+  border-radius: 5px; background: #fff; color: var(--ink);
+}
+.field-block fieldset { border: 0; padding: 0; margin: 0; }
+.radio-tile {
+  display: flex; gap: 10px; align-items: flex-start;
+  padding: 10px 12px; border: 1.4px solid var(--line); border-radius: 6px;
+  margin-bottom: 8px; cursor: pointer; transition: border-color 120ms ease, background 120ms ease;
+}
+.radio-tile:hover { border-color: var(--navy); }
+.radio-tile input[type="radio"] { margin-top: 3px; }
+.radio-tile input[type="radio"]:checked ~ div strong { color: var(--red); }
+.radio-tile:has(input:checked) { border-color: var(--red); background: #fff5f5; }
+.radio-tile strong { display: block; color: var(--navy); font-size: 14px; margin-bottom: 3px; }
+.radio-tile p { margin: 0; color: var(--muted); font-size: 12px; }
+.hint { color: var(--muted); font-size: 12px; margin: 8px 0 0; }

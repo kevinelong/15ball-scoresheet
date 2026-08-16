@@ -1,18 +1,34 @@
-# 15-Ball Rotation (K-Ball) — Online Score Sheet
+# Columbia Cue Club Tournament — Double-Elimination Bracket + K-Ball Score Sheet
 
-Interactive online version of the Columbia Cue Club K-Ball paper score sheet. Zero dependencies — one HTML file, one stylesheet, one JS file. Runs anywhere: static hosting, USB drive, phone browser, iPad on the wall next to the table.
+Online tournament manager for 15-Ball Rotation (K-Ball). Enter a participant list, seed by Fargo rating, build a full double-elimination bracket, and click any match to open the paper-style K-Ball score sheet as a modal. Ball totals flow back into the bracket as the match score, winners advance automatically, and everything persists in the browser or exports as JSON.
+
+Zero dependencies — three JS/CSS/HTML files, no build step.
 
 ## What it does
 
-- 4 racks × 2 players × 15 balls each — click a ball to record it pocketed
+### Tournament bracket
+- Paste a participant list (one per line, optional Fargo rating in parentheses)
+- **Sort by Fargo** or **Shuffle** to seed
+- Build a full double-elimination bracket for any N &ge; 2 (byes auto-resolve)
+- **Grand Final format toggle**: Single Final vs. Must Beat Twice (with GF2 reset)
+- Winners' bracket, losers' bracket, and Grand Finals sections rendered as cards you can tap
+- Pending matches greyed out; playable ones highlighted; decided ones show score
+- Champion banner when the last match is decided
+- **Load Sept 7 Signups** shortcut fills the roster from the current Labor Day Showdown 2026 registration list
+
+### K-Ball match score sheet (per match, modal)
+- 4 racks × 2 players × 15 balls each — click balls to record them pocketed
 - Live per-rack totals, running totals, and final totals
 - Fouls per rack, aggregated per player
-- Player names, goals (25 / 50 / other), high run, signatures, winner
-- Auto-saves to `localStorage` — refresh-safe
-- **Copy Share Link** encodes the whole sheet into the URL hash, so you can text a match to another phone
-- **Export / Import JSON** for archiving matches
-- **Print / PDF** — a print stylesheet strips the toolbar and keeps the paper look
-- Fully responsive down to phone width; keyboard accessible (Tab, Space/Enter to toggle balls)
+- Player names pre-populated from the bracket slot
+- Winner selection advances the bracket automatically on save
+- Race-to target from tournament setup pre-fills both players' goals
+
+### Persistence & sharing
+- Auto-saves the entire tournament (bracket + every match sheet) to browser storage
+- **Export JSON / Import JSON** for archiving or moving between devices
+- **Print** a bracket-only view (toolbar and setup hidden by print stylesheet)
+- Fully responsive down to phone width; keyboard accessible
 
 ## Running locally
 
@@ -36,6 +52,18 @@ Because it's a static site, drop it on GitHub Pages, Netlify, Cloudflare Pages, 
 3. Site lives at `https://<you>.github.io/kball-scoresheet/`
 
 Or point a custom subdomain (like `score.columbiacueclub.com`) at Pages via a `CNAME` file.
+
+## Bracket engine (`bracket.js`)
+
+Pure-function module, standalone testable. Exposes `BracketEngine.build(participants, { format })` and `BracketEngine.recordWinner(state, matchId, slotIdx, { score })`. `bracket.test.js` runs a small suite under Node: `node bracket.test.js`.
+
+- Standard "seed vs. opposite" ordering: #1 meets #2 in the final if form holds
+- Bracket size rounds up to the next power of 2, extra slots become BYEs
+- BYEs auto-advance so real players face real opponents
+- W-bracket winners feed forward; W-bracket losers cross-side into the L-bracket
+- L-bracket rounds alternate consolidate/drop-in for standard double-elim shape
+- Grand Final always has GF1; GF2 exists only in double-final format and only
+  seats players when the L-champ wins GF1
 
 ## Design decisions
 

@@ -3,99 +3,255 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>15-Ball Rotation (K-Ball) &mdash; Score Sheet</title>
-<meta name="description" content="Interactive online score sheet for 15-Ball Rotation (K-Ball). ColumbiaCueClub.com." />
+<title>15-Ball Rotation (K-Ball) &mdash; Tournament Bracket &amp; Score Sheets</title>
+<meta name="description" content="Double-elimination bracket, seeded from a participant list, with the K-Ball score sheet as the per-match editor. ColumbiaCueClub.com." />
 <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <main class="sheet" id="sheet">
-    <header class="hdr">
-      <h1>15-Ball Rotation (K-Ball)</h1>
-      <div class="subhdr"><span class="star">&#9733;</span> SCORE SHEET <span class="star">&#9733;</span></div>
+  <!-- =============================== HOME VIEW (Tournaments list) =============================== -->
+  <main class="app" id="homeView" hidden>
+    <header class="apphdr">
+      <div class="brandbar">
+        <div>
+          <h1>Columbia Cue Club</h1>
+          <div class="tagline">Tournaments</div>
+        </div>
+        <div class="hdr-actions">
+          <button type="button" data-action="new-tournament" class="primary-hdr">+ New Tournament</button>
+          <button type="button" data-action="import-tournament-home">Import JSON</button>
+          <input type="file" id="importTournamentHomeFile" accept="application/json" hidden />
+        </div>
+      </div>
     </header>
 
-    <section class="players">
-      <div class="pcard">
-        <label class="line">PLAYER A: <input type="text" data-field="pAname" autocomplete="off" /></label>
-        <div class="goalbox">
-          <div class="goalttl">PLAYER A GOAL</div>
-          <div class="goals">
-            <label><input type="radio" name="goalA" value="25" checked /><span>25</span></label>
-            <label><input type="radio" name="goalA" value="50" /><span>50</span></label>
-            <label class="other">
-              <input type="radio" name="goalA" value="other" />
-              <span>OTHER</span>
-              <input type="number" min="1" max="999" step="1" data-field="goalAOther" aria-label="Other goal for Player A" />
-            </label>
-          </div>
+    <section class="tourneys" id="tourneysList">
+      <!-- populated by app.js -->
+    </section>
+
+    <div class="emptyState" id="emptyState" hidden>
+      <div class="emptyCard">
+        <h2>No tournaments yet</h2>
+        <p>Create your first tournament to start building brackets. You can save as many as you want and switch between them at any time.</p>
+        <button type="button" data-action="new-tournament" class="primary">+ New Tournament</button>
+      </div>
+    </div>
+  </main>
+
+  <!-- =============================== BRACKET VIEW =============================== -->
+  <main class="app" id="bracketView" hidden>
+    <header class="apphdr">
+      <div class="brandbar">
+        <div class="brand-titles">
+          <button type="button" class="backlink" data-action="go-home" aria-label="Back to tournaments">&larr; Tournaments</button>
+          <h1 id="tournamentTitle">Tournament</h1>
+          <div class="tagline" id="tournamentTagline">15-Ball Rotation (K-Ball) &mdash; Double Elimination</div>
+        </div>
+        <div class="hdr-actions">
+          <button type="button" data-action="rename-tournament" title="Rename this tournament">Rename</button>
+          <button type="button" data-action="save-tournament">Save</button>
+          <button type="button" data-action="export-tournament">Export JSON</button>
+          <button type="button" data-action="import-tournament">Import JSON</button>
+          <input type="file" id="importTournamentFile" accept="application/json" hidden />
         </div>
       </div>
-      <div class="pcard">
-        <label class="line">PLAYER B: <input type="text" data-field="pBname" autocomplete="off" /></label>
-        <div class="goalbox">
-          <div class="goalttl">PLAYER B GOAL</div>
-          <div class="goals">
-            <label><input type="radio" name="goalB" value="25" checked /><span>25</span></label>
-            <label><input type="radio" name="goalB" value="50" /><span>50</span></label>
-            <label class="other">
-              <input type="radio" name="goalB" value="other" />
-              <span>OTHER</span>
-              <input type="number" min="1" max="999" step="1" data-field="goalBOther" aria-label="Other goal for Player B" />
-            </label>
-          </div>
+    </header>
+
+    <section class="setup" id="setup">
+      <div class="col">
+        <h3>Tournament Setup</h3>
+        <label class="field">
+          <span>Tournament Name</span>
+          <input type="text" id="tName" placeholder="Labor Day Showdown 2026" />
+        </label>
+        <label class="field">
+          <span>Date</span>
+          <input type="date" id="tDate" />
+        </label>
+        <label class="field">
+          <span>Grand Final Format</span>
+          <select id="tFormat">
+            <option value="double">Double Final (must beat twice)</option>
+            <option value="single">Single Final</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Race To</span>
+          <input type="number" id="tRaceTo" min="1" max="99" value="25" />
+          <small>Points target per match (25 rec / 35 pro).</small>
+        </label>
+      </div>
+      <div class="col">
+        <h3>Participants <span class="pill" id="participantCount">0</span></h3>
+        <p class="hint">One player per line. Optional Fargo rating in parentheses. Example: <code>Tyler Layton (476)</code>. Higher Fargo = higher seed.</p>
+        <textarea id="participantList" rows="8" placeholder="Tyler Layton (476)&#10;David Scarth&#10;Matthew Wiederholt&#10;Jose Gonzalez&#10;Roberto&#10;Celso Tapia"></textarea>
+        <div class="row">
+          <button type="button" data-action="build-bracket" class="primary">Build Bracket</button>
+          <button type="button" data-action="shuffle-participants">Shuffle Order</button>
+          <button type="button" data-action="sort-by-fargo">Sort by Fargo</button>
+          <button type="button" data-action="clear-participants">Clear</button>
         </div>
       </div>
     </section>
 
-    <section class="racks" id="racks"><!-- populated by app.js --></section>
-
-    <section class="totals">
-      <div class="tcard">
-        <h3>PLAYER A TOTALS</h3>
-        <div class="trow">
-          <label>HIGH RUN<input type="number" min="0" max="120" step="1" data-field="hrA" /></label>
-          <label>FOULS<input type="number" min="0" step="1" data-field="foulsA" readonly /></label>
-          <label class="final">FINAL TOTAL<input type="number" data-field="finalA" readonly /></label>
+    <section class="bracketWrap" id="bracketWrap" hidden>
+      <div class="statusbar">
+        <div id="statusText"></div>
+        <div>
+          <button type="button" data-action="add-late-entry" class="primary" title="Add a player to the running bracket">+ Add Late Entry</button>
+          <button type="button" data-action="print-bracket">Print Bracket</button>
+          <button type="button" data-action="reset-bracket" class="danger">Reset Bracket</button>
         </div>
       </div>
-      <div class="tcard">
-        <h3>PLAYER B TOTALS</h3>
-        <div class="trow">
-          <label>HIGH RUN<input type="number" min="0" max="120" step="1" data-field="hrB" /></label>
-          <label>FOULS<input type="number" min="0" step="1" data-field="foulsB" readonly /></label>
-          <label class="final">FINAL TOTAL<input type="number" data-field="finalB" readonly /></label>
-        </div>
-      </div>
-    </section>
-
-    <section class="sigblock">
-      <div class="sigttl">SIGNATURES:</div>
-      <div class="sigs">
-        <label>PLAYER A:<input type="text" data-field="sigA" autocomplete="off" /></label>
-        <label>PLAYER B:<input type="text" data-field="sigB" autocomplete="off" /></label>
-      </div>
-      <div class="winner">
-        CIRCLE THE WINNER:
-        <label><input type="radio" name="winner" value="A" /><span data-winner="A">Player A</span></label>
-        <label><input type="radio" name="winner" value="B" /><span data-winner="B">Player B</span></label>
-      </div>
-      <div class="brand"><a href="https://ColumbiaCueClub.com" target="_blank" rel="noopener">ColumbiaCueClub.com</a></div>
+      <div class="bracket" id="bracket"></div>
+      <div class="champBanner" id="champBanner" hidden></div>
     </section>
   </main>
 
-  <nav class="toolbar" aria-label="Score sheet actions">
-    <button type="button" data-action="new">New</button>
-    <button type="button" data-action="save">Save</button>
-    <button type="button" data-action="load">Load</button>
-    <button type="button" data-action="export">Export JSON</button>
-    <button type="button" data-action="import">Import JSON</button>
-    <button type="button" data-action="print">Print / PDF</button>
-    <button type="button" data-action="share">Copy Share Link</button>
-    <input type="file" id="importFile" accept="application/json" hidden />
-  </nav>
+  <!-- =============================== SCORE SHEET MODAL =============================== -->
+  <div class="modal" id="matchModal" hidden aria-modal="true" role="dialog" aria-labelledby="matchTitle">
+    <div class="modal-scrim" data-action="close-match"></div>
+    <div class="modal-card">
+      <div class="modal-hdr">
+        <div>
+          <div class="modal-eyebrow" id="matchEyebrow">Match</div>
+          <h2 id="matchTitle">A vs B</h2>
+        </div>
+        <button type="button" class="iconbtn" data-action="close-match" aria-label="Close">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <!-- The paper-style score sheet, scoped to one match -->
+        <main class="sheet" id="sheet">
+          <header class="hdr">
+            <h1>15-Ball Rotation (K-Ball)</h1>
+            <div class="subhdr"><span class="star">&#9733;</span> MATCH SCORE SHEET <span class="star">&#9733;</span></div>
+          </header>
+
+          <section class="players">
+            <div class="pcard">
+              <label class="line">PLAYER A: <input type="text" data-field="pAname" autocomplete="off" /></label>
+              <div class="goalbox">
+                <div class="goalttl">PLAYER A GOAL</div>
+                <div class="goals">
+                  <label><input type="radio" name="goalA" value="25" checked /><span>25</span></label>
+                  <label><input type="radio" name="goalA" value="50" /><span>50</span></label>
+                  <label class="other"><input type="radio" name="goalA" value="other" /><span>OTHER</span>
+                    <input type="number" min="1" max="999" step="1" data-field="goalAOther" aria-label="Other goal for Player A" />
+                  </label>
+                </div>
+              </div>
+            </div>
+            <div class="pcard">
+              <label class="line">PLAYER B: <input type="text" data-field="pBname" autocomplete="off" /></label>
+              <div class="goalbox">
+                <div class="goalttl">PLAYER B GOAL</div>
+                <div class="goals">
+                  <label><input type="radio" name="goalB" value="25" checked /><span>25</span></label>
+                  <label><input type="radio" name="goalB" value="50" /><span>50</span></label>
+                  <label class="other"><input type="radio" name="goalB" value="other" /><span>OTHER</span>
+                    <input type="number" min="1" max="999" step="1" data-field="goalBOther" aria-label="Other goal for Player B" />
+                  </label>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="racks" id="racks"><!-- populated by app.js --></section>
+
+          <section class="totals">
+            <div class="tcard">
+              <h3>PLAYER A TOTALS</h3>
+              <div class="trow">
+                <label>HIGH RUN<input type="number" min="0" max="120" step="1" data-field="hrA" /></label>
+                <label>FOULS<input type="number" min="0" step="1" data-field="foulsA" readonly /></label>
+                <label class="final">FINAL TOTAL<input type="number" data-field="finalA" readonly /></label>
+              </div>
+            </div>
+            <div class="tcard">
+              <h3>PLAYER B TOTALS</h3>
+              <div class="trow">
+                <label>HIGH RUN<input type="number" min="0" max="120" step="1" data-field="hrB" /></label>
+                <label>FOULS<input type="number" min="0" step="1" data-field="foulsB" readonly /></label>
+                <label class="final">FINAL TOTAL<input type="number" data-field="finalB" readonly /></label>
+              </div>
+            </div>
+          </section>
+
+          <section class="sigblock">
+            <div class="sigttl">SIGNATURES:</div>
+            <div class="sigs">
+              <label>PLAYER A:<input type="text" data-field="sigA" autocomplete="off" /></label>
+              <label>PLAYER B:<input type="text" data-field="sigB" autocomplete="off" /></label>
+            </div>
+            <div class="winner">
+              WINNER:
+              <label><input type="radio" name="winner" value="A" /><span data-winner="A">Player A</span></label>
+              <label><input type="radio" name="winner" value="B" /><span data-winner="B">Player B</span></label>
+            </div>
+            <div class="brand"><a href="https://ColumbiaCueClub.com" target="_blank" rel="noopener">ColumbiaCueClub.com</a></div>
+          </section>
+        </main>
+      </div>
+
+      <div class="modal-actions">
+        <button type="button" data-action="clear-match" class="ghost">Clear</button>
+        <div class="spacer"></div>
+        <button type="button" data-action="close-match" class="ghost">Cancel</button>
+        <button type="button" data-action="save-match" class="primary">Save Result</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =============================== LATE-ENTRY MODAL =============================== -->
+  <div class="modal" id="lateEntryModal" hidden aria-modal="true" role="dialog" aria-labelledby="lateEntryTitle">
+    <div class="modal-scrim" data-action="close-late-entry"></div>
+    <div class="modal-card modal-card-sm">
+      <div class="modal-hdr">
+        <div>
+          <div class="modal-eyebrow">Add Late Entry</div>
+          <h2 id="lateEntryTitle">Player joining after start</h2>
+        </div>
+        <button type="button" class="iconbtn" data-action="close-late-entry" aria-label="Close">&times;</button>
+      </div>
+      <div class="modal-body pad">
+        <label class="field-block">
+          <span>Player name</span>
+          <input type="text" id="lateEntryName" placeholder="e.g. John Smith" autocomplete="off" />
+        </label>
+        <label class="field-block">
+          <span>Fargo rating (optional)</span>
+          <input type="number" id="lateEntryFargo" min="0" max="999" step="1" placeholder="e.g. 476" />
+        </label>
+        <fieldset class="field-block">
+          <legend>Where should they enter the bracket?</legend>
+          <label class="radio-tile">
+            <input type="radio" name="lateEntrySide" value="W" checked />
+            <div>
+              <strong>Winners bracket</strong>
+              <p>Enter with a bye at the earliest open W-round slot. Most common for players who show up right after registration closes.</p>
+            </div>
+          </label>
+          <label class="radio-tile">
+            <input type="radio" name="lateEntrySide" value="L" />
+            <div>
+              <strong>Losers bracket</strong>
+              <p>Enter directly into the L-bracket at the earliest open slot. Treats late entry as one loss already taken.</p>
+            </div>
+          </label>
+        </fieldset>
+        <p class="hint">The bracket keeps every decided match and every currently paired match. The new player fills the first open slot in their chosen side.</p>
+      </div>
+      <div class="modal-actions">
+        <div class="spacer"></div>
+        <button type="button" data-action="close-late-entry" class="ghost">Cancel</button>
+        <button type="button" data-action="confirm-late-entry" class="primary">Add to Bracket</button>
+      </div>
+    </div>
+  </div>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
+  <script src="bracket.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
