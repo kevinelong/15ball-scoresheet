@@ -16,7 +16,9 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/kevinelong/kball-scoresheet/server/internal/auth"
 	"github.com/kevinelong/kball-scoresheet/server/internal/config"
+	"github.com/kevinelong/kball-scoresheet/server/internal/mail"
 	"github.com/kevinelong/kball-scoresheet/server/internal/store"
 )
 
@@ -29,12 +31,31 @@ func main() {
 	}
 	defer st.Close()
 
+	// Mailer: SMTP is required in production; fall back to a no-op logger if
+	// unconfigured so the service still runs (request-link then just no-ops).
+	var mailer mail.Mailer
+	if cfg.SMTPHost != "" {
+		mailer = &mail.SMTPMailer{Host: cfg.SMTPHost, Port: cfg.SMTPPort, Username: cfg.SMTPUsername, Password: cfg.SMTPPassword, From: cfg.EmailFrom}
+	} else {
+		log.Printf("WARNING: SMTP not configured (SMTP_HOST empty) — magic links will not be sent")
+		mailer = &mail.LogMailer{Sink: func(to, link string) { log.Printf("magic link for %s (SMTP disabled)", to) }}
+	}
+	a := auth.New(st.DB, cfg, mailer)
+
 	r := chi.NewRouter()
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Recoverer)
 
 	// Health is registered before any authenticated routing (reconciliation #14).
 	r.Get("/api/health", healthHandler(st))
+
+	// Auth: public request-link + scanner-safe GET landing; confirm-link needs
+	// X-CO (the landing page sends it); me/signout need a session.
+	r.Post("/api/auth/request-link", a.RequestLink)
+	r.Get("/api/auth/verify", a.Verify)
+	r.With(a.RequireCSRF).Post("/api/auth/confirm-link", a.ConfirmLink)
+	r.With(a.RequireSession).Get("/api/me", a.Me)
+	r.With(a.RequireCSRF, a.RequireSession).Post("/api/auth/signout", a.Signout)
 
 	srv := &http.Server{
 		Addr:              cfg.ListenAddr,
