@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>15-Ball Rotation (K-Ball) &mdash; Score Sheet</title>
+<meta name="description" content="Interactive online score sheet for 15-Ball Rotation (K-Ball). ColumbiaCueClub.com." />
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="sheet" id="sheet">
+    <header class="hdr">
+      <h1>15-Ball Rotation (K-Ball)</h1>
+      <div class="subhdr"><span class="star">&#9733;</span> SCORE SHEET <span class="star">&#9733;</span></div>
+    </header>
+
+    <section class="players">
+      <div class="pcard">
+        <label class="line">PLAYER A: <input type="text" data-field="pAname" autocomplete="off" /></label>
+        <div class="goalbox">
+          <div class="goalttl">PLAYER A GOAL</div>
+          <div class="goals">
+            <label><input type="radio" name="goalA" value="25" checked /><span>25</span></label>
+            <label><input type="radio" name="goalA" value="50" /><span>50</span></label>
+            <label class="other">
+              <input type="radio" name="goalA" value="other" />
+              <span>OTHER</span>
+              <input type="number" min="1" max="999" step="1" data-field="goalAOther" aria-label="Other goal for Player A" />
+            </label>
+          </div>
+        </div>
+      </div>
+      <div class="pcard">
+        <label class="line">PLAYER B: <input type="text" data-field="pBname" autocomplete="off" /></label>
+        <div class="goalbox">
+          <div class="goalttl">PLAYER B GOAL</div>
+          <div class="goals">
+            <label><input type="radio" name="goalB" value="25" checked /><span>25</span></label>
+            <label><input type="radio" name="goalB" value="50" /><span>50</span></label>
+            <label class="other">
+              <input type="radio" name="goalB" value="other" />
+              <span>OTHER</span>
+              <input type="number" min="1" max="999" step="1" data-field="goalBOther" aria-label="Other goal for Player B" />
+            </label>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="racks" id="racks"><!-- populated by app.js --></section>
+
+    <section class="totals">
+      <div class="tcard">
+        <h3>PLAYER A TOTALS</h3>
+        <div class="trow">
+          <label>HIGH RUN<input type="number" min="0" max="120" step="1" data-field="hrA" /></label>
+          <label>FOULS<input type="number" min="0" step="1" data-field="foulsA" readonly /></label>
+          <label class="final">FINAL TOTAL<input type="number" data-field="finalA" readonly /></label>
+        </div>
+      </div>
+      <div class="tcard">
+        <h3>PLAYER B TOTALS</h3>
+        <div class="trow">
+          <label>HIGH RUN<input type="number" min="0" max="120" step="1" data-field="hrB" /></label>
+          <label>FOULS<input type="number" min="0" step="1" data-field="foulsB" readonly /></label>
+          <label class="final">FINAL TOTAL<input type="number" data-field="finalB" readonly /></label>
+        </div>
+      </div>
+    </section>
+
+    <section class="sigblock">
+      <div class="sigttl">SIGNATURES:</div>
+      <div class="sigs">
+        <label>PLAYER A:<input type="text" data-field="sigA" autocomplete="off" /></label>
+        <label>PLAYER B:<input type="text" data-field="sigB" autocomplete="off" /></label>
+      </div>
+      <div class="winner">
+        CIRCLE THE WINNER:
+        <label><input type="radio" name="winner" value="A" /><span data-winner="A">Player A</span></label>
+        <label><input type="radio" name="winner" value="B" /><span data-winner="B">Player B</span></label>
+      </div>
+      <div class="brand"><a href="https://ColumbiaCueClub.com" target="_blank" rel="noopener">ColumbiaCueClub.com</a></div>
+    </section>
+  </main>
+
+  <nav class="toolbar" aria-label="Score sheet actions">
+    <button type="button" data-action="new">New</button>
+    <button type="button" data-action="save">Save</button>
+    <button type="button" data-action="load">Load</button>
+    <button type="button" data-action="export">Export JSON</button>
+    <button type="button" data-action="import">Import JSON</button>
+    <button type="button" data-action="print">Print / PDF</button>
+    <button type="button" data-action="share">Copy Share Link</button>
+    <input type="file" id="importFile" accept="application/json" hidden />
+  </nav>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
