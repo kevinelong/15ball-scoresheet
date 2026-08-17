@@ -45,11 +45,11 @@ Then browse to `http://localhost:8000/`.
 
 ## Deploying
 
-Because it's a static site, drop it on GitHub Pages, Netlify, Cloudflare Pages, S3+CloudFront, or any web host. GitHub Pages recipe (the repository will be renamed to `15ball-scoresheet` soon):
+Because it's a static site, drop it on GitHub Pages, Netlify, Cloudflare Pages, S3+CloudFront, or any web host. GitHub Pages recipe:
 
-1. Push this repo to `github.com/<you>/kball-scoresheet`
+1. Push this repo to `github.com/<you>/15ball-scoresheet`
 2. **Settings → Pages → Build from branch → `main` / root**
-3. Site lives at `https://<you>.github.io/kball-scoresheet/`
+3. Site lives at `https://<you>.github.io/15ball-scoresheet/`
 
 Or point a custom subdomain (like `score.columbiacueclub.com`) at Pages via a `CNAME` file.
 
