@@ -1,4 +1,4 @@
-// Command kball-server is the Columbia Cue Club tournament backend. Foundation
+// Command fifteenball-server is the Columbia Cue Club tournament backend. Foundation
 // slice: config, migrated SQLite store, chi router, GET /api/health, and a
 // bounded graceful shutdown. Feature routes (auth, tournaments, challonge) are
 // added in subsequent slices per server/SPEC-DESIGN-RECONCILED.md.
@@ -16,11 +16,11 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
-	"github.com/kevinelong/kball-scoresheet/server/internal/auth"
-	"github.com/kevinelong/kball-scoresheet/server/internal/challonge"
-	"github.com/kevinelong/kball-scoresheet/server/internal/config"
-	"github.com/kevinelong/kball-scoresheet/server/internal/mail"
-	"github.com/kevinelong/kball-scoresheet/server/internal/store"
+	"github.com/kevinelong/15ball-scoresheet/server/internal/auth"
+	"github.com/kevinelong/15ball-scoresheet/server/internal/challonge"
+	"github.com/kevinelong/15ball-scoresheet/server/internal/config"
+	"github.com/kevinelong/15ball-scoresheet/server/internal/mail"
+	"github.com/kevinelong/15ball-scoresheet/server/internal/store"
 )
 
 func main() {
@@ -90,7 +90,7 @@ func main() {
 	defer stop()
 
 	go func() {
-		log.Printf("kball-server listening on %s (db=%s)", cfg.ListenAddr, cfg.DatabasePath)
+		log.Printf("fifteenball-server listening on %s (db=%s)", cfg.ListenAddr, cfg.DatabasePath)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("listen: %v", err)
 		}

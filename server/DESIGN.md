@@ -4,7 +4,7 @@
 > **📌 Read `server/SPEC-DESIGN-RECONCILED.md` before implementing.** It is the
 > accepted single source of truth for backend decisions. All 17 `Decision:` items
 > from `server/SPEC-REVIEW.md` are answered there, and both deploy blockers are
-> resolved (OpenRC init instead of systemd; same-origin `/kball/` + `/kball/api/`
+> resolved (OpenRC init instead of systemd; same-origin `/15ball/` + `/15ball/api/`
 > → `127.0.0.1:8093` instead of GitHub Pages + separate absolute API origin).
 >
 > Sections of THIS document are being rewritten to match. Trust a section only
@@ -174,7 +174,7 @@ A single helper owns the mutation pattern. Open the `modernc.org/sqlite` databas
 
 ```go
 // DATABASE_PATH is opened as:
-// file:/var/lib/kball/data.db?_txlock=immediate&_pragma=busy_timeout(5000)
+// file:/var/lib/fifteenball/data.db?_txlock=immediate&_pragma=busy_timeout(5000)
 func (s *Store) withImmediateTx(ctx context.Context, fn func(*sql.Tx) error) (err error) {
     tx, err := s.db.BeginTx(ctx, nil)
     if err != nil { return err }
@@ -359,42 +359,42 @@ Deploy a single static Go `linux/amd64` binary to Kevin's existing Ubuntu 22.04+
 ### Filesystem and account layout
 
 ```text
-/opt/kball/
+/opt/fifteenball/
   bin/
-    kball-server                  # current executable, owned by root:kball
+    fifteenball-server                  # current executable, owned by root:fifteenball
   releases/
-    v1.2.3/kball-server           # immutable downloaded release binaries
+    v1.2.3/fifteenball-server           # immutable downloaded release binaries
   deploy/
-    kball.service
-    nginx-kball.conf
-    logrotate-kball
-  .env                            # root:kball, mode 0640
+    fifteenball.service
+    nginx-fifteenball.conf
+    logrotate-fifteenball
+  .env                            # root:fifteenball, mode 0640
 
-/var/lib/kball/
+/var/lib/fifteenball/
   data.db
   data.db-wal                     # transient when SQLite WAL is active
   data.db-shm                     # transient when SQLite WAL is active
   backups/
-    kball-2026-08-16.db
+    fifteenball-2026-08-16.db
 
-/var/log/kball/
-  kball.log
-  kball-error.log
+/var/log/fifteenball/
+  fifteenball.log
+  fifteenball-error.log
 ```
 
-Create a dedicated system account with no shell or home directory. The service needs write access only to `/var/lib/kball` and `/var/log/kball`; deployment operators update `/opt/kball` through `sudo` or a controlled release script.
+Create a dedicated system account with no shell or home directory. The service needs write access only to `/var/lib/fifteenball` and `/var/log/fifteenball`; deployment operators update `/opt/fifteenball` through `sudo` or a controlled release script.
 
 ```sh
-sudo groupadd --system kball
-sudo useradd --system --gid kball --home-dir /nonexistent \
-  --shell /usr/sbin/nologin kball
-sudo install -d -o root -g kball -m 0750 /opt/kball /opt/kball/bin /opt/kball/releases
-sudo install -d -o kball -g kball -m 0750 /var/lib/kball /var/lib/kball/backups
-sudo install -d -o kball -g kball -m 0750 /var/log/kball
-sudo install -o root -g kball -m 0640 /dev/null /opt/kball/.env
+sudo groupadd --system fifteenball
+sudo useradd --system --gid fifteenball --home-dir /nonexistent \
+  --shell /usr/sbin/nologin fifteenball
+sudo install -d -o root -g fifteenball -m 0750 /opt/fifteenball /opt/fifteenball/bin /opt/fifteenball/releases
+sudo install -d -o fifteenball -g fifteenball -m 0750 /var/lib/fifteenball /var/lib/fifteenball/backups
+sudo install -d -o fifteenball -g fifteenball -m 0750 /var/log/fifteenball
+sudo install -o root -g fifteenball -m 0640 /dev/null /opt/fifteenball/.env
 ```
 
-Set `DATABASE_PATH=/var/lib/kball/data.db` and `LISTEN_ADDR=127.0.0.1:8080` in `/opt/kball/.env`. Set `umask 0027` in the service so newly created database and log files do not become world-readable. Use SQLite WAL mode and a nonzero busy timeout in application startup:
+Set `DATABASE_PATH=/var/lib/fifteenball/data.db` and `LISTEN_ADDR=127.0.0.1:8080` in `/opt/fifteenball/.env`. Set `umask 0027` in the service so newly created database and log files do not become world-readable. Use SQLite WAL mode and a nonzero busy timeout in application startup:
 
 ```sql
 PRAGMA journal_mode = WAL;
@@ -404,22 +404,22 @@ PRAGMA busy_timeout = 5000;
 
 ### systemd unit
 
-`/etc/systemd/system/kball.service`:
+`/etc/systemd/system/fifteenball.service`:
 
 ```ini
 [Unit]
 Description=Columbia Cue Club tournament backend
-Documentation=https://github.com/<owner>/kball-scoresheet
+Documentation=https://github.com/<owner>/15ball-scoresheet
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=exec
-User=kball
-Group=kball
-WorkingDirectory=/opt/kball
-EnvironmentFile=/opt/kball/.env
-ExecStart=/opt/kball/bin/kball-server
+User=fifteenball
+Group=fifteenball
+WorkingDirectory=/opt/fifteenball
+EnvironmentFile=/opt/fifteenball/.env
+ExecStart=/opt/fifteenball/bin/fifteenball-server
 Restart=on-failure
 RestartSec=3s
 TimeoutStartSec=20s
@@ -448,22 +448,22 @@ SystemCallArchitectures=native
 SystemCallFilter=@system-service @network-io
 CapabilityBoundingSet=
 AmbientCapabilities=
-ReadWritePaths=/var/lib/kball /var/log/kball
-ReadOnlyPaths=/opt/kball
+ReadWritePaths=/var/lib/fifteenball /var/log/fifteenball
+ReadOnlyPaths=/opt/fifteenball
 
 [Install]
 WantedBy=multi-user.target
 ```
 
-`ProtectSystem=strict` means `/opt/kball` is read-only to the service and `ReadWritePaths` is mandatory for its database and logs. Do not enable `DynamicUser=yes`: stable ownership of SQLite and backup files is simpler for this small shared VPS. Keep the binary on loopback; systemd does not need any privileged network capability.
+`ProtectSystem=strict` means `/opt/fifteenball` is read-only to the service and `ReadWritePaths` is mandatory for its database and logs. Do not enable `DynamicUser=yes`: stable ownership of SQLite and backup files is simpler for this small shared VPS. Keep the binary on loopback; systemd does not need any privileged network capability.
 
 Install and operate it with:
 
 ```sh
 sudo systemctl daemon-reload
-sudo systemctl enable --now kball.service
-sudo systemctl status kball.service
-sudo journalctl -u kball.service -f
+sudo systemctl enable --now fifteenball.service
+sudo systemctl status fifteenball.service
+sudo journalctl -u fifteenball.service -f
 ```
 
 The application should emit structured one-line JSON logs to stdout/stderr. systemd journald is the primary service log. If application configuration also writes the two files shown above, rotate them as follows; do not have two independent writers writing the same log stream.
@@ -497,8 +497,8 @@ server {
     include /etc/letsencrypt/options-ssl-nginx.conf;
     ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
 
-    access_log /var/log/nginx/kball-access.log;
-    error_log  /var/log/nginx/kball-error.log warn;
+    access_log /var/log/nginx/fifteenball-access.log;
+    error_log  /var/log/nginx/fifteenball-error.log warn;
 
     client_max_body_size 2m;
 
@@ -529,10 +529,10 @@ If the GitHub Pages origin differs from `BASE_URL`, configure the backend's exac
 
 ### Log rotation
 
-If file logs are enabled, create `/etc/logrotate.d/kball`:
+If file logs are enabled, create `/etc/logrotate.d/fifteenball`:
 
 ```conf
-/var/log/kball/kball.log /var/log/kball/kball-error.log {
+/var/log/fifteenball/fifteenball.log /var/log/fifteenball/fifteenball-error.log {
     daily
     rotate 14
     missingok
@@ -541,10 +541,10 @@ If file logs are enabled, create `/etc/logrotate.d/kball`:
     delaycompress
     dateext
     dateformat -%Y%m%d
-    create 0640 kball kball
+    create 0640 fifteenball fifteenball
     sharedscripts
     postrotate
-        /bin/systemctl kill -s USR1 kball.service >/dev/null 2>&1 || true
+        /bin/systemctl kill -s USR1 fifteenball.service >/dev/null 2>&1 || true
     endscript
 }
 ```
@@ -553,22 +553,22 @@ Implement `SIGUSR1` reopening only if the application writes files itself; other
 
 ### SQLite backup
 
-Backups use SQLite's online backup command, never `cp` of a live database, WAL file, or SHM file. Install `/usr/local/sbin/kball-sqlite-backup` as root-owned, executable mode `0750`:
+Backups use SQLite's online backup command, never `cp` of a live database, WAL file, or SHM file. Install `/usr/local/sbin/fifteenball-sqlite-backup` as root-owned, executable mode `0750`:
 
 ```sh
 #!/bin/sh
 set -eu
 umask 0027
 stamp=$(date -u +%F)
-out=/var/lib/kball/backups/kball-${stamp}.db
-/usr/bin/sqlite3 /var/lib/kball/data.db ".backup '${out}'"
-/usr/bin/find /var/lib/kball/backups -type f -name 'kball-*.db' -mtime +30 -delete
+out=/var/lib/fifteenball/backups/fifteenball-${stamp}.db
+/usr/bin/sqlite3 /var/lib/fifteenball/data.db ".backup '${out}'"
+/usr/bin/find /var/lib/fifteenball/backups -type f -name 'fifteenball-*.db' -mtime +30 -delete
 ```
 
 Then add a root crontab entry (or an equivalent systemd timer) that writes a daily backup after the venue's active period:
 
 ```cron
-17 4 * * * /usr/local/sbin/kball-sqlite-backup >> /var/log/kball/backup.log 2>&1
+17 4 * * * /usr/local/sbin/fifteenball-sqlite-backup >> /var/log/fifteenball/backup.log 2>&1
 ```
 
 Test restoration periodically on a copy: `sqlite3 restored.db 'PRAGMA integrity_check;'`. Copy encrypted backups off the VPS when the club's operational process is ready; a backup stored only on the same disk is not disaster recovery.
@@ -601,31 +601,31 @@ jobs:
       - run: >-
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64
           go build -trimpath -ldflags='-s -w -X main.version=${{ github.ref_name }}'
-          -o kball-server ./...
-      - run: sha256sum kball-server > kball-server-linux-amd64.sha256
+          -o fifteenball-server ./...
+      - run: sha256sum fifteenball-server > fifteenball-server-linux-amd64.sha256
       - uses: softprops/action-gh-release@v2
         with:
           files: |
-            server/kball-server
-            server/kball-server-linux-amd64.sha256
+            server/fifteenball-server
+            server/fifteenball-server-linux-amd64.sha256
 ```
 
-The first deployment method should be manual pull, because it is observable and requires no inbound webhook listener. A root-owned `kball-deploy` script downloads the selected release asset, verifies its SHA-256 checksum, puts it in `/opt/kball/releases/<tag>/`, atomically updates `/opt/kball/bin/kball-server` (a symlink or `install` plus rename), and runs `systemctl restart kball`. A later GitHub webhook can invoke that exact script after verifying an HMAC signature, but it is optional and must not accept an arbitrary download URL or tag name.
+The first deployment method should be manual pull, because it is observable and requires no inbound webhook listener. A root-owned `fifteenball-deploy` script downloads the selected release asset, verifies its SHA-256 checksum, puts it in `/opt/fifteenball/releases/<tag>/`, atomically updates `/opt/fifteenball/bin/fifteenball-server` (a symlink or `install` plus rename), and runs `systemctl restart fifteenball`. A later GitHub webhook can invoke that exact script after verifying an HMAC signature, but it is optional and must not accept an arbitrary download URL or tag name.
 
 ```sh
 # Operator workflow after the release is published.
-sudo /usr/local/sbin/kball-deploy v1.2.3
-sudo systemctl status kball.service --no-pager
+sudo /usr/local/sbin/fifteenball-deploy v1.2.3
+sudo systemctl status fifteenball.service --no-pager
 curl -fsS https://tournaments.columbiacueclub.com/api/me || true
 ```
 
-**MVP decision:** Deploy one hardened loopback Go service under `kball`, reverse-proxied by the existing nginx, with a WAL SQLite database, daily `.backup` backup cron, and manual verified GitHub Release pulls. Defer webhook-triggered deployment and offsite backup automation.
+**MVP decision:** Deploy one hardened loopback Go service under `fifteenball`, reverse-proxied by the existing nginx, with a WAL SQLite database, daily `.backup` backup cron, and manual verified GitHub Release pulls. Defer webhook-triggered deployment and offsite backup automation.
 
 ## 4. Client↔server migration path
 
-The v3 browser state is an app document under `localStorage["kball.app.v3"]` with `{v: 3, tournaments: [], activeId}`. Each tournament has `id`, setup fields, `createdAt`, `updatedAt`, `participants`, `bracket`, `sheets`, and now `tables`. Existing v3 records may lack `game` and `tables`, and current `loadPersisted()` already backfills those fields. Preserve that compatibility during rollout.
+The v3 browser state is an app document under `localStorage["fifteenball.app.v3"]` with `{v: 3, tournaments: [], activeId}`. Each tournament has `id`, setup fields, `createdAt`, `updatedAt`, `participants`, `bracket`, `sheets`, and now `tables`. Existing v3 records may lack `game` and `tables`, and current `loadPersisted()` already backfills those fields. Preserve that compatibility during rollout.
 
-Once a user is authenticated and `KBALL_BACKEND_URL` is configured, the server is the source of truth. The browser's local storage becomes an offline cache and an import source, not a peer authority. A signed-out frontend stays exactly as it is today: local-only, with no cloud or Challonge controls.
+Once a user is authenticated and `FIFTEENBALL_BACKEND_URL` is configured, the server is the source of truth. The browser's local storage becomes an offline cache and an import source, not a peer authority. A signed-out frontend stays exactly as it is today: local-only, with no cloud or Challonge controls.
 
 ### Cloud envelope and timestamps
 
@@ -634,7 +634,7 @@ Do not overload the app document's `updatedAt` with sync protocol metadata. Add 
 ```json
 {
   "v": 1,
-  "tournament": { "id": "t_...", "name": "Sunday K-Ball", "updatedAt": 1786800700000 },
+  "tournament": { "id": "t_...", "name": "Sunday 15-Ball", "updatedAt": 1786800700000 },
   "sync": {
     "base_updated_at": 1786800600123,
     "updated_at": 1786800700000,
@@ -654,7 +654,7 @@ A cloud response is an envelope, not bare document JSON:
 
 ```json
 {
-  "tournament": { "id": "t_...", "name": "Sunday K-Ball", "...": "..." },
+  "tournament": { "id": "t_...", "name": "Sunday 15-Ball", "...": "..." },
   "updated_at": 1786800700456
 }
 ```
@@ -679,7 +679,7 @@ This is the deterministic behavior when a user edited a tournament offline in tw
 2. On reconnect, browser A calls `GET /api/tournaments/{id}`. It receives remote payload `R` and remote `R.updated_at`. If the cache is not dirty, A replaces its cached payload and `base_updated_at` with R.
 3. If cache `L` is dirty and `L.sync.base_updated_at == R.updated_at`, no other cloud change occurred since A's baseline. A sends `PUT /api/tournaments/{id}` with the payload, `base_updated_at`, `client_updated_at=L.sync.updated_at`, and `device_id`. The server updates atomically if its current `updated_at` still equals `base_updated_at`, assigns its canonical new timestamp, and returns the new envelope. A replaces cache and clears `dirty`.
 4. If `L.sync.base_updated_at != R.updated_at`, the documents diverged. Compare the ordered pair `(updated_at, device_id)` for local L and remote R. The larger pair wins. Timestamp is first; if timestamps are equal, lexicographically larger `device_id` wins. This tie rule makes every browser reach the same answer.
-5. If R wins, A replaces the active cache with R and clears `dirty`. It also stores L in a local `kball.conflicts.v1` array with its timestamp and a timestamped name suffix so a director can export or inspect it. It does not automatically create a duplicate cloud tournament.
+5. If R wins, A replaces the active cache with R and clears `dirty`. It also stores L in a local `fifteenball.conflicts.v1` array with its timestamp and a timestamped name suffix so a director can export or inspect it. It does not automatically create a duplicate cloud tournament.
 6. If L wins, A retries the conditional `PUT` using R's `updated_at` as `base_updated_at`. The server validates the baseline, accepts L as a full document replacement, assigns a new canonical `updated_at`, and returns it. If another write wins between fetch and PUT, the server returns `409 tournament_conflict` including its latest timestamp; A returns to step 2, with a bounded three-attempt loop. After three racing conflicts, keep L in the conflict cache and show a refresh-required message rather than spinning.
 7. Browser B follows the same steps. Because server responses are canonical and the pair tie-break is stable, it converges on the same winner after its next watch response or refresh.
 
@@ -690,7 +690,7 @@ PUT /api/tournaments/t_abc
 Content-Type: application/json
 
 {
-  "tournament": { "id": "t_abc", "name": "Sunday K-Ball", "...": "..." },
+  "tournament": { "id": "t_abc", "name": "Sunday 15-Ball", "...": "..." },
   "base_updated_at": 1786800600123,
   "client_updated_at": 1786800700000,
   "device_id": "7a6f..."
@@ -731,7 +731,7 @@ Long-poll is the right first implementation because it has simpler infrastructur
 
 ```http
 GET /api/tournaments/t_abc/watch?since=1786800700456
-Cookie: kball_session=...
+Cookie: fifteenball_session=...
 ```
 
 If an update has occurred:
@@ -753,7 +753,7 @@ If no update arrives within 30 seconds:
 ```http
 HTTP/1.1 204 No Content
 Cache-Control: no-store
-X-KBall-Updated-At: 1786800700456
+X-FifteenBall-Updated-At: 1786800700456
 ```
 
 Return `401` for no session, `403` for a user without tournament access, and `400` for a malformed or negative `since`. A `since` value older than the current row returns immediately. `changed` is an advisory invalidation hint, not an event log: clients refetch the current data and compare its `updated_at`. This deliberately avoids retaining an unbounded event history.
@@ -847,7 +847,7 @@ func (s *Server) watchTournament(w http.ResponseWriter, r *http.Request) {
         }
         if time.Now().After(deadline) {
             w.Header().Set("Cache-Control", "no-store")
-            w.Header().Set("X-KBall-Updated-At", strconv.FormatInt(current, 10))
+            w.Header().Set("X-FifteenBall-Updated-At", strconv.FormatInt(current, 10))
             w.WriteHeader(http.StatusNoContent)
             return
         }
@@ -874,7 +874,7 @@ async function watchTournament(id, since) {
     credentials: "include",
     cache: "no-store"
   });
-  if (res.status === 204) return Number(res.headers.get("X-KBall-Updated-At")) || since;
+  if (res.status === 204) return Number(res.headers.get("X-FifteenBall-Updated-At")) || since;
   if (!res.ok) throw new Error(`watch failed: ${res.status}`);
   const event = await res.json();
   await refreshTournamentAndTableBoard(id);
@@ -893,13 +893,13 @@ A later multi-instance deployment would replace `WatchHub.Notify` with a small d
 The frontend remains a plain static GitHub Pages site with no bundler, environment substitution, or deployment-specific JavaScript build. Put the optional backend base URL in `index.html`:
 
 ```html
-<meta name="kball-backend-url" content="">
+<meta name="fifteenball-backend-url" content="">
 ```
 
 For the hosted club frontend, set it to the HTTPS API origin, with no trailing slash:
 
 ```html
-<meta name="kball-backend-url" content="https://tournaments.columbiacueclub.com">
+<meta name="fifteenball-backend-url" content="https://tournaments.columbiacueclub.com">
 ```
 
 The empty default is intentional. A downloaded copy, GitHub Pages preview, or local `file://` session remains local-only exactly as it works now. Do not put API keys, client secrets, or a Challonge token in this tag.
@@ -907,16 +907,16 @@ The empty default is intentional. A downloaded copy, GitHub Pages preview, or lo
 Place this code near the existing `STORAGE_KEY` constants at the top of `app.js`. It is compatible with the current IIFE and uses no build tooling:
 
 ```js
-const backendMeta = document.querySelector('meta[name="kball-backend-url"]');
-const KBALL_BACKEND_URL = (backendMeta?.getAttribute("content") || "")
+const backendMeta = document.querySelector('meta[name="fifteenball-backend-url"]');
+const FIFTEENBALL_BACKEND_URL = (backendMeta?.getAttribute("content") || "")
   .trim()
   .replace(/\/+$/, "");
-const cloudEnabled = /^https:\/\//i.test(KBALL_BACKEND_URL) ||
-  (/^http:\/\/localhost(?::\d+)?$/i.test(KBALL_BACKEND_URL));
+const cloudEnabled = /^https:\/\//i.test(FIFTEENBALL_BACKEND_URL) ||
+  (/^http:\/\/localhost(?::\d+)?$/i.test(FIFTEENBALL_BACKEND_URL));
 
 function backendPath(path) {
   if (!cloudEnabled) throw new Error("Cloud features are not configured.");
-  return KBALL_BACKEND_URL + path;
+  return FIFTEENBALL_BACKEND_URL + path;
 }
 
 async function apiFetch(path, options) {
@@ -1023,4 +1023,4 @@ The same helper is used for cloud tournament calls. Local persistence remains im
 
 For GitHub Pages, editing the meta tag is the deployment configuration. If the frontend later moves behind the same nginx host, the tag can use a relative base URL only after `backendPath` is updated to support it; do not silently interpret empty as same-origin, because that would break the deliberate local-only default. Keep the explicit absolute API URL for the current static-site topology.
 
-**MVP decision:** Add one empty-by-default `kball-backend-url` meta tag, read it directly from `app.js`, and gate cloud save and Challonge proxy actions behind both configured HTTPS URL and `/api/me` authentication. Keep the frontend build-free and local-only when the tag is empty.
+**MVP decision:** Add one empty-by-default `fifteenball-backend-url` meta tag, read it directly from `app.js`, and gate cloud save and Challonge proxy actions behind both configured HTTPS URL and `/api/me` authentication. Keep the frontend build-free and local-only when the tag is empty.

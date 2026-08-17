@@ -487,6 +487,8 @@ def draw_footer(c):
 
 
 if __name__ == "__main__":
-    out = "/home/user/workspace/kball-scoresheet/docs/15ball-guide.pdf"
+    import os
+    # Write next to this script (docs/) regardless of the repo checkout name.
+    out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "15ball-guide.pdf")
     build(out)
     print(f"Wrote {out}")

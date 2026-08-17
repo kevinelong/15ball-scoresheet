@@ -1,0 +1,33 @@
+#!/sbin/openrc-run
+# Columbia Cue Club tournament backend (15-Ball). Install to /etc/init.d/fifteenball.
+# Runs the static binary as the unprivileged fifteenball user, loads secrets from the
+# root-owned env file before dropping privileges, and stops gracefully (SIGTERM,
+# 20s deadline matching the server's shutdown budget). Reconciliation #1/#12/#15.
+name="fifteenball"
+description="Columbia Cue Club tournament backend (15-Ball)"
+command="/opt/fifteenball/bin/fifteenball-server"
+command_user="fifteenball:fifteenball"
+command_background=true
+pidfile="/run/fifteenball.pid"
+output_log="/var/log/fifteenball.log"
+error_log="/var/log/fifteenball.log"
+retry="TERM/20/KILL/5"
+
+depend() {
+    need net
+    after nginx
+}
+
+start_pre() {
+    umask 0027
+    # Load the only secret source (root:root 0600) into the environment; the
+    # command inherits it, then start-stop-daemon drops to command_user.
+    if [ -f /etc/fifteenball/fifteenball.env ]; then
+        set -a
+        . /etc/fifteenball/fifteenball.env
+        set +a
+    fi
+    checkpath -d -o fifteenball:fifteenball -m 0750 /var/lib/fifteenball
+    checkpath -d -o fifteenball:fifteenball -m 0750 /var/lib/fifteenball/backups
+    checkpath -f -o fifteenball:fifteenball -m 0640 /var/log/fifteenball.log
+}

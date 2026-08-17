@@ -13,13 +13,13 @@ import (
 
 type ctxKey string
 
-const userIDKey ctxKey = "kball_user_id"
+const userIDKey ctxKey = "fifteenball_user_id"
 
-const sessionCookieName = "kball_session"
+const sessionCookieName = "fifteenball_session"
 
 func (a *Auth) sessionCookie(value string, maxAge int) *http.Cookie {
 	return &http.Cookie{
-		Name: sessionCookieName, Value: value, Path: "/kball/", MaxAge: maxAge,
+		Name: sessionCookieName, Value: value, Path: "/15ball/", MaxAge: maxAge,
 		Secure: true, HttpOnly: true, SameSite: http.SameSiteLaxMode,
 	}
 }
@@ -114,7 +114,7 @@ button{font-size:1rem;padding:.7rem 1.4rem;border:0;border-radius:.5rem;backgrou
 .err{color:#b00;margin-top:1rem}</style></head><body>
 <h1>Columbia Cue Club</h1>
 <p>Click to finish signing in on this device.</p>
-<button id="go">Continue to K-Ball</button>
+<button id="go">Continue to 15-Ball</button>
 <p id="err" class="err" hidden>That link is invalid or expired. Request a new one.</p>
 <script>
 document.getElementById('go').addEventListener('click', async function(){
@@ -125,7 +125,7 @@ document.getElementById('go').addEventListener('click', async function(){
       headers:{'Content-Type':'application/json','X-CO':'1'},
       body: JSON.stringify({s: %s, t: %s})
     });
-    if (res.ok) { window.location = '/kball/'; return; }
+    if (res.ok) { window.location = '/15ball/'; return; }
   } catch(e){}
   this.disabled = false;
   document.getElementById('err').hidden = false;
@@ -167,7 +167,7 @@ func (a *Auth) ConfirmLink(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.SetCookie(w, a.sessionCookie(raw, int(a.Cfg.SessionTTL.Seconds())))
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "redirect": "/kball/"})
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "redirect": "/15ball/"})
 }
 
 // Me: GET /api/me -> {email} (RequireSession wired in main).

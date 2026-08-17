@@ -1,5 +1,5 @@
 // Package config loads server configuration from the environment. The only
-// secret source in production is /etc/kball/kball.env (root:root, 0600), loaded
+// secret source in production is /etc/fifteenball/fifteenball.env (root:root, 0600), loaded
 // by the OpenRC init before dropping privileges (reconciliation #12).
 package config
 
@@ -12,8 +12,8 @@ import (
 
 type Config struct {
 	ListenAddr   string // LISTEN_ADDR, default 127.0.0.1:8093 (loopback, behind nginx)
-	DatabasePath string // DATABASE_PATH, default /var/lib/kball/data.db
-	BaseURL      string // BASE_URL, public origin+path, e.g. https://codeonline.io/kball
+	DatabasePath string // DATABASE_PATH, default /var/lib/fifteenball/data.db
+	BaseURL      string // BASE_URL, public origin+path, e.g. https://codeonline.io/15ball
 
 	MagicLinkTTL time.Duration // MAGIC_LINK_TTL_MINUTES, default 15m
 	SessionTTL   time.Duration // SESSION_TTL_DAYS, default 30d
@@ -64,8 +64,8 @@ func Load() *Config {
 	}
 	return &Config{
 		ListenAddr:         getenv("LISTEN_ADDR", "127.0.0.1:8093"),
-		DatabasePath:       getenv("DATABASE_PATH", "/var/lib/kball/data.db"),
-		BaseURL:            strings.TrimRight(getenv("BASE_URL", "https://codeonline.io/kball"), "/"),
+		DatabasePath:       getenv("DATABASE_PATH", "/var/lib/fifteenball/data.db"),
+		BaseURL:            strings.TrimRight(getenv("BASE_URL", "https://codeonline.io/15ball"), "/"),
 		MagicLinkTTL:       time.Duration(atoi("MAGIC_LINK_TTL_MINUTES", 15)) * time.Minute,
 		SessionTTL:         time.Duration(atoi("SESSION_TTL_DAYS", 30)) * 24 * time.Hour,
 		AllowedEmails:      emails,

@@ -8,7 +8,7 @@ __pycache__/
 *.pyc
 
 # Backend
-server/kball-server
+server/fifteenball-server
 server/bin/
 server/data.db
 server/*.db

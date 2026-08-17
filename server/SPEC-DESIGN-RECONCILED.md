@@ -3,21 +3,21 @@
 ## Environment (locked)
 
 - The production host is Kevin's shared Alpine Linux VPS, administered with OpenRC and `doas`; it does not have systemd or `sudo`.
-- nginx already terminates TLS and serves the static frontend at `https://codeonline.io/kball/`.
-- The public API origin is the same site at `https://codeonline.io/kball/api/`; nginx proxies that prefix to the loopback-only Go listener at `127.0.0.1:8093`.
-- The service is one Go process and one SQLite database on this VPS. It uses `modernc.org/sqlite`, builds with `CGO_ENABLED=0`, and runs with a dedicated unprivileged `kball` account.
-- Runtime data is durable under `/var/lib/kball`; release binaries are immutable under `/opt/kball/releases`, with `/opt/kball/bin/kball-server` atomically updated to the selected release.
+- nginx already terminates TLS and serves the static frontend at `https://codeonline.io/15ball/`.
+- The public API origin is the same site at `https://codeonline.io/15ball/api/`; nginx proxies that prefix to the loopback-only Go listener at `127.0.0.1:8093`.
+- The service is one Go process and one SQLite database on this VPS. It uses `modernc.org/sqlite`, builds with `CGO_ENABLED=0`, and runs with a dedicated unprivileged `fifteenball` account.
+- Runtime data is durable under `/var/lib/fifteenball`; release binaries are immutable under `/opt/fifteenball/releases`, with `/opt/fifteenball/bin/fifteenball-server` atomically updated to the selected release.
 - This is one Columbia Cue Club deployment. Membership is allowlisted at the club level; there is no tenant selector or per-club credential UI.
 
 ## Two deploy blockers — resolved
 
 ### Service manager: OpenRC, not systemd
 
-Ship `/etc/init.d/kball` as an OpenRC `openrc-run` service, patterned after the host's working `apid` and `huntd` services. It must start `/opt/kball/bin/kball-server` as `kball:kball`, load root-owned `/etc/kball/kball.env`, set `umask 0027`, use OpenRC's normal respawn/supervision mechanism, and declare `need net` plus `after nginx`. The init script's stop policy is `TERM/20/KILL/5`, which matches the application's 20-second graceful-shutdown deadline. Operators use `doas rc-service kball restart`, `doas rc-update add kball default`, and the existing OpenRC logging convention. This is the deployable equivalent of DESIGN.md's service hardening: the host has no systemd sandbox directives, while the existing OpenRC service pattern is known-good on this box.
+Ship `/etc/init.d/fifteenball` as an OpenRC `openrc-run` service, patterned after the host's working `apid` and `huntd` services. It must start `/opt/fifteenball/bin/fifteenball-server` as `fifteenball:fifteenball`, load root-owned `/etc/fifteenball/fifteenball.env`, set `umask 0027`, use OpenRC's normal respawn/supervision mechanism, and declare `need net` plus `after nginx`. The init script's stop policy is `TERM/20/KILL/5`, which matches the application's 20-second graceful-shutdown deadline. Operators use `doas rc-service fifteenball restart`, `doas rc-update add fifteenball default`, and the existing OpenRC logging convention. This is the deployable equivalent of DESIGN.md's service hardening: the host has no systemd sandbox directives, while the existing OpenRC service pattern is known-good on this box.
 
-### Frontend and API origin: same-origin `/kball/` and `/kball/api/`
+### Frontend and API origin: same-origin `/15ball/` and `/15ball/api/`
 
-Serve the frontend at `https://codeonline.io/kball/` and expose the API only at `https://codeonline.io/kball/api/`. nginx must use `location /kball/api/ { proxy_pass http://127.0.0.1:8093/api/; ... }`, so public `/kball/api/health` reaches backend `/api/health`; it must forward `Host`, `X-Real-IP`, `X-Forwarded-For`, and `X-Forwarded-Proto`, set `proxy_read_timeout 35s`, and disable buffering for the watch route. The frontend meta value is `/kball/api`, and `app.js` must support an explicit relative base URL while preserving empty as local-only. There is no CORS middleware. This matches the live host and removes the separate-origin/GitHub Pages premise that DESIGN.md currently assumes; same-origin cookies, CSRF header checks, and long polling then work without cross-origin credential complexity.
+Serve the frontend at `https://codeonline.io/15ball/` and expose the API only at `https://codeonline.io/15ball/api/`. nginx must use `location /15ball/api/ { proxy_pass http://127.0.0.1:8093/api/; ... }`, so public `/15ball/api/health` reaches backend `/api/health`; it must forward `Host`, `X-Real-IP`, `X-Forwarded-For`, and `X-Forwarded-Proto`, set `proxy_read_timeout 35s`, and disable buffering for the watch route. The frontend meta value is `/15ball/api`, and `app.js` must support an explicit relative base URL while preserving empty as local-only. There is no CORS middleware. This matches the live host and removes the separate-origin/GitHub Pages premise that DESIGN.md currently assumes; same-origin cookies, CSRF header checks, and long polling then work without cross-origin credential complexity.
 
 ## 17 Decision items
 
@@ -31,7 +31,7 @@ Serve the frontend at `https://codeonline.io/kball/` and expose the API only at 
 
 ### 3. Port, data directory, and backup
 
-**Decision: Bind `LISTEN_ADDR=127.0.0.1:8093`, store the database at `/var/lib/kball/data.db`, and run a nightly SQLite `.backup` job retained for 30 days.** Port 8093 is reserved specifically for K-Ball and loopback binding keeps the service private behind nginx. Enable WAL, `foreign_keys`, and a 5-second busy timeout at startup; the backup job uses the `sqlite3` CLI's `.backup` command at 04:17 local time, writes `/var/lib/kball/backups/kball-YYYY-MM-DD.db`, prunes files older than 30 days, and periodically verifies a restored copy with `PRAGMA integrity_check`. Litestream is not part of MVP: an online SQLite backup is the smallest reliable operation for one database on this VPS.
+**Decision: Bind `LISTEN_ADDR=127.0.0.1:8093`, store the database at `/var/lib/fifteenball/data.db`, and run a nightly SQLite `.backup` job retained for 30 days.** Port 8093 is reserved specifically for 15-Ball and loopback binding keeps the service private behind nginx. Enable WAL, `foreign_keys`, and a 5-second busy timeout at startup; the backup job uses the `sqlite3` CLI's `.backup` command at 04:17 local time, writes `/var/lib/fifteenball/backups/fifteenball-YYYY-MM-DD.db`, prunes files older than 30 days, and periodically verifies a restored copy with `PRAGMA integrity_check`. Litestream is not part of MVP: an online SQLite backup is the smallest reliable operation for one database on this VPS.
 
 ### 4. Email transport
 
@@ -39,11 +39,11 @@ Serve the frontend at `https://codeonline.io/kball/` and expose the API only at 
 
 ### 5. CSRF
 
-**Decision: Require `X-CO: 1` on every authenticated state-changing `POST`, `PUT`, `PATCH`, and `DELETE`, in addition to a `SameSite=Lax` session cookie.** Same-origin deployment makes this exact header a low-friction, effective request-origin gate: the K-Ball JavaScript adds it automatically, while a cross-site HTML form cannot. The middleware must reject missing or nonexact values with `403 csrf_failed` before handler work, including tournament writes, table transitions, Challonge export, and signout; GET, HEAD, the magic-link landing GET, and the unauthenticated request-link POST are not in that authenticated-cookie class.
+**Decision: Require `X-CO: 1` on every authenticated state-changing `POST`, `PUT`, `PATCH`, and `DELETE`, in addition to a `SameSite=Lax` session cookie.** Same-origin deployment makes this exact header a low-friction, effective request-origin gate: the 15-Ball JavaScript adds it automatically, while a cross-site HTML form cannot. The middleware must reject missing or nonexact values with `403 csrf_failed` before handler work, including tournament writes, table transitions, Challonge export, and signout; GET, HEAD, the magic-link landing GET, and the unauthenticated request-link POST are not in that authenticated-cookie class.
 
 ### 6. Cookie flags
 
-**Decision: Issue the opaque session cookie with `Secure`, `HttpOnly`, `SameSite=Lax`, `Path=/kball/`, no `Domain`, and a `Max-Age` bounded by the database session expiry.** HTTPS is already terminated by nginx, same-origin paths are all under `/kball/`, and no subdomain needs the cookie. These flags prevent JavaScript access, prevent plain-HTTP transmission, constrain ambient cross-site sends, and avoid making the cookie available to unrelated paths or sibling hosts; the API must also send `Cache-Control: no-store` on auth responses.
+**Decision: Issue the opaque session cookie with `Secure`, `HttpOnly`, `SameSite=Lax`, `Path=/15ball/`, no `Domain`, and a `Max-Age` bounded by the database session expiry.** HTTPS is already terminated by nginx, same-origin paths are all under `/15ball/`, and no subdomain needs the cookie. These flags prevent JavaScript access, prevent plain-HTTP transmission, constrain ambient cross-site sends, and avoid making the cookie available to unrelated paths or sibling hosts; the API must also send `Cache-Control: no-store` on auth responses.
 
 ### 7. Session revocation
 
@@ -51,7 +51,7 @@ Serve the frontend at `https://codeonline.io/kball/` and expose the API only at 
 
 ### 8. Magic-link hardening
 
-**Decision: Make every magic link a 256-bit, database-backed, single-use token and consume it only on an explicit confirmation POST from a landing page.** Email security scanners commonly prefetch GET links, so a GET must only render a no-store confirmation page and must never create a session or mark a token consumed. The page's explicit “Continue to K-Ball” action calls `POST /api/auth/confirm-link` with `X-CO: 1`; in one immediate transaction the server checks expiry and unused state, marks the link consumed, creates a session, and redirects to `/kball/`. Store a random selector and a SHA-256 token digest, use `crypto/rand`, compare a fetched digest with `subtle.ConstantTimeCompare`, and reject replay, expiry, or any failed comparison as the same invalid-link response.
+**Decision: Make every magic link a 256-bit, database-backed, single-use token and consume it only on an explicit confirmation POST from a landing page.** Email security scanners commonly prefetch GET links, so a GET must only render a no-store confirmation page and must never create a session or mark a token consumed. The page's explicit “Continue to 15-Ball” action calls `POST /api/auth/confirm-link` with `X-CO: 1`; in one immediate transaction the server checks expiry and unused state, marks the link consumed, creates a session, and redirects to `/15ball/`. Store a random selector and a SHA-256 token digest, use `crypto/rand`, compare a fetched digest with `subtle.ConstantTimeCompare`, and reject replay, expiry, or any failed comparison as the same invalid-link response.
 
 ### 9. Request-link rate limit
 
@@ -63,19 +63,19 @@ Serve the frontend at `https://codeonline.io/kball/` and expose the API only at 
 
 ### 11. Body-size and tournament-count caps
 
-**Decision: Limit each tournament create or update request to 256 KiB and cap each user at 100 tournaments they created.** A bounded JSON document is ample for a K-Ball bracket, score sheets, and offline envelope while preventing a single authenticated account from consuming the VPS disk or memory. Apply `http.MaxBytesReader` before JSON decoding, reject oversized or malformed payloads with `413`/`400`, enforce the creator count inside the same write transaction as create, and do not count shared club tournaments against a viewer or scorer. The database remains the backstop; clients must not be trusted to police these caps.
+**Decision: Limit each tournament create or update request to 256 KiB and cap each user at 100 tournaments they created.** A bounded JSON document is ample for a 15-Ball bracket, score sheets, and offline envelope while preventing a single authenticated account from consuming the VPS disk or memory. Apply `http.MaxBytesReader` before JSON decoding, reject oversized or malformed payloads with `413`/`400`, enforce the creator count inside the same write transaction as create, and do not count shared club tournaments against a viewer or scorer. The database remains the backstop; clients must not be trusted to police these caps.
 
 ### 12. Secrets
 
-**Decision: Keep only `CHALLONGE_API_KEY` and SMTP credentials as runtime secrets; eliminate `SESSION_SECRET` because sessions are opaque database records, and add no token-signing secret.** Magic-link and session values are generated with `crypto/rand` and retained only as hashes, so an HMAC signing key is neither needed nor useful. Store `/etc/kball/kball.env` as root-owned mode `0600`, load it through OpenRC, never serialize it in errors or logs, and treat `LISTEN_ADDR`, `DATABASE_PATH`, `BASE_URL`, `EMAIL_TRANSPORT`, and cookie settings as nonsecret configuration. If Postmark is later enabled, its server token is an alternative mail credential, not a browser-visible setting.
+**Decision: Keep only `CHALLONGE_API_KEY` and SMTP credentials as runtime secrets; eliminate `SESSION_SECRET` because sessions are opaque database records, and add no token-signing secret.** Magic-link and session values are generated with `crypto/rand` and retained only as hashes, so an HMAC signing key is neither needed nor useful. Store `/etc/fifteenball/fifteenball.env` as root-owned mode `0600`, load it through OpenRC, never serialize it in errors or logs, and treat `LISTEN_ADDR`, `DATABASE_PATH`, `BASE_URL`, `EMAIL_TRANSPORT`, and cookie settings as nonsecret configuration. If Postmark is later enabled, its server token is an alternative mail credential, not a browser-visible setting.
 
 ### 13. Challonge re-export idempotency
 
-**Decision: Persist a resumable Challonge export record keyed by K-Ball tournament ID before the first external call, use a deterministic Challonge URL key, and update the existing Challonge tournament on every re-export.** A retry or double-click must never create a second remote tournament. The record stores a deterministic URL key such as `kball-<internal-id>`, `challonge_tournament_id`, URL, step status, last exported tournament timestamp, and last error; a partial first attempt resolves or creates by that URL key and resumes its incomplete participant/seed/score steps. A concurrent export returns `409 export_in_progress`, while a completed re-export diffs and updates the stored remote ID. This gives the multi-step remote workflow a durable recovery point rather than an orphan-producing best effort.
+**Decision: Persist a resumable Challonge export record keyed by 15-Ball tournament ID before the first external call, use a deterministic Challonge URL key, and update the existing Challonge tournament on every re-export.** A retry or double-click must never create a second remote tournament. The record stores a deterministic URL key such as `fifteenball-<internal-id>`, `challonge_tournament_id`, URL, step status, last exported tournament timestamp, and last error; a partial first attempt resolves or creates by that URL key and resumes its incomplete participant/seed/score steps. A concurrent export returns `409 export_in_progress`, while a completed re-export diffs and updates the stored remote ID. This gives the multi-step remote workflow a durable recovery point rather than an orphan-producing best effort.
 
 ### 14. Health endpoint
 
-**Decision: Add unauthenticated `GET /api/health`, publicly available as `GET /kball/api/health`, returning `200 {"status":"ok"}` only after `SELECT 1` against SQLite succeeds.** OpenRC operations and host monitoring need a cheap liveness/readiness check, and it must test the dependency that makes the service useful. Set `Cache-Control: no-store`; return `503 {"status":"degraded"}` if the database check fails, without exposing configuration, paths, credentials, or internal errors.
+**Decision: Add unauthenticated `GET /api/health`, publicly available as `GET /15ball/api/health`, returning `200 {"status":"ok"}` only after `SELECT 1` against SQLite succeeds.** OpenRC operations and host monitoring need a cheap liveness/readiness check, and it must test the dependency that makes the service useful. Set `Cache-Control: no-store`; return `503 {"status":"degraded"}` if the database check fails, without exposing configuration, paths, credentials, or internal errors.
 
 ### 15. Graceful shutdown
 
@@ -87,7 +87,7 @@ Serve the frontend at `https://codeonline.io/kball/` and expose the API only at 
 
 ### 17. Frontend integration
 
-**Decision: Completing the implementation includes the frontend work: sign-in, magic-link confirmation, cloud save, table board, long polling, signout, and Challonge export wired into `app.js` for the live same-origin deployment.** The current frontend has no backend calls, so a server-only delivery cannot provide the designed product. Set `<meta name="kball-backend-url" content="/kball/api">`, make the API helper accept that explicit relative base, add `credentials: "include"` and `X-CO: 1` on unsafe requests, and keep an empty meta value as the explicit local-only mode for downloaded/offline copies. No CORS headers are configured because the deployed frontend and API share `codeonline.io` and the `/kball/` site boundary.
+**Decision: Completing the implementation includes the frontend work: sign-in, magic-link confirmation, cloud save, table board, long polling, signout, and Challonge export wired into `app.js` for the live same-origin deployment.** The current frontend has no backend calls, so a server-only delivery cannot provide the designed product. Set `<meta name="fifteenball-backend-url" content="/15ball/api">`, make the API helper accept that explicit relative base, add `credentials: "include"` and `X-CO: 1` on unsafe requests, and keep an empty meta value as the explicit local-only mode for downloaded/offline copies. No CORS headers are configured because the deployed frontend and API share `codeonline.io` and the `/15ball/` site boundary.
 
 ## Security/correctness items missing from DESIGN.md
 
@@ -119,7 +119,7 @@ Create one cookie helper so callback, refresh, and signout cannot drift:
 ```go
 func sessionCookie(value string, maxAge int) *http.Cookie {
     return &http.Cookie{
-        Name: "kball_session", Value: value, Path: "/kball/", MaxAge: maxAge,
+        Name: "fifteenball_session", Value: value, Path: "/15ball/", MaxAge: maxAge,
         Secure: true, HttpOnly: true, SameSite: http.SameSiteLaxMode,
     }
 }
@@ -197,7 +197,7 @@ Wrap each create/update body with `http.MaxBytesReader(w, r.Body, 256<<10)` befo
 
 ### Secret handling (#12)
 
-Use `/etc/kball/kball.env`, owned by `root:root` and mode `0600`, as the only secret source. The OpenRC script reads it before dropping the child to `kball`; logs redact values by key and never log request Authorization/Cookie headers, magic URLs, raw email addresses, SMTP credentials, or the Challonge key. Required secrets are `CHALLONGE_API_KEY` and the configured SMTP password; use opaque session and magic-link records so `SESSION_SECRET` and a token-signing key are deliberately absent.
+Use `/etc/fifteenball/fifteenball.env`, owned by `root:root` and mode `0600`, as the only secret source. The OpenRC script reads it before dropping the child to `fifteenball`; logs redact values by key and never log request Authorization/Cookie headers, magic URLs, raw email addresses, SMTP credentials, or the Challonge key. Required secrets are `CHALLONGE_API_KEY` and the configured SMTP password; use opaque session and magic-link records so `SESSION_SECRET` and a token-signing key are deliberately absent.
 
 ### Idempotent Challonge export (#13)
 
@@ -224,11 +224,11 @@ CREATE TABLE challonge_export_participants (
 );
 ```
 
-Insert the `creating` row and deterministic `url_key` in SQLite before the first Challonge POST. A worker/request first resolves the key remotely if the row lacks a remote ID, creates only if absent, persists the remote ID immediately, then records each participant/seed/score step after that step succeeds. Re-export acquires the row transactionally, rejects concurrent work with `409`, diffs current K-Ball state using the participant map, and PUTs the stored remote tournament rather than creating another one. Failed work remains resumable with `status='failed'` and its step markers.
+Insert the `creating` row and deterministic `url_key` in SQLite before the first Challonge POST. A worker/request first resolves the key remotely if the row lacks a remote ID, creates only if absent, persists the remote ID immediately, then records each participant/seed/score step after that step succeeds. Re-export acquires the row transactionally, rejects concurrent work with `409`, diffs current 15-Ball state using the participant map, and PUTs the stored remote tournament rather than creating another one. Failed work remains resumable with `status='failed'` and its step markers.
 
 ### Health check (#14)
 
-Register `GET /api/health` before authenticated routing. It uses `context.WithTimeout(r.Context(), time.Second)` and `db.QueryRowContext(ctx, "SELECT 1").Scan(&one)`; successful checks return `200` and no-cache JSON, failures return `503` and a generic degraded status. nginx exposes it only through the same public API prefix as every other route: `/kball/api/health`.
+Register `GET /api/health` before authenticated routing. It uses `context.WithTimeout(r.Context(), time.Second)` and `db.QueryRowContext(ctx, "SELECT 1").Scan(&one)`; successful checks return `200` and no-cache JSON, failures return `503` and a generic degraded status. nginx exposes it only through the same public API prefix as every other route: `/15ball/api/health`.
 
 ### Graceful shutdown (#15)
 
@@ -262,13 +262,13 @@ Watch handlers must select on `r.Context().Done()` and the hub wake mechanism so
 - [ ] **Section 1, “SQLite schema”:** retain tables/assignments, add the session, magic-link, request-link rate-limit, and Challonge export migrations from this document. Add `organization_memberships` now, not as a deferred option, and ensure every durable query uses the fixed organization scope.
 - [ ] **Section 1, “Endpoint contracts”:** state that all unsafe authenticated routes require `X-CO: 1`; change tournament create to create-only and describe membership/role authorization instead of owner-only authorization. Add size/count validation and explicit `409 tournament_exists`, `403 csrf_failed`, and quota errors.
 - [ ] **Section 2, “Multi-tenant scoping”:** keep the single implicit Columbia Cue Club organization, but replace the deferred-sharing posture with allowlisted organization membership now. Define roles and their read/mutate/export/table permissions; preserve `owner_user_id` only for audit and creator quotas.
-- [ ] **Section 3 opening and “Filesystem and account layout”:** replace Ubuntu/systemd/sudo with Alpine/OpenRC/doas. Keep the dedicated `kball` account, `/opt/kball` release layout, and `/var/lib/kball` database, but move secrets to `/etc/kball/kball.env` mode `0600` and set `LISTEN_ADDR=127.0.0.1:8093`.
+- [ ] **Section 3 opening and “Filesystem and account layout”:** replace Ubuntu/systemd/sudo with Alpine/OpenRC/doas. Keep the dedicated `fifteenball` account, `/opt/fifteenball` release layout, and `/var/lib/fifteenball` database, but move secrets to `/etc/fifteenball/fifteenball.env` mode `0600` and set `LISTEN_ADDR=127.0.0.1:8093`.
 - [ ] **Section 3, “systemd unit”:** replace the entire unit and all `systemctl` commands with an `openrc-run` init script modeled on `apid`/`huntd`, including restart supervision and `TERM/20/KILL/5`. Do not claim systemd isolation controls are available on Alpine.
-- [ ] **Section 3, “nginx and Certbot”:** replace the standalone `tournaments.columbiacueclub.com` server block and CORS discussion with the existing `codeonline.io` server's `/kball/api/` location proxying to `127.0.0.1:8093/api/`. Specify the 35-second long-poll timeout, no buffering for watch, and no CORS middleware.
+- [ ] **Section 3, “nginx and Certbot”:** replace the standalone `tournaments.columbiacueclub.com` server block and CORS discussion with the existing `codeonline.io` server's `/15ball/api/` location proxying to `127.0.0.1:8093/api/`. Specify the 35-second long-poll timeout, no buffering for watch, and no CORS middleware.
 - [ ] **Section 3, “SQLite backup,” “CI/CD sketch,” and operator workflow:** retain online `.backup`, but make the scheduled Alpine/OpenRC-compatible job use the locked data directory and 30-day retention; replace `sudo`/`systemctl` examples with `doas`/`rc-service`; retain the pure-Go static release build and verified manual release pull.
 - [ ] **New Section 3 subsection, “Authentication, email, and request abuse”:** add SMTP-first mailer configuration, opaque database sessions with true revocation, scanner-safe single-use magic links, the exact rate limits, cookie construction, no-store auth responses, and secret redaction rules.
 - [ ] **New Section 3 subsection, “Challonge export state”:** add durable export intent, deterministic remote URL key, participant mapping, resumable step state, serialized export handling, and update-on-re-export behavior. The current create-only wording is insufficient.
-- [ ] **New Section 3 subsection, “Health and lifecycle”:** add backend `/api/health` (public `/kball/api/health`) and the SIGTERM/SIGINT shutdown sequence, including cancellation of long polls before database close.
+- [ ] **New Section 3 subsection, “Health and lifecycle”:** add backend `/api/health` (public `/15ball/api/health`) and the SIGTERM/SIGINT shutdown sequence, including cancellation of long polls before database close.
 - [ ] **Section 4, “Client↔server migration path”:** keep server-authoritative conditional PUT and LWW, but revise authorization language from per-owner to organization-role access and require the 256 KiB request cap. Client-side cloud API calls must use the same-origin relative base.
 - [ ] **Section 5, “Realtime multi-scorer sync”:** keep long polling and post-commit notifications, but make watch handlers responsive to root-context cancellation during graceful shutdown. Retain the 30-second server wait and require nginx to exceed it with 35 seconds.
-- [ ] **Section 6, “Frontend build integration”:** replace the GitHub Pages/absolute API URL flow with `<meta name="kball-backend-url" content="/kball/api">`, make `backendPath` support that explicit relative base, and add concrete sign-in, confirmation, signout, cloud-save, table-board, watch, and export wiring. Every unsafe `apiFetch` request must include `X-CO: 1`; an empty meta value remains deliberately local-only.
+- [ ] **Section 6, “Frontend build integration”:** replace the GitHub Pages/absolute API URL flow with `<meta name="fifteenball-backend-url" content="/15ball/api">`, make `backendPath` support that explicit relative base, and add concrete sign-in, confirmation, signout, cloud-save, table-board, watch, and export wiring. Every unsafe `apiFetch` request must include `X-CO: 1`; an empty meta value remains deliberately local-only.

@@ -46,7 +46,7 @@ When a match result is saved:
 ### UI surfaces
 
 - **Bracket page (existing):** each match card gets a small `🖨 Sheet` button once ready. Amber `🖨 Reprint (v2)` when stale. Top of page: `🖨 Print all Round 1 sheets` shown while Round 1 has ≥1 unprinted ready sheet.
-- **`/print/` page (new `print.html` at `kball-scoresheet/print.html`):** live queue keyed by `?t=<tournamentId>` (URL hash `#t=<id>` also fine). Three sections:
+- **`/print/` page (new `print.html` at `15ball-scoresheet/print.html`):** live queue keyed by `?t=<tournamentId>` (URL hash `#t=<id>` also fine). Three sections:
   - **Ready to Print** — matches ready with no sheet yet OR with a stale sheet.
   - **Recently Printed** — collapsed, last 20 by timestamp.
   - **Voided** — historical audit trail of voided-then-regenerated sheets (optional; can render as a small counter chip on the Recently Printed row if space is tight).
@@ -55,7 +55,7 @@ When a match result is saved:
 
 ### Printable sheet content
 
-Reuses the paper-sheet visual language from `docs/_scoresheet_draw.py` (single sheet, HOW TO SCORE strip and K-BALL RULES SUMMARY retained on every printed sheet, 4 racks, totals, signatures) but rendered as HTML/CSS with `@page { size: letter; margin: 0.5in }`.
+Reuses the paper-sheet visual language from `docs/_scoresheet_draw.py` (single sheet, HOW TO SCORE strip and 15-BALL RULES SUMMARY retained on every printed sheet, 4 racks, totals, signatures) but rendered as HTML/CSS with `@page { size: letter; margin: 0.5in }`.
 
 Pre-filled at print time:
 

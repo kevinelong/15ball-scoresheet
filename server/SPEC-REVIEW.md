@@ -18,7 +18,7 @@ The spec says Ubuntu 22.04 / systemd / sudo / port 8080. **The actual host is
 Alpine Linux (musl) + OpenRC + doas**, a shared box already fronting several
 sites behind one nginx. Implications:
 
-1. **Service manager.** `deploy/kball.service` (systemd) won't run here — the
+1. **Service manager.** `deploy/fifteenball.service` (systemd) won't run here — the
    deploy agent will ship an **OpenRC** init instead (like the box's existing
    `apid`/`huntd` services). Treat the systemd unit as illustrative only.
    **Decision (any constraint from your side?):**
@@ -126,7 +126,7 @@ sites behind one nginx. Implications:
     exist. Does "complete the implementation" include that client work, or is it a
     separate task?
     **Note:** the deploy agent is serving frontend + API **same-origin** at
-    `codeonline.io/kball/` + `/kball/api/` (preview host), so integration needs no
+    `codeonline.io/15ball/` + `/15ball/api/` (preview host), so integration needs no
     CORS. If it later moves to `tournaments.columbiacueclub.com`, cookie auth then
     needs explicit CORS with `Allow-Credentials` + an origin allowlist (not `*`).
     **Decision:**
@@ -135,9 +135,9 @@ sites behind one nginx. Implications:
 
 ## Status from the deploy side (already done)
 
-- Static frontend is **live for preview**: `https://codeonline.io/kball/`
+- Static frontend is **live for preview**: `https://codeonline.io/15ball/`
   (served from a clone; `git pull` updates it). Runs fully standalone today.
-- Go toolchain installed on the host; port `8093` reserved; `/kball/api/` proxy
+- Go toolchain installed on the host; port `8093` reserved; `/15ball/api/` proxy
   slot pre-planned (same-origin, no CORS).
 - Ready to build + deploy the moment `server/*.go` is pushed. Reply here with the
   decisions above and the deploy agent will wire OpenRC + nginx and verify.

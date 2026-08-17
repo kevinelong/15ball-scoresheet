@@ -42,7 +42,7 @@ server/
 ├── static/              # (optional) can also serve the frontend
 ├── data.db              # SQLite file (created at first run, gitignored)
 └── deploy/
-    ├── kball.service    # systemd unit file
+    ├── fifteenball.service    # systemd unit file
     └── nginx.conf       # nginx reverse-proxy snippet
 ```
 
@@ -53,7 +53,7 @@ Copy `.env.example` to `.env` and fill in:
 ```
 LISTEN_ADDR=127.0.0.1:8080
 BASE_URL=https://tournaments.columbiacueclub.com
-DATABASE_PATH=/var/lib/kball/data.db
+DATABASE_PATH=/var/lib/fifteenball/data.db
 
 SESSION_SECRET=<64 hex chars, generate with: openssl rand -hex 32>
 MAGIC_LINK_TTL_MINUTES=15
@@ -90,13 +90,13 @@ ALLOWED_EMAILS=kevinelong@gmail.com
 
 Assumes an Ubuntu 22.04+ VPS with nginx already fronting other apps.
 
-1. **Build.** On your dev machine: `cd server && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o kball-server ./...`
-2. **Ship.** `scp kball-server user@vps:/opt/kball/` and `scp .env user@vps:/opt/kball/.env`
-3. **Data dir.** `sudo mkdir -p /var/lib/kball && sudo chown you:you /var/lib/kball`
-4. **Systemd.** Copy `deploy/kball.service` to `/etc/systemd/system/`, `systemctl daemon-reload`, `systemctl enable --now kball`.
+1. **Build.** On your dev machine: `cd server && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o fifteenball-server ./...`
+2. **Ship.** `scp fifteenball-server user@vps:/opt/fifteenball/` and `scp .env user@vps:/opt/fifteenball/.env`
+3. **Data dir.** `sudo mkdir -p /var/lib/fifteenball && sudo chown you:you /var/lib/fifteenball`
+4. **Systemd.** Copy `deploy/fifteenball.service` to `/etc/systemd/system/`, `systemctl daemon-reload`, `systemctl enable --now fifteenball`.
 5. **Nginx.** Add `deploy/nginx.conf` inside your existing server block (or as a new server block on `tournaments.columbiacueclub.com`). Reload nginx.
 6. **DNS.** Point `tournaments.columbiacueclub.com` at your VPS. Let's Encrypt via certbot handles TLS.
 
 ## Frontend hookup
 
-Once the backend is up, set `KBALL_BACKEND_URL` in the frontend build (or via a `<meta>` tag) to your backend base URL, and the app's "Push to Challonge" and "Cloud Save" buttons will light up. Until then the frontend runs 100% locally as it does today.
+Once the backend is up, set `FIFTEENBALL_BACKEND_URL` in the frontend build (or via a `<meta>` tag) to your backend base URL, and the app's "Push to Challonge" and "Cloud Save" buttons will light up. Until then the frontend runs 100% locally as it does today.

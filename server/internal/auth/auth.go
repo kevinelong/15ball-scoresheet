@@ -15,8 +15,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kevinelong/kball-scoresheet/server/internal/config"
-	"github.com/kevinelong/kball-scoresheet/server/internal/mail"
+	"github.com/kevinelong/15ball-scoresheet/server/internal/config"
+	"github.com/kevinelong/15ball-scoresheet/server/internal/mail"
 )
 
 var (

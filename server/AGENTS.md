@@ -15,7 +15,7 @@ Two Perplexity agents work on this backend on separate schedules and separate ma
 
 Never writes Go code, migrations, `go.mod`, or any file under `server/cmd/`, `server/internal/`, `server/migrations/`, or `server/scripts/`.
 
-**Implementation agent (separate scheduled worker).** Owns Go code, migrations, tests, build scripts, and the OpenRC init script. Reads the design docs above and implements against them. Writes only to code paths (`server/cmd/…`, `server/internal/…`, `server/migrations/…`, `server/scripts/…`, `go.mod`, `go.sum`, `server/openrc/kball.initd`) and its own test files. When it finds a spec ambiguity it cannot resolve deterministically, it appends a question to `server/OPEN-QUESTIONS.md` (never edits `SPEC-DESIGN-RECONCILED.md`) and stops on that item.
+**Implementation agent (separate scheduled worker).** Owns Go code, migrations, tests, build scripts, and the OpenRC init script. Reads the design docs above and implements against them. Writes only to code paths (`server/cmd/…`, `server/internal/…`, `server/migrations/…`, `server/scripts/…`, `go.mod`, `go.sum`, `server/openrc/fifteenball.initd`) and its own test files. When it finds a spec ambiguity it cannot resolve deterministically, it appends a question to `server/OPEN-QUESTIONS.md` (never edits `SPEC-DESIGN-RECONCILED.md`) and stops on that item.
 
 **No overlap.** If the design agent touches a code file or the implementation agent touches a spec file, that is a bug — call it out in the next commit.
 
@@ -52,7 +52,7 @@ Anything the implementation agent needs to notice appears in these files, in thi
 
 ## What has been decided (as of 2026-08-16)
 
-- Reconciliation exists at `server/SPEC-DESIGN-RECONCILED.md`. All 17 `Decision:` items are answered; both deploy blockers are resolved (OpenRC init, same-origin `/kball/` + `/kball/api/` → `127.0.0.1:8093`).
+- Reconciliation exists at `server/SPEC-DESIGN-RECONCILED.md`. All 17 `Decision:` items are answered; both deploy blockers are resolved (OpenRC init, same-origin `/15ball/` + `/15ball/api/` → `127.0.0.1:8093`).
 - The security/correctness items DESIGN.md was silent on (CSRF, opaque sessions, scanner-safe magic links, request-link rate limits, tournament write authorization, body-size caps, secrets, idempotent Challonge export, health, graceful shutdown) each have a concrete approach in the reconciliation, with schema/code sketches.
 - DESIGN.md itself has NOT been rewritten yet. Its delta checklist is at the bottom of the reconciliation.
 

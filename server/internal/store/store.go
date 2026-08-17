@@ -9,7 +9,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/kevinelong/kball-scoresheet/server/migrations"
+	"github.com/kevinelong/15ball-scoresheet/server/migrations"
 	_ "modernc.org/sqlite"
 )
 

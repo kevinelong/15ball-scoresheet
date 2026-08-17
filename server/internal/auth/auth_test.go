@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kevinelong/kball-scoresheet/server/internal/config"
-	"github.com/kevinelong/kball-scoresheet/server/internal/store"
+	"github.com/kevinelong/15ball-scoresheet/server/internal/config"
+	"github.com/kevinelong/15ball-scoresheet/server/internal/store"
 )
 
 type captureMailer struct{ links []string }
@@ -29,7 +29,7 @@ func newTestAuth(t *testing.T, allowed ...string) (*Auth, *captureMailer) {
 	t.Cleanup(func() { st.Close() })
 	cfg := config.Load()
 	cfg.AllowedEmails = allowed
-	cfg.BaseURL = "https://codeonline.io/kball"
+	cfg.BaseURL = "https://codeonline.io/15ball"
 	m := &captureMailer{}
 	return New(st.DB, cfg, m), m
 }

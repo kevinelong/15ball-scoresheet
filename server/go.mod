@@ -1,4 +1,4 @@
-module github.com/kevinelong/kball-scoresheet/server
+module github.com/kevinelong/15ball-scoresheet/server
 
 go 1.22
 

@@ -1,4 +1,4 @@
--- 0001_init — core schema for the K-Ball / Columbia Cue Club backend.
+-- 0001_init — core schema for the Columbia Cue Club 15-Ball backend.
 -- Greenfield: tables that DESIGN.md describes via ALTER on a pre-existing DB are
 -- created here already in their intended end-state (organization_id + owner_user_id
 -- present from the start). Authoritative source: server/SPEC-DESIGN-RECONCILED.md.
