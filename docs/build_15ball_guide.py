@@ -57,13 +57,16 @@ CALLOUT_BG = (255/255, 249/255, 220/255)
 CALLOUT_BORDER = (191/255, 149/255, 45/255)
 
 # ---------------- Sample game data ----------------
-# Alice (25 goal, wins) vs Bob (25 goal)
+# Alice (25 goal, wins) vs Bob (25 goal). Race to 25.
 # Rack: (balls_on_A, fouls_A, balls_on_B, fouls_B)
+# CRITICAL: sample must model correct reconciliation - in every rack,
+# A + B marks equal all 15 balls with NO ball marked twice. Rack ends
+# when 15-ball falls; match ends when a player reaches target (25 here).
 RACKS = [
-    ([1,3,5,7,9], 0, [2,4,6,8],       1),  # A: 5, 0f -> net 5, run 5; B: 4, 1f -> net 3, run 3
-    ([2,4,10,12], 1, [1,7,11,15],     0),  # A: 4, 1f -> net 3, run 8; B: 4, 0f -> net 4, run 7
-    ([1,6,8,13,15], 0, [3,5,9],       0),  # A: 5, 0f -> net 5, run 13; B: 3, 0f -> net 3, run 10
-    ([2,7,10,11,14,15], 0, [1,4,6,8], 1),  # A: 6, 0f -> net 6, run 19; B: 4, 1f -> net 3, run 13
+    ([4,6,8,10,12,14,15],   0, [1,2,3,5,7,9,11,13],        1),  # A:7-0=7, run 7  ;  B:8-1=7, run 7
+    ([1,3,5,7,9,11,13,15],  1, [2,4,6,8,10,12,14],         0),  # A:8-1=7, run 14 ;  B:7-0=7, run 14
+    ([2,4,6,8,10,12,14,15], 0, [1,3,5,7,9,11,13],          1),  # A:8-0=8, run 22 ;  B:7-1=6, run 20
+    ([1,3,15],              0, [2,4,5,6,7,8,9,10,11,12,13,14], 0),  # A:3-0=3, run 25 WIN ;  B:12, run 32
 ]
 
 # ---------------- Layout ----------------
@@ -374,25 +377,32 @@ CALLOUTS = [
     (1, "Player name & goal",
      "Enter the player's name; select 25 (rec) or 50 (pro), or type a custom goal.",
      0.16, 0.85),
-    (2, "Tap balls when pocketed",
-     "Tap a ball to mark it. Filled = pocketed, unmarked = not pocketed. Rack 1 shows Alice pocketed 1, 3, 5, 7, 9.",
+    (2, "MARK specific balls (mandatory)",
+     "Mark each ball's numbered circle on the player who pocketed it. Tallies alone "
+     "do not count. Marking your opponent's balls for them is a courtesy.",
      0.25, 0.68),
     (3, "Record fouls per rack",
-     "Type foul count for this rack in the Fouls cell. Bob committed 1 foul in Rack 1.",
+     "Enter foul count for this rack in the FOULS cell. Bob committed 1 foul in Rack 1.",
      0.75, 0.65),
-    (4, "RACK TOTAL = Balls Made \u2212 Fouls",
-     "Auto-computed per rack per player. Alice R1: 5 balls \u2212 0 fouls = 5. Bob R1: 4 \u2212 1 = 3.",
+    (4, "RECONCILE at the end of every rack",
+     "Both players confirm together: the two sides' marks must total 15 and no ball "
+     "may be marked on both sides. Required at Columbia Cue Club tournaments.",
+     0.50, 0.58),
+    (5, "RACK TOTAL = marks \u2212 fouls",
+     "Count the marks that rack (a running BALLS MADE tally is optional) and subtract "
+     "fouls. Alice R1: 7 \u2212 0 = 7. Bob R1: 8 \u2212 1 = 7. Scores can go negative.",
      0.35, 0.52),
-    (5, "GAME SUBTOTAL is a running balance",
-     "Cumulative sum of Rack Totals so far, like a checkbook balance. Alice: 5, 8, 13, 19. First to the goal wins.",
+    (6, "GAME SUBTOTAL is a running balance",
+     "Cumulative sum of Rack Totals so far, like a checkbook balance. Alice: 7, 14, 22, 25. First to the goal wins.",
      0.85, 0.36),
-    (6, "Final Total = winning line",
-     "The last GAME SUBTOTAL is the FINAL GAME TOTAL. Alice finished at 19 (goal 25 not reached in demo). Winner is decided by whoever reaches the goal first \u2014 in a real match, keep racking.",
+    (7, "Final Total = winning line",
+     "The last GAME SUBTOTAL is the FINAL GAME TOTAL. Alice reached 25 in Rack 4 to win "
+     "the match; play stops the instant the target is met, even if the rack is unfinished.",
      0.30, 0.15),
-    (7, "Pick the winner",
+    (8, "Pick the winner",
      "Only one radio can be selected. Selecting a winner also updates the bracket.",
      0.15, 0.05),
-    (8, "Both players sign",
+    (9, "Both players sign",
      "Both players sign to confirm the score sheet is agreed. Then Save Result.",
      0.72, 0.05),
 ]
@@ -471,9 +481,9 @@ def draw_footer(c):
 
     c.setFont(FONT_BODY, 7.5); c.setFillColorRGB(*MUTED)
     c.drawString(MARGIN, MARGIN + 0.10*inch,
-                 "Scorekeeping app: ColumbiaCueClub.com/tournaments  |  15-Ball Rotation scores each ball 1 point.")
+                 "This is the one correct way to use the sheet and is required at Columbia Cue Club tournaments.")
     c.drawRightString(PAGE_W - MARGIN, MARGIN + 0.10*inch,
-                      "Score-Sheet Guide v1")
+                      "Score-Sheet Guide v2")
 
 
 if __name__ == "__main__":

@@ -310,10 +310,12 @@ def draw_cover(c: canvas.Canvas) -> None:
     y -= 20
     c.setFont(FONT_BODY, 10.5)
     para2 = (
-        "15-Ball Rotation borrows rotation order and standard fouls from WPA 10-Ball, "
+        "15-Ball Rotation borrows rotation order and called shots from WPA 10-Ball, "
         "and 1-point-per-ball, race-to-N scoring from WPA 14.1 Continuous Pool. "
-        "Unlike 10-Ball, called shots are not required. Unlike 14.1, balls must "
-        "be contacted in numerical order. All other WPA general rules apply unchanged."
+        "Like 10-Ball, shots must be called (ball + pocket) with two exceptions: "
+        "the break shot (slop counts) and any ball that falls on the same shot as a "
+        "legally-called-and-made ball. Unlike 14.1, balls must be contacted in "
+        "numerical order. All other WPA general rules apply unchanged."
     )
     for line in wrap_lines(para2, FONT_BODY, 10.5, box_w - 2 * inner_pad):
         c.drawString(box_x + inner_pad, y, line)
@@ -403,11 +405,15 @@ def draw_whats_new(cur: Cursor) -> None:
         ("K.2  The Rack",
          "The 1-ball on the Foot Spot at the apex, the 8-ball in the center "
          "of the triangle, the 15-ball and remaining balls placed randomly."),
-        ("K.5  Shots Are Not Called",
-         "Slop counts. Any legal contact with the lowest-numbered ball that "
-         "results in a pocketed ball scores that ball, regardless of which "
-         "pocket or combination produced it. A declared safety still passes "
-         "the turn."),
+        ("K.5  Called Shots (with Two Slop Exceptions)",
+         "Every shot except the break must be called: name the object-ball "
+         "and the pocket. Only the called ball into the called pocket scores. "
+         "Slop counts in exactly two situations: (1) on a legal break — any "
+         "ball pocketed stays down and scores for the breaker; and (2) when "
+         "your called ball drops into the called pocket AND another ball "
+         "also falls on the same shot — the extra ball scores as a bonus. "
+         "In every other case an uncalled make is spotted, no score, and "
+         "the turn ends (incoming player takes BIH)."),
         ("K.8  Scoring — 1 Point per Ball, Race to Target",
          "Each ball legally pocketed = 1 point. Each foul = −1 point. The "
          "Match ends the moment a player’s SUBTOTAL reaches the target "
@@ -453,8 +459,9 @@ def draw_body(c: canvas.Canvas) -> None:
         "1.5 Spotting Balls, 1.6 Cue-Ball in Hand, 1.8 Balls Settling, "
         "1.9 Restoring a Position, 1.10 Outside Interference, 1.11 Prompting "
         "Calls and Protesting Rulings, 1.12 Concession, and 1.13 Stalemate. "
-        "WPA 1.7 Standard Call Shot does NOT apply because 15-Ball Rotation is not a "
-        "call-shot Discipline (see K.5 below).")
+        "WPA 1.7 Standard Call Shot applies to 15-Ball Rotation with two "
+        "named exceptions defined in K.5: the break shot and any extra "
+        "ball pocketed on the same shot as a legally-called-and-made ball.")
 
     draw_h2(cur, "1.2", "APPLICABILITY OF THE WPA FOULS")
     draw_para(cur,
@@ -486,7 +493,8 @@ def draw_body(c: canvas.Canvas) -> None:
         "numbered 1 through 15 and the cue-ball. The object-balls must be "
         "contacted in ascending numerical order (rotation). Each ball legally "
         "pocketed counts one point, and the first player to reach the target "
-        "score wins the Match. Called shots are not required.")
+        "score wins the Match. Shots must be called (ball + pocket), with two "
+        "named exceptions detailed in K.5.")
 
     # --- New 15-Ball Rotation rules (bold italic, [K] chip) come first ---
 
@@ -522,13 +530,40 @@ def draw_body(c: canvas.Canvas) -> None:
         "places it wherever they choose. The −1-point foul penalty in K.9 "
         "replaces ball-in-hand as the deterrent for illegal shots.")
 
-    draw_h3(cur, "K.5", "SHOTS ARE NOT CALLED", "K")
+    draw_h3(cur, "K.5", "CALLED SHOTS (WITH TWO SLOP EXCEPTIONS)", "K")
     draw_para(cur,
-        "15-Ball Rotation is NOT a call-shot Discipline. A ball is legally "
-        "pocketed whenever the cue-ball first contacts the lowest-numbered "
-        "ball remaining on the table and any object-ball is subsequently "
-        "pocketed without a foul, regardless of which pocket, cushion "
-        "route, or combination produced the pocketing. Slop counts.")
+        "15-Ball Rotation is a call-shot Discipline. On every shot except "
+        "the break, the shooter must call the object-ball and the pocket. "
+        "Obvious balls (a straight-in shot into the nearest pocket) need "
+        "not be verbally called per WPA 1.7. Only the called ball into the "
+        "called pocket scores.")
+    draw_para(cur,
+        "The called ball need not be the lowest-numbered ball. The rotation "
+        "requirement is on the FIRST CONTACT: the cue-ball must first "
+        "contact the lowest-numbered ball on the table. The shooter may "
+        "then call any ball into any pocket — for example, hitting the "
+        "2-ball first and driving the 7 into the corner (called: 7 in that "
+        "corner). Failing to contact the lowest ball first is a foul under "
+        "K.9 regardless of what falls.")
+    draw_para(cur,
+        "Slop counts in exactly two situations, and nowhere else:")
+    draw_lettered(cur, [
+        "THE BREAK. On a legal break shot, any ball pocketed stays down "
+        "and scores for the breaker (see K.3). No call is required on "
+        "the break.",
+        "BONUS EXTRA BALL. When the shooter legally pockets the called "
+        "ball into the called pocket AND another object-ball also falls "
+        "on the same shot, that extra ball scores as a bonus. The "
+        "shooter continues at the table.",
+    ])
+    draw_para(cur,
+        "In every other case, a pocketed uncalled ball is SPOTTED, no "
+        "points are awarded for that ball, and the shooter's inning ends. "
+        "The incoming player takes ball-in-hand per K.0 (no foul penalty; "
+        "an uncalled make is a missed shot, not a foul, unless a WPA "
+        "Section 3 foul also occurred). If a shot is played without "
+        "calling and multiple balls fall, none of them count and all are "
+        "spotted. Declared safeties are still NOT permitted (K.0).")
 
     draw_h3(cur, "K.6", "SPOTTING BALLS", "K")
     draw_para(cur,
@@ -653,10 +688,13 @@ def draw_body(c: canvas.Canvas) -> None:
 
     draw_para(cur,
         "The table below summarises how 15-Ball Rotation relates to the two WPA "
-        "disciplines it borrows from. 15-Ball Rotation adopts rotation and standard "
-        "fouls from 10-Ball, and 1-point-per-ball / race-to-target scoring "
-        "from 14.1. It differs from both parents in that shots are NOT "
-        "called (see K.5) and no single ball is a “winning ball” (see K.8).")
+        "disciplines it borrows from. 15-Ball Rotation adopts rotation, called "
+        "shots, and standard fouls from 10-Ball, and 1-point-per-ball / race-"
+        "to-target scoring from 14.1. Its distinguishing rules are ball-in-"
+        "hand every inning with no safeties (K.0), the two-slop-exception "
+        "model for calls (K.5 — slop counts on the break and for a bonus "
+        "extra ball only), and race-to-target with no single winning ball "
+        "(K.8).")
 
     _draw_comparison_table(cur)
 
@@ -671,7 +709,7 @@ def draw_body(c: canvas.Canvas) -> None:
     draw_bulleted(cur, [
         "Rack 1: Player A legally pockets 8 balls, then misses. RACK TOTAL = 8. "
         "Player B pockets the remaining 7. Rack 1 GAME SUBTOTAL: A = 8, B = 7.",
-        "Rack 2: A pockets 10 balls (including one bank shot — slop counts), "
+        "Rack 2: A pockets 10 balls (including one bank that was called and made), "
         "then commits a scratch foul on the 12-ball. RACK TOTAL = 10 − 1 = 9. "
         "B pockets the remaining 5. Rack 2 SUBTOTAL: A = 8 + 9 = 17, B = 7 + 5 = 12.",
         "Rack 3: B breaks and pockets 13 balls in a row. B’s SUBTOTAL hits "
@@ -704,7 +742,7 @@ def draw_body(c: canvas.Canvas) -> None:
         ("WPA 1.3",  "Subsequent Breaks",                 "cited in K.1"),
         ("WPA 1.5",  "Spotting Balls",                    "cited in K.4, K.6"),
         ("WPA 1.6",  "Cue-Ball in Hand",                  "cited in K.3, K.9"),
-        ("WPA 1.7",  "Standard Call Shot",                "NOT applied (see K.5)"),
+        ("WPA 1.7",  "Standard Call Shot",                "applied with K.5 exceptions"),
         ("WPA 1.13", "Stalemate",                         "cited in K.11"),
         ("WPA 3.1",  "Cue-Ball Scratch or Off the Table", "standard foul at 15-Ball Rotation"),
         ("WPA 3.2",  "Wrong Ball First",                  "standard foul (lowest ball first)"),
@@ -733,7 +771,7 @@ def _draw_comparison_table(cur: Cursor) -> None:
         ("",              "15-Ball Rotation",              "10-Ball (WPA 6)",     "14.1 (WPA 7)"),
         ("Object-balls",  "1 through 15",        "1 through 10",        "1 through 15"),
         ("Play order",    "Rotation (lowest)",   "Rotation (lowest)",   "Any legal ball"),
-        ("Call shots?",   "No",                  "Yes",                 "Yes"),
+        ("Call shots?",   "Yes (slop on break + bonus)", "Yes",         "Yes"),
         ("Scoring",       "1 pt per ball",       "Winning-ball only",   "1 pt per ball"),
         ("Win condition", "First to reach target", "Legally pocket 10",   "First to reach target"),
         ("Foul penalty",  "−1 point, BIH",       "BIH (rack-based)",    "−1 point, BIH-above"),

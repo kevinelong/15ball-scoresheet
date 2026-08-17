@@ -227,13 +227,24 @@ def draw_scoresheet(c, left, top, width, height, with_instructions=True):
         # Section label in the top-left corner of the strip.
         c.setFont(FONT_BOLD, 7); c.setFillColorRGB(*BLACK)
         c.drawString(strip_x + inner_pad_x, instr_top - 10, "HOW TO SCORE")
+        # Right-aligned tournament banner: this is the one correct way to
+        # use the sheet and is mandatory at Columbia Cue Club tournaments.
+        # The "polite to mark opponent's balls" courtesy is bundled in.
+        c.setFont(FONT_BODY, 6)
+        c.drawRightString(
+            strip_x + strip_w - inner_pad_x, instr_top - 10,
+            "Required at Columbia Cue Club tournaments. Mark opponent's balls as a courtesy.",
+        )
+        # Steps encode the ONE correct usage: mark specific balls (mandatory),
+        # reconcile every rack, tally is optional. Marking numbered circles
+        # is required for tournament play at Columbia Cue Club.
         instr_steps = [
-            (1, "Fill NAME and check goal (25 rec / 50 pro)."),
-            (2, "Mark each ball's circle when pocketed - OR write count in BALLS MADE."),
-            (3, "Write # of fouls per rack in FOULS."),
-            (4, "RACK TOTAL = BALLS MADE - fouls."),
-            (5, "GAME SUBTOTAL = last SUBTOTAL + this RACK TOTAL."),
-            (6, "First to goal wins. Check WINNER, both sign."),
+            (1, "Fill NAME; check goal (25 rec / 50 pro)."),
+            (2, "MARK each ball's circle as it drops (mandatory)."),
+            (3, "RECONCILE every rack: 15 marks total, no dupes."),
+            (4, "RACK TOTAL = # marks - FOULS. Tally optional."),
+            (5, "GAME SUBTOTAL = last SUBTOTAL + RACK TOTAL."),
+            (6, "First to goal wins. Check WINNER; both sign."),
         ]
         col_gap = 18
         col_w = (strip_w - col_gap - 2 * inner_pad_x) / 2
@@ -284,10 +295,13 @@ def draw_scoresheet(c, left, top, width, height, with_instructions=True):
         qr_y_bottom = rules_top - inner_pad_top - qr_size
         draw_qr(c, qr_x, qr_y_bottom, qr_size,
                 "https://kevinelong.github.io/15ball-scoresheet/docs/15ball-rules.pdf")
-        # Caption BELOW the QR, clear of the modules.
+        # Caption BELOW the QR. Right-align to the block's inside edge so a
+        # caption wider than the QR (e.g. "Scan: full 15-Ball rules") still
+        # sits fully inside the bounding rectangle instead of overhanging.
         c.setFont(FONT_BOLD, 6.5); c.setFillColorRGB(*BLACK)
-        c.drawCentredString(qr_x + qr_size/2, qr_y_bottom - caption_h + 1,
-                            "Scan: full 15-Ball rules")
+        caption_right_x = rules_x + rules_w - inner_pad_x
+        c.drawRightString(caption_right_x, qr_y_bottom - caption_h + 1,
+                          "Scan: full 15-Ball rules")
 
         # --- Left column: 15-Ball Rotation rules summary ---
         left_x = rules_x + inner_pad_x
@@ -304,13 +318,13 @@ def draw_scoresheet(c, left, top, width, height, with_instructions=True):
         # Signature rule - bold, gets pride of place on line 1.
         c.setFont(FONT_BOLD, 7)
         c.drawString(left_x, line_y,
-            "BALL IN HAND every inning. No safeties - opponent always "
-            "places cue ball anywhere.")
+            "BALL IN HAND every inning. No safeties - incoming player "
+            "always places cue ball anywhere.")
         line_y -= 9
         c.setFont(FONT_BODY, 7)
         for txt in [
             "Rack: 1 at apex on foot spot, 8 in center, others random. Break with cue ball above the head string.",
-            "Hit lowest-numbered ball first every shot. Any ball pocketed legally scores 1 point. Slop counts.",
+            "Hit lowest first, then CALL ball + pocket. Uncalled makes are spotted. Slop only on break or bonus extra ball.",
             "Fouls (-1 pt, score can go negative): scratch, no-rail, wrong-ball-first, ball off table, jump on cue ball.",
             "First to goal wins. Balls made on break count for breaker (spotted on break foul). Play passes after break.",
         ]:
