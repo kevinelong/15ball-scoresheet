@@ -1,7 +1,7 @@
 /* Columbia Cue Club tournament manager.
    - Home view: list of tournaments (create, open, rename, duplicate, delete, import)
    - Bracket view: one tournament (setup, participants, bracket render, match modal)
-   - Match modal: K-Ball score sheet, scoped to a single bracket match
+   - Match modal: 15-Ball Rotation score sheet, scoped to a single bracket match
    - Late-entry modal: add a player to a running bracket
    All state persists to browser storage under a single key.
 */
@@ -14,9 +14,14 @@
   const STRIPES = [9, 10, 11, 12, 13, 14, 15];
   const EIGHT = [8];
   // Storage schema: v3 (pre-tables) is auto-migrated to v4 (with tables[]).
-  const STORAGE_KEY = "kball.app.v3";  // key stays v3 to preserve existing local data;
-                                        // records get a `tables` array via backfill.
-  const LEGACY_KEY_V2 = "kball.tournament.v1";
+  // Storage keys were renamed from kball.* to fifteenBall.* when the product
+  // dropped the K-Ball nickname. loadPersisted() reads from the new key first,
+  // then falls back to the legacy kball.* keys and rewrites into the new key
+  // on save. Do not resurrect "kball.*" as canonical.
+  const STORAGE_KEY = "fifteenBall.app.v3";
+  const LEGACY_STORAGE_KEY = "kball.app.v3";        // pre-rename primary key
+  const LEGACY_KEY_V2 = "fifteenBall.tournament.v1";
+  const LEGACY_KEY_V2_OLD = "kball.tournament.v1";  // pre-rename v2 key
 
   // ---------- safe storage adapter ----------
   const store = (function () {
@@ -26,7 +31,7 @@
       const g = (typeof globalThis !== "undefined" ? globalThis : window);
       const ls = g[BACKEND_KEY];
       if (ls) {
-        const probe = "__kball_probe__";
+        const probe = "__fifteenBall_probe__";
         ls.setItem(probe, "1"); ls.removeItem(probe);
         return {
           backend: "browser",
@@ -65,9 +70,9 @@
     return "t_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 6);
   }
 
-  // Curated game catalog. sheetType: "kball" = existing rack grid; "counter" = simple games-won/points counter.
+  // Curated game catalog. sheetType: "fifteenBall" = existing rack grid; "counter" = simple games-won/points counter.
   const GAMES = {
-    kball:      { id: "kball",      name: "K-Ball / 15-Ball Rotation", sheetType: "kball",   defaultRaceTo: 25,  raceLabel: "Points to win", raceHint: "Points target per match (25 rec / 35 pro).",                  scoringHint: "Rotation scoring by pocketed ball value." },
+    fifteenBall:{ id: "fifteenBall",name: "15-Ball Rotation",         sheetType: "fifteenBall", defaultRaceTo: 25, raceLabel: "Points to win", raceHint: "Points target per match (25 rec / 35 pro).",                  scoringHint: "Rotation scoring by pocketed ball value." },
     "8ball":    { id: "8ball",    name: "8-Ball",                    sheetType: "counter", defaultRaceTo: 7,   raceLabel: "Race to",       raceHint: "Games needed to win the match (typical: 5 / 7 / 9).",           scoringHint: "Games won \u2014 first to the race target." },
     "9ball":    { id: "9ball",    name: "9-Ball",                    sheetType: "counter", defaultRaceTo: 7,   raceLabel: "Race to",       raceHint: "Games needed to win the match (typical: 7 / 9 / 11).",          scoringHint: "Games won \u2014 first to the race target." },
     "10ball":   { id: "10ball",   name: "10-Ball",                   sheetType: "counter", defaultRaceTo: 7,   raceLabel: "Race to",       raceHint: "Games needed to win the match (typical: 7 / 9).",              scoringHint: "Games won \u2014 first to the race target." },
@@ -75,7 +80,7 @@
     "14_1":     { id: "14_1",     name: "Straight Pool (14.1 Continuous)", sheetType: "counter", defaultRaceTo: 100, raceLabel: "Points to",     raceHint: "Point target per match (typical: 75 / 100 / 125 / 150).",       scoringHint: "Continuous points \u2014 first to the point target." },
     "banks":    { id: "banks",    name: "Bank Pool",                 sheetType: "counter", defaultRaceTo: 5,   raceLabel: "Race to",       raceHint: "Banked-ball games to win the match (typical: 3 / 5).",          scoringHint: "Banked wins \u2014 first to the race target." }
   };
-  function gameOf(t) { return GAMES[t?.game] || GAMES.kball; }
+  function gameOf(t) { return GAMES[t?.game] || GAMES.fifteenBall; }
 
   const SIGNUPS_SEPT7 = [
     { name: "Tyler Layton", fargo: 476, notes: "Under 500 division" },
@@ -110,7 +115,7 @@
   const DEFAULT_TABLE_COUNT = 6;
 
   function makeTournament(name, game, tableOpts) {
-    const gid = GAMES[game] ? game : "kball";
+    const gid = GAMES[game] ? game : "fifteenBall";
     const count = tableOpts?.count ?? DEFAULT_TABLE_COUNT;
     const naming = tableOpts?.naming ?? "";
     const tables = (window.Tables ? window.Tables.buildTables(count, naming) : []);
@@ -146,32 +151,51 @@
   }
 
   function loadPersisted() {
-    try {
-      const raw = store.get(STORAGE_KEY);
-      if (raw) {
+    // Try new key first, then the pre-rename legacy key. Existing local data
+    // used game id "kball"; upgrade it to "fifteenBall" in-place. Storage
+    // keys and game ids were renamed when the K-Ball nickname was dropped.
+    // Removing the legacy key after a successful read prevents split brains
+    // on the next save.
+    function upgradeV3(parsed, fromLegacyKey) {
+      app = parsed;
+      app.tournaments.forEach((t) => {
+        // Rename game id kball -> fifteenBall on existing tournaments.
+        if (t.game === "kball") t.game = "fifteenBall";
+        if (!t.game) t.game = "fifteenBall";
+        if (!Array.isArray(t.tables) || t.tables.length === 0) {
+          t.tables = window.Tables
+            ? window.Tables.buildTables(DEFAULT_TABLE_COUNT, "")
+            : [];
+        }
+      });
+      if (fromLegacyKey) {
+        // Write to the new key immediately, then clear the old one so future
+        // reads take the fast path.
+        try { store.set(STORAGE_KEY, JSON.stringify(app)); } catch (e) { /* ignore */ }
+        try { store.remove(fromLegacyKey); } catch (e) { /* ignore */ }
+      }
+      return true;
+    }
+    for (const key of [STORAGE_KEY, LEGACY_STORAGE_KEY]) {
+      try {
+        const raw = store.get(key);
+        if (!raw) continue;
         const parsed = JSON.parse(raw);
         if (parsed && parsed.v === 3 && Array.isArray(parsed.tournaments)) {
-          app = parsed;
-          // Backfill: older v3 records may predate several fields.
-          app.tournaments.forEach((t) => {
-            if (!t.game) t.game = "kball";
-            if (!Array.isArray(t.tables) || t.tables.length === 0) {
-              t.tables = window.Tables
-                ? window.Tables.buildTables(DEFAULT_TABLE_COUNT, "")
-                : [];
-            }
-          });
-          return true;
+          return upgradeV3(parsed, key === STORAGE_KEY ? null : key);
         }
-      }
-    } catch (e) { /* ignore */ }
-    // Migrate v2 (single-tournament) if present
-    try {
-      const legacy = store.get(LEGACY_KEY_V2);
-      if (legacy) {
+      } catch (e) { /* ignore, try next key */ }
+    }
+    // Migrate v2 (single-tournament) if present, in either key variant.
+    for (const key of [LEGACY_KEY_V2, LEGACY_KEY_V2_OLD]) {
+      try {
+        const legacy = store.get(key);
+        if (!legacy) continue;
         const parsed = JSON.parse(legacy);
         if (parsed && parsed.v === 2) {
-          const t = makeTournament(parsed.tournament?.name || "Imported Tournament", parsed.tournament?.game || "kball");
+          const legacyGame = parsed.tournament?.game;
+          const seedGame = legacyGame === "kball" ? "fifteenBall" : (legacyGame || "fifteenBall");
+          const t = makeTournament(parsed.tournament?.name || "Imported Tournament", seedGame);
           t.date = parsed.tournament?.date || "";
           t.format = parsed.tournament?.format || "single";
           t.raceTo = parsed.tournament?.raceTo || GAMES[t.game].defaultRaceTo;
@@ -181,10 +205,12 @@
           app.tournaments.push(t);
           app.activeId = t.id;
           persist(0);
+          // Clear the legacy key so we don't re-migrate on next load.
+          try { store.remove(key); } catch (e) { /* ignore */ }
           return true;
         }
-      }
-    } catch (e) { /* ignore */ }
+      } catch (e) { /* ignore, try next key */ }
+    }
     return false;
   }
 
@@ -339,6 +365,8 @@
           t.sheets = parsed.sheets || {};
         }
         if (!t) { alert("This JSON isn't a recognized tournament export."); return; }
+        // Upgrade legacy game id from imported JSON exported before the rename.
+        if (t.game === "kball") t.game = "fifteenBall";
         t.id = newId();
         t.createdAt = t.createdAt || Date.now();
         t.updatedAt = Date.now();
@@ -587,7 +615,7 @@
     $("#tName").value = t.name || "";
     $("#tDate").value = t.date || "";
     $("#tTime").value = t.startTime || "";
-    $("#tGame").value = t.game || "kball";
+    $("#tGame").value = t.game || "fifteenBall";
     $("#tTableCount").value = Array.isArray(t.tables) ? t.tables.length : DEFAULT_TABLE_COUNT;
     $("#tTableNaming").placeholder = window.Tables ? window.Tables.namingPlaceholder(t.tables?.length || DEFAULT_TABLE_COUNT) : "1-6";
     // Show the *current* naming as a hint only when the user has customized it.
@@ -789,7 +817,7 @@
     $("#counterANm").textContent = match.slots[0].name;
     $("#counterBNm").textContent = match.slots[1].name;
     $("#counterTarget").textContent = `${g.raceLabel} ${t.raceTo}`;
-    // Show +5 / +10 quick-add buttons for point-style games (Straight Pool / K-Ball-style targets).
+    // Show +5 / +10 quick-add buttons for point-style games (Straight Pool / 15-Ball-Rotation-style targets).
     const pointsMode = (t.raceTo || g.defaultRaceTo) >= 50;
     $$("[data-counter-jumps]").forEach((el) => { el.hidden = !pointsMode; });
     const existing = t.sheets[matchId] || null;
@@ -1090,7 +1118,7 @@
     // Game selector: update hints and default race-to when user changes game
     $("#tGame").addEventListener("change", () => {
       const gid = $("#tGame").value;
-      const g = GAMES[gid] || GAMES.kball;
+      const g = GAMES[gid] || GAMES.fifteenBall;
       $("#tGameHint").textContent = g.scoringHint;
       $("#tRaceLabel").textContent = g.raceLabel;
       $("#tRaceHint").textContent = g.raceHint;

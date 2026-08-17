@@ -43,7 +43,7 @@ Findings from https://fargorate.com, https://forums.azbilliards.com, and the r/b
 ## Decision for this app
 
 1. **Game selector at the tournament level** — pick one of a curated list; the score-sheet modal adapts.
-2. **Every match records winner + final score (games won or points, depending on the game).** K-Ball keeps its ball-grid sheet; other games get a simpler counter sheet.
+2. **Every match records winner + final score (games won or points, depending on the game).** 15-Ball Rotation keeps its ball-grid sheet; other games get a simpler counter sheet.
 3. **Export menu** offers three destinations:
    - **Challonge (JSON payload + terminal command)** — user copies a `curl` block that creates the tournament, bulk-adds participants with seeds & Fargo in `misc`, starts it, updates each match with `scores_csv` and `winner_id`, and finalizes. API key entered into the modal is used inline in the command but never stored server-side (this is a static site — no server).
    - **FargoRate submission bundle** — CSV of matches formatted as `Winner, Loser, WinnerGames, LoserGames, Game, TableSize, Date` plus a prefilled email template pointing to the tournament's Challonge/DigitalPool URL, ready to send to `support@fargorate.com`.
@@ -59,4 +59,4 @@ Findings from https://fargorate.com, https://forums.azbilliards.com, and the r/b
 | One Pocket | games won (race to N) | counter | yes |
 | Straight Pool (14.1) | points (target 100/125/150) | counter | yes (points as games-substitute per Mike Page's guidance) |
 | Bank Pool | games won (race to N) | counter | yes |
-| K-Ball / 15-Ball Rotation | points-per-rack (rotation) | ball-grid (existing) | yes (as points) |
+| 15-Ball Rotation | points-per-rack (rotation) | ball-grid (existing) | yes (as points) |

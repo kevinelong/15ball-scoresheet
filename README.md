@@ -1,6 +1,6 @@
-# Columbia Cue Club Tournament — Double-Elimination Bracket + K-Ball Score Sheet
+# Columbia Cue Club Tournament — Double-Elimination Bracket + 15-Ball Rotation Score Sheet
 
-Online tournament manager for 15-Ball Rotation (K-Ball). Enter a participant list, seed by Fargo rating, build a full double-elimination bracket, and click any match to open the paper-style K-Ball score sheet as a modal. Ball totals flow back into the bracket as the match score, winners advance automatically, and everything persists in the browser or exports as JSON.
+Online tournament manager for 15-Ball Rotation. Enter a participant list, seed by Fargo rating, build a full double-elimination bracket, and click any match to open the paper-style 15-Ball Rotation score sheet as a modal. Ball totals flow back into the bracket as the match score, winners advance automatically, and everything persists in the browser or exports as JSON.
 
 Zero dependencies — three JS/CSS/HTML files, no build step.
 
@@ -16,7 +16,7 @@ Zero dependencies — three JS/CSS/HTML files, no build step.
 - Champion banner when the last match is decided
 - **Load Sept 7 Signups** shortcut fills the roster from the current Labor Day Showdown 2026 registration list
 
-### K-Ball match score sheet (per match, modal)
+### 15-Ball Rotation match score sheet (per match, modal)
 - 4 racks × 2 players × 15 balls each — click balls to record them pocketed
 - Live per-rack totals, running totals, and final totals
 - Fouls per rack, aggregated per player
@@ -45,7 +45,7 @@ Then browse to `http://localhost:8000/`.
 
 ## Deploying
 
-Because it's a static site, drop it on GitHub Pages, Netlify, Cloudflare Pages, S3+CloudFront, or any web host. GitHub Pages recipe:
+Because it's a static site, drop it on GitHub Pages, Netlify, Cloudflare Pages, S3+CloudFront, or any web host. GitHub Pages recipe (the repository will be renamed to `15ball-scoresheet` soon):
 
 1. Push this repo to `github.com/<you>/kball-scoresheet`
 2. **Settings → Pages → Build from branch → `main` / root**

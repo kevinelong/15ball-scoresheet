@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Columbia Cue Club &mdash; Tournament Bracket &amp; Score Sheets</title>
-<meta name="description" content="Double-elimination brackets for 8-Ball, 9-Ball, 10-Ball, One Pocket, Straight Pool (14.1), Bank Pool, and K-Ball. Manage participants, record match scores, and export to Challonge. ColumbiaCueClub.com." />
+<meta name="description" content="Double-elimination brackets for 8-Ball, 9-Ball, 10-Ball, One Pocket, Straight Pool (14.1), Bank Pool, and 15-Ball Rotation. Manage participants, record match scores, and export to Challonge. ColumbiaCueClub.com." />
 <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -48,7 +48,7 @@
         <div class="brand-titles">
           <button type="button" class="backlink" data-action="go-home" aria-label="Back to tournaments">&larr; Tournaments</button>
           <h1 id="tournamentTitle">Tournament</h1>
-          <div class="tagline" id="tournamentTagline">15-Ball Rotation (K-Ball) &mdash; Double Elimination</div>
+          <div class="tagline" id="tournamentTagline">15-Ball Rotation &mdash; Double Elimination</div>
         </div>
         <div class="hdr-actions">
           <button type="button" data-action="rename-tournament" title="Rename this tournament">Rename</button>
@@ -91,7 +91,7 @@
         <label class="field">
           <span>Game</span>
           <select id="tGame">
-            <option value="kball">K-Ball / 15-Ball Rotation</option>
+            <option value="fifteenBall">15-Ball Rotation</option>
             <option value="8ball">8-Ball</option>
             <option value="9ball">9-Ball</option>
             <option value="10ball">10-Ball</option>
@@ -141,7 +141,7 @@
     </section>
   </main>
 
-  <!-- =============================== KBALL SCORE SHEET MODAL =============================== -->
+  <!-- =============================== 15-BALL ROTATION SCORE SHEET MODAL =============================== -->
   <div class="modal" id="matchModal" hidden aria-modal="true" role="dialog" aria-labelledby="matchTitle">
     <div class="modal-scrim" data-action="close-match"></div>
     <div class="modal-card">
@@ -154,10 +154,10 @@
       </div>
 
       <div class="modal-body">
-        <!-- The paper-style K-Ball score sheet, scoped to one match -->
+        <!-- The paper-style 15-Ball Rotation score sheet, scoped to one match -->
         <main class="sheet" id="sheet">
           <header class="hdr">
-            <h1 id="sheetGameTitle">15-Ball Rotation (K-Ball)</h1>
+            <h1 id="sheetGameTitle">15-Ball Rotation</h1>
             <div class="subhdr"><span class="star">&#9733;</span> MATCH SCORE SHEET <span class="star">&#9733;</span></div>
             <div class="legend" aria-label="Cell legend">
               <span class="lg-swatch lg-edit"></span> <span>red = you edit</span>
