@@ -29,9 +29,13 @@ type Config struct {
 	EmailFrom      string
 	PostmarkToken  string
 
-	// Challonge (shared club account).
-	ChallongeAPIKey    string
-	ChallongeSubdomain string
+	// Challonge Connect (OAuth2 client-credentials; shared club app).
+	ChallongeClientID     string
+	ChallongeClientSecret string
+	ChallongeTokenURL     string
+	ChallongeAPIBase      string
+	ChallongeScope        string
+	ChallongeSubdomain    string
 }
 
 func getenv(key, def string) string {
@@ -72,8 +76,12 @@ func Load() *Config {
 		SMTPPassword:       getenv("SMTP_PASSWORD", ""),
 		EmailFrom:          getenv("SMTP_FROM", getenv("EMAIL_FROM", "")),
 		PostmarkToken:      getenv("POSTMARK_TOKEN", ""),
-		ChallongeAPIKey:    getenv("CHALLONGE_API_KEY", ""),
-		ChallongeSubdomain: getenv("CHALLONGE_SUBDOMAIN", ""),
+		ChallongeClientID:     getenv("CHALLONGE_CLIENT_ID", ""),
+		ChallongeClientSecret: getenv("CHALLONGE_CLIENT_SECRET", ""),
+		ChallongeTokenURL:     getenv("CHALLONGE_TOKEN_URL", "https://api.challonge.com/oauth/token"),
+		ChallongeAPIBase:      strings.TrimRight(getenv("CHALLONGE_API_BASE", "https://api.challonge.com/v2"), "/"),
+		ChallongeScope:        getenv("CHALLONGE_SCOPE", "me application:manage tournaments:read tournaments:write matches:read matches:write participants:read participants:write"),
+		ChallongeSubdomain:    getenv("CHALLONGE_SUBDOMAIN", ""),
 	}
 }
 

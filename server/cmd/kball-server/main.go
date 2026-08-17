@@ -17,6 +17,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/kevinelong/kball-scoresheet/server/internal/auth"
+	"github.com/kevinelong/kball-scoresheet/server/internal/challonge"
 	"github.com/kevinelong/kball-scoresheet/server/internal/config"
 	"github.com/kevinelong/kball-scoresheet/server/internal/mail"
 	"github.com/kevinelong/kball-scoresheet/server/internal/store"
@@ -41,6 +42,27 @@ func main() {
 		mailer = &mail.LogMailer{Sink: func(to, link string) { log.Printf("magic link for %s (SMTP disabled)", to) }}
 	}
 	a := auth.New(st.DB, cfg, mailer)
+
+	// Challonge Connect client (OAuth2 client-credentials). If configured, verify
+	// connectivity in the background at startup and log the outcome (no secrets).
+	ch := challonge.New(challonge.Config{
+		ClientID: cfg.ChallongeClientID, ClientSecret: cfg.ChallongeClientSecret,
+		TokenURL: cfg.ChallongeTokenURL, APIBase: cfg.ChallongeAPIBase, Scope: cfg.ChallongeScope,
+	})
+	if ch.Configured() {
+		go func() {
+			pctx, pcancel := context.WithTimeout(context.Background(), 25*time.Second)
+			defer pcancel()
+			if n, err := ch.Ping(pctx); err != nil {
+				log.Printf("challonge: connectivity check FAILED: %v", err)
+			} else {
+				log.Printf("challonge: connected (app tournaments: %d)", n)
+			}
+		}()
+	} else {
+		log.Printf("challonge: not configured (CHALLONGE_CLIENT_ID empty) — export disabled")
+	}
+	_ = ch // export routes wired in the export sub-slice (pending membership-role authz)
 
 	r := chi.NewRouter()
 	r.Use(middleware.RealIP)
