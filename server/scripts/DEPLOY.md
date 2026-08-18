@@ -47,7 +47,9 @@ location ^~ /15ball/api/ {
 # Legacy /kball URL: 301 to the new /15ball/ path. Keep this as long as
 # there are bookmarks or magic-link emails pointing at the old prefix.
 location = /kball        { return 301 /15ball/; }
-location ^~ /kball/      { return 301 /15ball/; }
+# rewrite (NOT `return 301 /15ball/`) so subpath + query survive:
+# /kball/api/auth/verify?s=..&t=.. -> /15ball/api/auth/verify?s=..&t=..
+location ^~ /kball/      { rewrite ^/kball/(.*)$ /15ball/$1 permanent; }
 # Static frontend from the repo clone (git pull updates live)
 location ^~ /15ball/ {
     alias /home/kevin/15ball-scoresheet/;

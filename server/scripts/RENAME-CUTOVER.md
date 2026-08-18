@@ -128,7 +128,11 @@ location ^~ /15ball/ {
 # Legacy /kball -> /15ball 301 redirect (keep for as long as bookmarks and
 # already-sent magic-link emails might still hit the old path).
 location = /kball        { return 301 /15ball/; }
-location ^~ /kball/      { return 301 /15ball/; }
+# rewrite (NOT `return 301 /15ball/`) so the SUBPATH + query survive — e.g.
+# /kball/api/auth/verify?s=..&t=.. -> /15ball/api/auth/verify?s=..&t=..
+# A bare `return 301 /15ball/` would send every /kball/* to the homepage and
+# break already-sent magic links.
+location ^~ /kball/      { rewrite ^/kball/(.*)$ /15ball/$1 permanent; }
 ```
 
 Also rename the frontend checkout so the alias line above is honest:
