@@ -297,8 +297,11 @@ def draw_cover(c: canvas.Canvas) -> None:
     para = (
         "15-Ball Rotation is 15-ball rotation played to a target score. Fifteen numbered "
         "balls are racked and played in ascending numerical order. Every ball "
-        "legally pocketed scores one point. The first player to reach the "
-        "agreed target — 25 (recreational) or 50 (competitive) — wins the Match."
+        "legally pocketed scores one point. Pocketing the 15 does not end the rack — "
+        "play continues until every ball is off the table, so a completed rack always "
+        "totals exactly 15 points between the two players; only a player reaching the "
+        "target score ends a rack early, with balls still on the table. The first player "
+        "to reach the agreed target — 25 (recreational) or 50 (competitive) — wins the Match."
     )
     for line in wrap_lines(para, FONT_BODY, 10.5, box_w - 2 * inner_pad):
         c.drawString(box_x + inner_pad, y, line)

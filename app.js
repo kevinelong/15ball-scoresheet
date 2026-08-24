@@ -72,7 +72,7 @@
 
   // Curated game catalog. sheetType: "fifteenBall" = existing rack grid; "counter" = simple games-won/points counter.
   const GAMES = {
-    fifteenBall:{ id: "fifteenBall",name: "15-Ball Rotation",         sheetType: "fifteenBall", defaultRaceTo: 25, raceLabel: "Points to win", raceHint: "Points target per match (25 rec / 35 pro).",                  scoringHint: "Rotation scoring by pocketed ball value." },
+    fifteenBall:{ id: "fifteenBall",name: "15-Ball Rotation",         sheetType: "fifteenBall", defaultRaceTo: 25, raceLabel: "Points to win", raceHint: "Points target per match (25 rec / 35 pro).",                  scoringHint: "1 point per ball pocketed; a completed rack totals 15." },
     "8ball":    { id: "8ball",    name: "8-Ball",                    sheetType: "counter", defaultRaceTo: 7,   raceLabel: "Race to",       raceHint: "Games needed to win the match (typical: 5 / 7 / 9).",           scoringHint: "Games won \u2014 first to the race target." },
     "9ball":    { id: "9ball",    name: "9-Ball",                    sheetType: "counter", defaultRaceTo: 7,   raceLabel: "Race to",       raceHint: "Games needed to win the match (typical: 7 / 9 / 11).",          scoringHint: "Games won \u2014 first to the race target." },
     "10ball":   { id: "10ball",   name: "10-Ball",                   sheetType: "counter", defaultRaceTo: 7,   raceLabel: "Race to",       raceHint: "Games needed to win the match (typical: 7 / 9).",              scoringHint: "Games won \u2014 first to the race target." },

@@ -325,7 +325,7 @@ def draw_scoresheet(c, left, top, width, height, with_instructions=True):
         for txt in [
             "Rack: 1 at apex on foot spot, 8 in center, others random. Break with cue ball above the head string.",
             "Hit lowest first, then CALL ball + pocket. Uncalled makes are spotted. Slop only on break or bonus extra ball.",
-            "Fouls (-1 pt, score can go negative): scratch, no-rail, wrong-ball-first, ball off table, jump on cue ball.",
+            "Fouls (-1 pt, score can go negative): scratch, no-rail, wrong-ball-first, ball off table, scoop-jump (tip under cue ball).",
             "First to goal wins. Balls made on break count for breaker (spotted on break foul). Play passes after break.",
         ]:
             c.drawString(left_x, line_y, txt)
