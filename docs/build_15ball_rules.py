@@ -301,7 +301,7 @@ def draw_cover(c: canvas.Canvas) -> None:
         "play continues until every ball is off the table, so a completed rack always "
         "totals exactly 15 points between the two players; only a player reaching the "
         "target score ends a rack early, with balls still on the table. The first player "
-        "to reach the agreed target — 25 (recreational) or 50 (competitive) — wins the Match."
+        "to reach the agreed target — traditionally a multiple of 25 (25, 50, 100, or 150), as in Straight Pool — wins the Match."
     )
     for line in wrap_lines(para, FONT_BODY, 10.5, box_w - 2 * inner_pad):
         c.drawString(box_x + inner_pad, y, line)
