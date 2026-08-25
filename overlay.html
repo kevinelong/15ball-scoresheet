@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>15-Ball Overlay — OBS scoreboard</title>
+<!--
+  READ-ONLY broadcast scoreboard for streaming 15-Ball Rotation on OBS.
+  Add as a Browser Source (1920×1080, transparent). It renders nothing but the
+  scoreboard bar over a transparent page, so it composites over your table feed.
+
+  It receives live match state through EITHER channel (no polling, no deps):
+    new BroadcastChannel('fifteenball-live').postMessage(state)   // same browser/profile
+    window.postMessage({ source: 'fifteenball', state }, '*')     // iframe / opener
+
+  state = {
+    table:  'Table 1',            // optional label
+    raceTo: 50,                   // race-to target
+    rack:   2, racks: 4,          // current rack / total racks
+    players: [
+      { name:'Kevin L.', total:34, rackTotal:8, fouls:1, serving:true  },
+      { name:'Dale B.',  total:41, rackTotal:11, fouls:0, serving:false }
+    ]
+  }
+
+  URL options:  ?demo=1  (animated sample match) · ?pos=top|bottom · ?scale=1.2
+  The real cross-process sync channel (local relay / cloud / hosted) is TBD —
+  this is the finished UI; point any of the above feeds at it.
+-->
+<style>
+  :root{
+    --felt:#0b1310; --felt-2:#12201a;
+    --cloth:#3fa571; --brass:#c79a3f; --brass-bright:#e6bd63;
+    --ivory:#efe9db; --ivory-dim:#b7b9ab; --line:rgba(239,233,219,.16);
+    --serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,"Times New Roman",serif;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  }
+  html,body{margin:0;height:100%;background:transparent;font-family:var(--sans);overflow:hidden}
+  /* stage: 1920x1080 design space, scaled to fit any browser-source size */
+  #stage{position:fixed;inset:0;display:flex;justify-content:center}
+  #stage[data-pos="bottom"]{align-items:flex-end;padding-bottom:60px}
+  #stage[data-pos="top"]{align-items:flex-start;padding-top:60px}
+
+  .board{
+    --scale:1;
+    transform:scale(var(--scale));transform-origin:bottom center;
+    width:1180px;max-width:96vw;
+    background:linear-gradient(180deg,rgba(18,32,26,.94),rgba(11,19,16,.96));
+    border:1px solid var(--line);border-radius:10px;
+    box-shadow:0 18px 60px rgba(0,0,0,.55);
+    overflow:hidden;
+    opacity:0;transition:opacity .4s ease, transform .4s ease;
+  }
+  #stage[data-pos="top"] .board{transform-origin:top center}
+  .board.show{opacity:1}
+  .board .accent{height:4px;background:linear-gradient(90deg,var(--brass),var(--brass-bright),var(--brass))}
+
+  .row{display:grid;grid-template-columns:1fr auto 1fr;align-items:stretch}
+  .side{display:flex;align-items:center;gap:26px;padding:22px 34px}
+  .side.p2{flex-direction:row-reverse;text-align:right}
+  .name{font-family:var(--serif);font-weight:600;font-size:40px;letter-spacing:.01em;color:var(--ivory);line-height:1.05;max-width:360px}
+  .name .sub{display:block;font-family:var(--sans);font-size:15px;letter-spacing:.14em;text-transform:uppercase;color:var(--ivory-dim);margin-top:6px}
+  .score{font-family:var(--serif);font-weight:600;font-size:96px;line-height:.9;color:var(--brass-bright);font-variant-numeric:tabular-nums;min-width:150px;text-align:center}
+  .side.p2 .score{}
+  .serving .name{color:#fff}
+  .serving .score{color:#fff;text-shadow:0 0 22px rgba(231,189,99,.55)}
+  .dot{width:12px;height:12px;border-radius:50%;background:var(--brass-bright);box-shadow:0 0 12px var(--brass-bright);flex:0 0 auto;opacity:0;transition:opacity .3s}
+  .serving .dot{opacity:1}
+  .fouls{font-family:var(--mono);font-size:14px;color:var(--ivory-dim);letter-spacing:.05em;margin-top:8px}
+
+  .center{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:14px 30px;background:rgba(0,0,0,.28);border-left:1px solid var(--line);border-right:1px solid var(--line);min-width:230px}
+  .center .race{font-family:var(--sans);font-size:16px;letter-spacing:.22em;text-transform:uppercase;color:var(--brass)}
+  .center .race b{color:var(--ivory);font-family:var(--mono);font-size:20px}
+  .center .rack{font-family:var(--mono);font-size:14px;letter-spacing:.1em;color:var(--ivory-dim);margin-top:8px}
+  .center .club{font-family:var(--serif);font-size:14px;letter-spacing:.18em;text-transform:uppercase;color:var(--ivory-dim);margin-top:10px;opacity:.7}
+  .center .club b{color:var(--brass)}
+
+  .idle{padding:26px 40px;text-align:center;color:var(--ivory-dim);font-size:20px;letter-spacing:.02em}
+</style>
+</head>
+<body>
+<div id="stage" data-pos="bottom">
+  <div class="board" id="board">
+    <div class="accent"></div>
+    <div class="row" id="live" hidden>
+      <div class="side p1" id="p1">
+        <span class="dot"></span>
+        <div><div class="name">Player 1<span class="sub">Rack <span class="rt1">–</span></span></div><div class="fouls" id="f1"></div></div>
+        <div class="score" id="s1">0</div>
+      </div>
+      <div class="center">
+        <div class="race">Race to <b id="race">–</b></div>
+        <div class="rack" id="rack">Rack – of –</div>
+        <div class="club">Columbia&nbsp;<b>Cue</b>&nbsp;Club · 15-Ball</div>
+      </div>
+      <div class="side p2" id="p2">
+        <span class="dot"></span>
+        <div><div class="name">Player 2<span class="sub">Rack <span class="rt2">–</span></span></div><div class="fouls" id="f2"></div></div>
+        <div class="score" id="s2">0</div>
+      </div>
+    </div>
+    <div class="idle" id="idle">Waiting for the next rack…</div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const qs = new URLSearchParams(location.search);
+  const stage = document.getElementById('stage');
+  const board = document.getElementById('board');
+  const live  = document.getElementById('live');
+  const idle  = document.getElementById('idle');
+
+  stage.dataset.pos = qs.get('pos') === 'top' ? 'top' : 'bottom';
+  board.style.setProperty('--scale', Math.max(0.5, Math.min(2, parseFloat(qs.get('scale')||'1'))) || 1);
+
+  const $ = id => document.getElementById(id);
+  const foulStr = n => n>0 ? ('Fouls · ' + '•'.repeat(Math.min(n,5)) + (n>5?('+'+(n-5)):'')) : '';
+
+  function render(st){
+    if(!st || !Array.isArray(st.players) || st.players.length<2){
+      live.hidden = true; idle.hidden = false; board.classList.add('show'); return;
+    }
+    idle.hidden = true; live.hidden = false;
+    const [a,b] = st.players;
+    $('s1').textContent = a.total ?? 0;
+    $('s2').textContent = b.total ?? 0;
+    $('p1').querySelector('.name').firstChild.textContent = a.name || 'Player 1';
+    $('p2').querySelector('.name').firstChild.textContent = b.name || 'Player 2';
+    document.querySelector('.rt1').textContent = (a.rackTotal ?? '–');
+    document.querySelector('.rt2').textContent = (b.rackTotal ?? '–');
+    $('f1').textContent = foulStr(a.fouls||0);
+    $('f2').textContent = foulStr(b.fouls||0);
+    $('race').textContent = st.raceTo ?? '–';
+    $('rack').textContent = 'Rack ' + (st.rack ?? '–') + ' of ' + (st.racks ?? 4);
+    $('p1').classList.toggle('serving', !!a.serving);
+    $('p2').classList.toggle('serving', !!b.serving);
+    board.classList.add('show');
+  }
+
+  // ——— live feeds (read-only): BroadcastChannel + postMessage ———
+  try {
+    const bc = new BroadcastChannel('fifteenball-live');
+    bc.onmessage = e => render(e.data && e.data.state ? e.data.state : e.data);
+  } catch(_) {}
+  window.addEventListener('message', e => {
+    const d = e.data;
+    if (d && d.source === 'fifteenball' && d.state) render(d.state);
+  });
+
+  // ——— demo mode: animate a sample match so you can style it in OBS now ———
+  if (qs.get('demo') === '1'){
+    let a=18, b=22, rt=[6,9], rack=2, foulsA=1, foulsB=0, serving=0;
+    const tick = () => {
+      if (serving===0){ a++; rt[0]++; } else { b++; rt[1]++; }
+      if (Math.random()<0.18){ serving^=1; }                 // change of innings
+      if (Math.random()<0.05){ (serving?foulsB++:foulsA++); }
+      if (rt[0]>15||rt[1]>15){ rack++; rt=[0,0]; }
+      render({ table:'Table 1', raceTo:50, rack, racks:4, players:[
+        {name:'Kevin L.', total:a, rackTotal:rt[0], fouls:foulsA, serving:serving===0},
+        {name:'Dale B.',  total:b, rackTotal:rt[1], fouls:foulsB, serving:serving===1},
+      ]});
+    };
+    render({raceTo:50,rack,racks:4,players:[{name:'Kevin L.',total:a,rackTotal:rt[0],fouls:foulsA,serving:true},{name:'Dale B.',total:b,rackTotal:rt[1],fouls:foulsB}]});
+    setInterval(tick, 1400);
+  } else {
+    render(null); // idle until a feed arrives
+  }
+})();
+</script>
+</body>
+</html>
