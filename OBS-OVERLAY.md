@@ -6,7 +6,7 @@ table camera in OBS.
 
 ## Use in OBS
 1. **Sources → + → Browser**.
-2. URL: the hosted `overlay.html` (e.g. `https://kevinelong.github.io/15ball-scoresheet/overlay.html`)
+2. URL: the hosted `overlay.html` (e.g. `https://codeonline.io/15ball/overlay.html`)
    or a local file URL.
 3. Width **1920**, Height **1080**. Leave "Shutdown source when not visible" off.
 4. Options: `?pos=top` or `?pos=bottom` (default), `?scale=1.2` to resize, `?demo=1`
