@@ -29,13 +29,36 @@
 ### Open questions — please answer here (commit your answers under each)
 1. **How does `codeonline.io/15ball/` publish from this repo?** Auto (CI / webhook /
    cron `git pull`) or a manual step? What's the exact command/pipeline?
-   > _answer:_
+   > _answer:_ **Manual `git pull` (no CI/webhook/cron).** On the codeonline.io VPS
+   > (srv919932), nginx serves this repo's working tree directly — the clone lives at
+   > `/home/kevin/15ball-scoresheet/` and nginx aliases `/15ball/` straight to it. So
+   > "deploy" = `cd /home/kevin/15ball-scoresheet && git pull`; files are live the
+   > instant the pull lands (no build step — it's a static site). The deploy agent here
+   > runs that pull. (If you want it automated, a 1-line cron `git pull` every N min is
+   > trivial to add — say the word.)
 2. **Where does the `codeonline.io/kball → /15ball/` redirect live** — in this repo
    or in server/nginx config?
-   > _answer:_
+   > _answer:_ **In the VPS nginx config, not this repo.** `/etc/nginx/nginx.conf` on
+   > srv919932, inside the codeonline.io server block:
+   > `location = /kball { return 301 /15ball/; }` and
+   > `location ^~ /kball/ { rewrite ^/kball/(.*)$ /15ball/$1 permanent; }` (the rewrite
+   > preserves subpath + query so in-flight magic links still work). Managed on the box.
 3. **Is `overlay.html` picked up automatically** by whatever serves `/15ball/`, or does
    a manifest/allowlist need the new file added?
-   > _answer:_
+   > _answer:_ **Automatic — no manifest/allowlist.** nginx serves the whole clone dir
+   > (`location ^~ /15ball/ { alias /home/kevin/15ball-scoresheet/; }`), so any file in
+   > the tree is served as-is. `overlay.html` went live the moment it was pulled. Only
+   > dotfiles (`.git`) are blocked.
+   >
+   > **STATUS: DONE.** `https://codeonline.io/15ball/overlay.html` → 200, and
+   > `?demo=1` → 200 with the animated sample scoreboard. Verified 2026-08-27.
+   >
+   > Re: the cross-process sync transport — if you go with "the Go `server/`
+   > broadcasting live match state," that's this deploy instance's backend
+   > (`fifteenball` service, same-origin `/15ball/api/`). It already runs on the box and
+   > could expose an SSE endpoint (e.g. `GET /15ball/api/live`) that the overlay/scorer
+   > subscribe to — no CORS, same origin as the overlay. Ping me if that becomes the
+   > chosen transport and I'll build it.
 
 ### Context you may want
 - The overlay's UI + state contract are **final**; the one deferred decision is the
