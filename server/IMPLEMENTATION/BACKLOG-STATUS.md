@@ -18,9 +18,9 @@ Legend: [ ] todo · [~] in progress · [x] done+deployed.
 - [x] A5 `idempotency_keys` table + dedup middleware/helper (needed by E/G; foundational)
 
 ## Slice B — tournaments + divisions
-- [ ] B1 migration: normalize `tournaments` (slug/name/state/visibility/version/archived), `divisions`, drop old `tables`/`assignments`/`challonge_exports*`
-- [ ] B2 tournament CRUD `/api/v1/tournaments` [GET,POST] `/{id}` [GET,PATCH] `/{id}/archive` [POST]
-- [ ] B3 divisions `/api/v1/tournaments/{id}/divisions` [GET,POST]
+- [x] B1 migration: normalize `tournaments` (slug/name/state/visibility/version/archived), `divisions`, drop old `tables`/`assignments`/`challonge_exports*`
+- [x] B2 tournament CRUD `/api/v1/tournaments` [GET,POST] `/{id}` [GET,PATCH] `/{id}/archive` [POST]
+- [x] B3 divisions `/api/v1/tournaments/{id}/divisions` [GET,POST]
 
 ## Slice C — entrants + check-in
 - [ ] C1 migration: `entrants`

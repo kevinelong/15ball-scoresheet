@@ -106,9 +106,13 @@ func (a *Auth) GrantRole(ctx context.Context, targetUserID, role, grantedBy stri
 	if err != nil || has {
 		return err
 	}
+	var by interface{}
+	if grantedBy != "" {
+		by = grantedBy
+	}
 	_, err = a.DB.ExecContext(ctx,
 		`INSERT INTO user_roles (id, user_id, role, granted_by, granted_at) VALUES (?, ?, ?, ?, ?)`,
-		newID("ur_"), targetUserID, role, grantedBy, time.Now().Unix())
+		newID("ur_"), targetUserID, role, by, time.Now().Unix())
 	if err == nil {
 		_, _ = a.DB.ExecContext(ctx, `UPDATE users SET pending_role = 0 WHERE id = ?`, targetUserID)
 	}

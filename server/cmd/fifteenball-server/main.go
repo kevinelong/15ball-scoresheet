@@ -16,6 +16,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/kevinelong/15ball-scoresheet/server/internal/api"
 	"github.com/kevinelong/15ball-scoresheet/server/internal/auth"
 	"github.com/kevinelong/15ball-scoresheet/server/internal/challonge"
 	"github.com/kevinelong/15ball-scoresheet/server/internal/config"
@@ -85,6 +86,19 @@ func main() {
 		Post("/api/v1/users/{id}/roles", a.GrantRoleHandler)
 	r.With(a.RequireCSRF, a.RequireSession, a.RequireRoles(auth.AdminOnly...)).
 		Delete("/api/v1/users/{id}/roles/{role}", a.RevokeRoleHandler)
+
+	// Domain API (/api/v1). Reads require a session; mutations require CSRF + director+.
+	dapi := api.New(st.DB, a)
+	sess := r.With(a.RequireSession)
+	dir := r.With(a.RequireCSRF, a.RequireSession, a.RequireRoles(auth.DirectorOrAbove...))
+	// tournaments + divisions (Slice B)
+	sess.Get("/api/v1/tournaments", dapi.ListTournaments)
+	dir.Post("/api/v1/tournaments", dapi.CreateTournament)
+	sess.Get("/api/v1/tournaments/{id}", dapi.GetTournament)
+	dir.Patch("/api/v1/tournaments/{id}", dapi.PatchTournament)
+	dir.Post("/api/v1/tournaments/{id}/archive", dapi.ArchiveTournament)
+	sess.Get("/api/v1/tournaments/{id}/divisions", dapi.ListDivisions)
+	dir.Post("/api/v1/tournaments/{id}/divisions", dapi.CreateDivision)
 
 	srv := &http.Server{
 		Addr:              cfg.ListenAddr,
