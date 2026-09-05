@@ -84,6 +84,11 @@ func newTestEnv(t *testing.T) *testEnv {
 	sess.Get("/api/v1/tournaments/{id}/matches/{matchId}/history", dapi.MatchHistory)
 	sess.With(a.RequireCSRF).Post("/api/v1/tournaments/{id}/matches/{matchId}/result", dapi.SubmitResult)
 	director.Post("/api/v1/tournaments/{id}/matches/{matchId}/reopen", dapi.ReopenMatch)
+	dirRead := r.With(a.RequireSession, a.RequireRoles(auth.DirectorOrAbove...))
+	sess.Get("/api/v1/tournaments/{id}/snapshot", dapi.Snapshot)
+	r.Get("/api/v1/public/tournaments/{id}", dapi.PublicTournament)
+	r.Get("/api/v1/public/tournaments/{id}/overlay", dapi.PublicOverlay)
+	dirRead.Get("/api/v1/tournaments/{id}/audit", dapi.ListAudit)
 
 	return &testEnv{api: dapi, auth: a, router: r,
 		director:   mkUser("director@x.com", auth.RoleTournamentDirector),

@@ -113,6 +113,12 @@ func main() {
 	// scoring (Slice E)
 	sess.With(a.RequireCSRF).Post("/api/v1/tournaments/{id}/matches/{matchId}/result", dapi.SubmitResult)
 	dir.Post("/api/v1/tournaments/{id}/matches/{matchId}/reopen", dapi.ReopenMatch)
+	// snapshot + public/overlay (Slice F, read side) + audit (Slice H1)
+	dirRead := r.With(a.RequireSession, a.RequireRoles(auth.DirectorOrAbove...))
+	sess.Get("/api/v1/tournaments/{id}/snapshot", dapi.Snapshot)
+	r.Get("/api/v1/public/tournaments/{id}", dapi.PublicTournament)
+	r.Get("/api/v1/public/tournaments/{id}/overlay", dapi.PublicOverlay)
+	dirRead.Get("/api/v1/tournaments/{id}/audit", dapi.ListAudit)
 
 	srv := &http.Server{
 		Addr:              cfg.ListenAddr,

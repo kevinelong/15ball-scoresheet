@@ -38,8 +38,8 @@ Legend: [ ] todo · [~] in progress · [x] done+deployed.
 ## Slice F — SSE + snapshot + public/overlay
 - [ ] F1 migration: `sse_event_log`
 - [ ] F2 SSE stream endpoint (hello/replay/heartbeat/snapshot_required)
-- [ ] F3 snapshot endpoint (+ OBS overlay normalization)
-- [ ] F4 public read-only + overlay endpoints (visibility-gated)
+- [x] F3 snapshot endpoint (+ OBS overlay normalization)
+- [x] F4 public read-only + overlay endpoints (visibility-gated)
 
 ## Slice G — Challonge sync
 - [ ] G1 migration: `challonge_tournaments`, `challonge_participant_map`, `challonge_match_map`, `outbox_jobs`
@@ -48,7 +48,7 @@ Legend: [ ] todo · [~] in progress · [x] done+deployed.
 - [ ] G4 job executors (ensure_tournament/sync_entrants/sync_matches/sync_results/reconcile)
 
 ## Slice H+I — audit view, fixtures, tests, deploy
-- [ ] H1 `GET /api/v1/tournaments/{id}/audit`
+- [x] H1 `GET /api/v1/tournaments/{id}/audit`
 - [ ] I1 idempotent seed fixtures (10-fixtures)
 - [ ] I2 acceptance test suite (09-acceptance-tests A–G)
 - [ ] I3 final migration validation + deploy verification
