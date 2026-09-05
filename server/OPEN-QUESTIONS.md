@@ -13,14 +13,12 @@ Closed/superseded decisions now codified in `server/IMPLEMENTATION/`:
 
 ## Still unresolved
 
-### [BLOCKING] Challonge auth/profile contract to implement first
+*(none — both prior items resolved in `DECISIONS/019-impl-locked-2026-09-05.md`.)*
 
-- **Question:** Should v1 sync use legacy API-key auth (`CHALLONGE_API_KEY`) from reconciled docs or OAuth2 app credentials from later implementation notes?
-- **Why blocking:** endpoint shape, credential config, and error/retry handling differ; implementers cannot safely code provider client until this is fixed.
-- **Needed decision format:** pick one auth model and define required env vars + token refresh behavior.
+## Resolved 2026-09-05 (see DECISIONS/019)
 
-### [NON-BLOCKING] Public visibility default per tournament
-
-- **Question:** Are tournaments public-readable by default, or private unless explicitly published?
-- **Why non-blocking:** internal organizer/scorer flows can be implemented first; only public endpoint defaults and UI copy depend on this.
-- **Current temporary assumption for planning docs:** public endpoints require explicit tournament visibility flag.
+- **[was BLOCKING] Challonge auth model** → **OAuth2 Connect client-credentials** (already
+  built + verified live; not the legacy API key). Env + token-refresh + idempotency-key
+  scheme in DECISIONS/019 §D1.
+- **[was NON-BLOCKING] Public visibility default** → **private by default**; public
+  endpoints 404 private tournaments. DECISIONS/019 §D2.
