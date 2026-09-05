@@ -4,12 +4,14 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"net/http"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/kevinelong/15ball-scoresheet/server/internal/audit"
 	"github.com/kevinelong/15ball-scoresheet/server/internal/auth"
+	"github.com/kevinelong/15ball-scoresheet/server/internal/notify"
 )
 
 type Match struct {
@@ -160,12 +162,54 @@ func (api *API) AssignMatch(w http.ResponseWriter, r *http.Request) {
 		After: after,
 	})
 	api.emitEvent(r.Context(), tx, tid, "match.updated", map[string]string{"matchId": mid, "state": "assigned"})
+	// A match assigned to a table is "ready" — enqueue opt-in SMS to both players
+	// (idempotent per match+entrant, so re-assigns don't re-text).
+	api.enqueueMatchReady(r.Context(), tx, tid, mid)
 	if err := tx.Commit(); err != nil {
 		writeErr(w, http.StatusInternalServerError, "server_error", "")
 		return
 	}
 	nm, _ := api.getMatch(r.Context(), tid, mid)
 	writeJSON(w, http.StatusOK, map[string]interface{}{"match": nm})
+}
+
+// enqueueMatchReady queues a match-ready SMS to each opt-in entrant of the match.
+// No-op unless SMS is enabled and the match has a table assigned. Best-effort:
+// enqueue failures never block the assign (the alert is advisory).
+func (api *API) enqueueMatchReady(ctx context.Context, tx *sql.Tx, tid, mid string) {
+	if !api.SMSEnabled {
+		return
+	}
+	var aID, bID, tableRef sql.NullString
+	if err := tx.QueryRowContext(ctx,
+		`SELECT entrant_a_id, entrant_b_id, table_ref FROM matches WHERE id=?`, mid).Scan(&aID, &bID, &tableRef); err != nil {
+		return
+	}
+	if !tableRef.Valid || tableRef.String == "" {
+		return // "ready" means at a table
+	}
+	var tname string
+	_ = tx.QueryRowContext(ctx, `SELECT name FROM tournaments WHERE id=?`, tid).Scan(&tname)
+	body := fmt.Sprintf("%s: your match is ready at Table %s. Please head to the table.", tname, tableRef.String)
+	for _, eid := range []sql.NullString{aID, bID} {
+		if !eid.Valid || eid.String == "" {
+			continue
+		}
+		var phone string
+		var optIn int
+		if err := tx.QueryRowContext(ctx,
+			`SELECT COALESCE(phone,''), notify_opt_in FROM entrants WHERE id=?`, eid.String).Scan(&phone, &optIn); err != nil {
+			continue
+		}
+		if phone == "" || optIn != 1 {
+			continue
+		}
+		_ = notify.Enqueue(ctx, tx, notify.Notification{
+			TournamentID: tid, MatchID: mid, EntrantID: eid.String,
+			Recipient: phone, Body: body,
+			DedupeKey: mid + ":" + eid.String + ":match_ready",
+		})
+	}
 }
 
 // StartMatch: POST /api/v1/tournaments/{id}/matches/{matchId}/start

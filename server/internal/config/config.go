@@ -37,6 +37,17 @@ type Config struct {
 	ChallongeAPIBase      string
 	ChallongeScope        string
 	ChallongeSubdomain    string
+
+	// Twilio SMS (match-ready alerts). All three required to enable sending.
+	TwilioAccountSID  string
+	TwilioAuthToken   string
+	TwilioFromNumber  string
+	TwilioAPIBase     string // override for tests; defaults to the live API
+}
+
+// SMSConfigured reports whether Twilio SMS sending is enabled.
+func (c *Config) SMSConfigured() bool {
+	return c.TwilioAccountSID != "" && c.TwilioAuthToken != "" && c.TwilioFromNumber != ""
 }
 
 func getenv(key, def string) string {
@@ -90,6 +101,10 @@ func Load() *Config {
 		ChallongeAPIBase:      strings.TrimRight(getenv("CHALLONGE_API_BASE", "https://api.challonge.com/v2"), "/"),
 		ChallongeScope:        getenv("CHALLONGE_SCOPE", "me application:manage tournaments:read tournaments:write matches:read matches:write participants:read participants:write"),
 		ChallongeSubdomain:    getenv("CHALLONGE_SUBDOMAIN", ""),
+		TwilioAccountSID:  getenv("TWILIO_ACCOUNT_SID", ""),
+		TwilioAuthToken:   getenv("TWILIO_AUTH_TOKEN", ""),
+		TwilioFromNumber:  getenv("TWILIO_FROM_NUMBER", ""),
+		TwilioAPIBase:     strings.TrimRight(getenv("TWILIO_API_BASE", "https://api.twilio.com"), "/"),
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -12,23 +13,27 @@ import (
 )
 
 type Entrant struct {
-	ID           string `json:"id"`
-	TournamentID string `json:"tournamentId"`
+	ID           string  `json:"id"`
+	TournamentID string  `json:"tournamentId"`
 	DivisionID   *string `json:"divisionId"`
-	DisplayName  string `json:"displayName"`
-	State        string `json:"state"`
-	CheckInAt    *int64 `json:"checkInAt"`
-	ArchivedAt   *int64 `json:"archivedAt"`
-	CreatedAt    int64  `json:"createdAt"`
-	UpdatedAt    int64  `json:"updatedAt"`
-	Version      int64  `json:"version"`
+	DisplayName  string  `json:"displayName"`
+	State        string  `json:"state"`
+	Phone        *string `json:"phone"`
+	NotifyOptIn  bool    `json:"notifyOptIn"`
+	CheckInAt    *int64  `json:"checkInAt"`
+	ArchivedAt   *int64  `json:"archivedAt"`
+	CreatedAt    int64   `json:"createdAt"`
+	UpdatedAt    int64   `json:"updatedAt"`
+	Version      int64   `json:"version"`
 }
 
-const entrantCols = `id, tournament_id, division_id, display_name, state, check_in_at, archived_at, created_at, updated_at, version`
+const entrantCols = `id, tournament_id, division_id, display_name, state, phone, notify_opt_in, check_in_at, archived_at, created_at, updated_at, version`
 
 func scanEntrant(row interface{ Scan(...any) error }) (*Entrant, error) {
 	var e Entrant
-	err := row.Scan(&e.ID, &e.TournamentID, &e.DivisionID, &e.DisplayName, &e.State, &e.CheckInAt, &e.ArchivedAt, &e.CreatedAt, &e.UpdatedAt, &e.Version)
+	var optIn int
+	err := row.Scan(&e.ID, &e.TournamentID, &e.DivisionID, &e.DisplayName, &e.State, &e.Phone, &optIn, &e.CheckInAt, &e.ArchivedAt, &e.CreatedAt, &e.UpdatedAt, &e.Version)
+	e.NotifyOptIn = optIn == 1
 	return &e, err
 }
 
@@ -58,6 +63,8 @@ func (api *API) CreateEntrant(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		DisplayName string  `json:"displayName"`
 		DivisionID  *string `json:"divisionId"`
+		Phone       *string `json:"phone"`
+		NotifyOptIn *bool   `json:"notifyOptIn"`
 	}
 	if !decodeBody(w, r, &body) {
 		return
@@ -66,13 +73,17 @@ func (api *API) CreateEntrant(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "invalid_display_name", "displayName is required (1-120 chars)")
 		return
 	}
+	optIn := 0
+	if body.NotifyOptIn != nil && *body.NotifyOptIn {
+		optIn = 1
+	}
 	id := newID("ent_")
 	now := time.Now().Unix()
 	tx, _ := api.DB.BeginTx(r.Context(), nil)
 	defer tx.Rollback()
 	_, err := tx.ExecContext(r.Context(),
-		`INSERT INTO entrants (id, tournament_id, division_id, display_name, state, created_at, updated_at)
-		 VALUES (?,?,?,?, 'pending', ?, ?)`, id, tid, body.DivisionID, body.DisplayName, now, now)
+		`INSERT INTO entrants (id, tournament_id, division_id, display_name, state, phone, notify_opt_in, created_at, updated_at)
+		 VALUES (?,?,?,?, 'pending', ?, ?, ?, ?)`, id, tid, body.DivisionID, body.DisplayName, body.Phone, optIn, now, now)
 	if err != nil {
 		writeErr(w, http.StatusConflict, "duplicate_display_name", "an entrant with that name already exists")
 		return
@@ -201,6 +212,8 @@ func (api *API) PatchEntrant(w http.ResponseWriter, r *http.Request) {
 		DisplayName *string `json:"displayName"`
 		State       *string `json:"state"`
 		Reason      string  `json:"reason"`
+		Phone       *string `json:"phone"`
+		NotifyOptIn *bool   `json:"notifyOptIn"`
 	}
 	if !decodeBody(w, r, &body) {
 		return
@@ -209,7 +222,7 @@ func (api *API) PatchEntrant(w http.ResponseWriter, r *http.Request) {
 		api.applyEntrantState(w, r, tid, eid, *body.State, body.Reason)
 		return
 	}
-	// metadata-only update (display name)
+	// metadata-only update (display name / phone / notify opt-in)
 	cur, err := api.getEntrant(r.Context(), tid, eid)
 	if errors.Is(err, sql.ErrNoRows) {
 		writeErr(w, http.StatusNotFound, "not_found", "entrant not found")
@@ -219,22 +232,45 @@ func (api *API) PatchEntrant(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "server_error", "")
 		return
 	}
-	if body.DisplayName == nil || *body.DisplayName == "" {
+	sets := []string{}
+	args := []any{}
+	after := map[string]interface{}{}
+	if body.DisplayName != nil && *body.DisplayName != "" {
+		sets = append(sets, "display_name=?")
+		args = append(args, *body.DisplayName)
+		after["displayName"] = *body.DisplayName
+	}
+	if body.Phone != nil {
+		sets = append(sets, "phone=?")
+		args = append(args, *body.Phone)
+		after["phone"] = *body.Phone
+	}
+	if body.NotifyOptIn != nil {
+		v := 0
+		if *body.NotifyOptIn {
+			v = 1
+		}
+		sets = append(sets, "notify_opt_in=?")
+		args = append(args, v)
+		after["notifyOptIn"] = *body.NotifyOptIn
+	}
+	if len(sets) == 0 {
 		writeJSON(w, http.StatusOK, map[string]interface{}{"entrant": cur})
 		return
 	}
 	now := time.Now().Unix()
 	tx, _ := api.DB.BeginTx(r.Context(), nil)
 	defer tx.Rollback()
+	args = append(args, now, eid)
 	if _, err := tx.ExecContext(r.Context(),
-		`UPDATE entrants SET display_name=?, updated_at=?, version=version+1 WHERE id=?`, *body.DisplayName, now, eid); err != nil {
+		`UPDATE entrants SET `+strings.Join(sets, ", ")+`, updated_at=?, version=version+1 WHERE id=?`, args...); err != nil {
 		writeErr(w, http.StatusConflict, "duplicate_display_name", "an entrant with that name already exists")
 		return
 	}
 	_ = audit.Write(r.Context(), tx, audit.Entry{
 		EntityType: "entrant", EntityID: eid, Action: "updated",
 		ActorUserID: actor(r.Context()), RequestID: reqID(r.Context()),
-		Before: map[string]string{"displayName": cur.DisplayName}, After: map[string]string{"displayName": *body.DisplayName},
+		After: after,
 	})
 	if err := tx.Commit(); err != nil {
 		writeErr(w, http.StatusInternalServerError, "server_error", "")

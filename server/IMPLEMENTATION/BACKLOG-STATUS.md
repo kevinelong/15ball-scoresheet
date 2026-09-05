@@ -59,3 +59,11 @@ Legend: [ ] todo · [~] in progress · [x] done+deployed.
       overlay 404 schema-valid, worker + Challonge up, migrations clean in logs
 
 ## Status: v1 backend COMPLETE — all slices A–I implemented, tested, deployed.
+
+## Post-v1 enhancements (requested 2026-09-05)
+- [x] Slice J — table assignment: `matches.table_ref`, wired through assign (COALESCE
+      keeps prior), exposed on match JSON + overlay. Deployed (migration 0008).
+- [x] Slice K — SMS match-ready alerts (Twilio): entrant `phone`+`notify_opt_in`,
+      `notifications` outbox + Twilio sender (+ fake) + retry/backoff worker; enqueued
+      on assign-to-table (idempotent per match+entrant), gated on `SMSConfigured()`.
+      Deployed (migration 0009); dormant until `TWILIO_*` env set (see ops runbook).

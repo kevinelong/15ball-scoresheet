@@ -21,6 +21,7 @@ import (
 	"github.com/kevinelong/15ball-scoresheet/server/internal/challonge"
 	"github.com/kevinelong/15ball-scoresheet/server/internal/config"
 	"github.com/kevinelong/15ball-scoresheet/server/internal/mail"
+	"github.com/kevinelong/15ball-scoresheet/server/internal/notify"
 	"github.com/kevinelong/15ball-scoresheet/server/internal/store"
 	"github.com/kevinelong/15ball-scoresheet/server/internal/syncer"
 )
@@ -90,6 +91,7 @@ func main() {
 
 	// Domain API (/api/v1). Reads require a session; mutations require CSRF + director+.
 	dapi := api.New(st.DB, a)
+	dapi.SMSEnabled = cfg.SMSConfigured() // gate match-ready SMS enqueue on Twilio config
 	sess := r.With(a.RequireSession)
 	dir := r.With(a.RequireCSRF, a.RequireSession, a.RequireRoles(auth.DirectorOrAbove...))
 	// tournaments + divisions (Slice B)
@@ -140,6 +142,16 @@ func main() {
 	if ch.Configured() {
 		wk := &syncer.Worker{DB: st.DB, Provider: &syncer.ChallongeProvider{C: ch}}
 		go wk.Run(root)
+	}
+
+	// SMS notification worker (Slice K): drains match-ready alerts via Twilio.
+	if cfg.SMSConfigured() {
+		sender := notify.NewTwilio(cfg.TwilioAccountSID, cfg.TwilioAuthToken, cfg.TwilioFromNumber, cfg.TwilioAPIBase)
+		nw := &notify.Worker{DB: st.DB, Sender: sender}
+		go nw.Run(root)
+		log.Printf("notify: Twilio SMS enabled (from %s)", cfg.TwilioFromNumber)
+	} else {
+		log.Printf("notify: SMS not configured (TWILIO_* empty) — match-ready alerts disabled")
 	}
 
 	go func() {

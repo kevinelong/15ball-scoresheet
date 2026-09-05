@@ -21,6 +21,9 @@ import (
 type API struct {
 	DB   *sql.DB
 	Auth *auth.Auth
+	// SMSEnabled gates match-ready SMS enqueue; set true when Twilio is configured
+	// so notifications aren't queued with no worker to drain them.
+	SMSEnabled bool
 }
 
 func New(db *sql.DB, a *auth.Auth) *API { return &API{DB: db, Auth: a} }
