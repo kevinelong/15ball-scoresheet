@@ -73,7 +73,10 @@ func TestMatchReadySMS(t *testing.T) {
 	if len(fake.Messages) != 1 {
 		t.Fatalf("want 1 sent message, got %d", len(fake.Messages))
 	}
-	if fake.Messages[0].To != "+15550000001" || !strings.Contains(fake.Messages[0].Body, "Table 7") {
+	// Ann is texted, and the body names her opponent (Bob) and the table.
+	if fake.Messages[0].To != "+15550000001" ||
+		!strings.Contains(fake.Messages[0].Body, "Bob") ||
+		!strings.Contains(fake.Messages[0].Body, "table 7") {
 		t.Fatalf("unexpected message: %+v", fake.Messages[0])
 	}
 }

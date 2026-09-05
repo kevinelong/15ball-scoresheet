@@ -188,26 +188,38 @@ func (api *API) enqueueMatchReady(ctx context.Context, tx *sql.Tx, tid, mid stri
 	if !tableRef.Valid || tableRef.String == "" {
 		return // "ready" means at a table
 	}
-	var tname string
-	_ = tx.QueryRowContext(ctx, `SELECT name FROM tournaments WHERE id=?`, tid).Scan(&tname)
-	body := fmt.Sprintf("%s: your match is ready at Table %s. Please head to the table.", tname, tableRef.String)
-	for _, eid := range []sql.NullString{aID, bID} {
-		if !eid.Valid || eid.String == "" {
-			continue
-		}
+	// Each player is texted their own opponent's name.
+	type rcpt struct{ eid, oppID string }
+	pairs := []rcpt{}
+	if aID.Valid && aID.String != "" {
+		pairs = append(pairs, rcpt{aID.String, bID.String})
+	}
+	if bID.Valid && bID.String != "" {
+		pairs = append(pairs, rcpt{bID.String, aID.String})
+	}
+	for _, p := range pairs {
 		var phone string
 		var optIn int
 		if err := tx.QueryRowContext(ctx,
-			`SELECT COALESCE(phone,''), notify_opt_in FROM entrants WHERE id=?`, eid.String).Scan(&phone, &optIn); err != nil {
+			`SELECT COALESCE(phone,''), notify_opt_in FROM entrants WHERE id=?`, p.eid).Scan(&phone, &optIn); err != nil {
 			continue
 		}
 		if phone == "" || optIn != 1 {
 			continue
 		}
+		oppName := "your opponent"
+		if p.oppID != "" {
+			var n sql.NullString
+			_ = tx.QueryRowContext(ctx, `SELECT display_name FROM entrants WHERE id=?`, p.oppID).Scan(&n)
+			if n.Valid && n.String != "" {
+				oppName = n.String
+			}
+		}
+		body := fmt.Sprintf("Your match against %s is starting now on table %s.", oppName, tableRef.String)
 		_ = notify.Enqueue(ctx, tx, notify.Notification{
-			TournamentID: tid, MatchID: mid, EntrantID: eid.String,
+			TournamentID: tid, MatchID: mid, EntrantID: p.eid,
 			Recipient: phone, Body: body,
-			DedupeKey: mid + ":" + eid.String + ":match_ready",
+			DedupeKey: mid + ":" + p.eid + ":match_ready",
 		})
 	}
 }
