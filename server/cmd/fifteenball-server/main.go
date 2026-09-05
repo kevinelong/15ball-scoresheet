@@ -99,6 +99,12 @@ func main() {
 	dir.Post("/api/v1/tournaments/{id}/archive", dapi.ArchiveTournament)
 	sess.Get("/api/v1/tournaments/{id}/divisions", dapi.ListDivisions)
 	dir.Post("/api/v1/tournaments/{id}/divisions", dapi.CreateDivision)
+	// entrants + check-in (Slice C)
+	sess.Get("/api/v1/tournaments/{id}/entrants", dapi.ListEntrants)
+	dir.Post("/api/v1/tournaments/{id}/entrants", dapi.CreateEntrant)
+	dir.Patch("/api/v1/tournaments/{id}/entrants/{entrantId}", dapi.PatchEntrant)
+	dir.Post("/api/v1/tournaments/{id}/entrants/{entrantId}/check-in", dapi.CheckInEntrant)
+	dir.Post("/api/v1/tournaments/{id}/entrants/{entrantId}/archive", dapi.ArchiveEntrant)
 
 	srv := &http.Server{
 		Addr:              cfg.ListenAddr,

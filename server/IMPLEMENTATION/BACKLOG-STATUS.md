@@ -23,8 +23,8 @@ Legend: [ ] todo · [~] in progress · [x] done+deployed.
 - [x] B3 divisions `/api/v1/tournaments/{id}/divisions` [GET,POST]
 
 ## Slice C — entrants + check-in
-- [ ] C1 migration: `entrants`
-- [ ] C2 entrant CRUD + `/check-in` + `/archive`
+- [x] C1 migration: `entrants`
+- [x] C2 entrant CRUD + `/check-in` + `/archive`
 
 ## Slice D — brackets + matches
 - [ ] D1 migration: `matches`, `match_results`

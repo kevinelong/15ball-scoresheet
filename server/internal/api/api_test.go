@@ -71,6 +71,11 @@ func newTestEnv(t *testing.T) *testEnv {
 	director.Post("/api/v1/tournaments/{id}/archive", dapi.ArchiveTournament)
 	sess.Get("/api/v1/tournaments/{id}/divisions", dapi.ListDivisions)
 	director.Post("/api/v1/tournaments/{id}/divisions", dapi.CreateDivision)
+	sess.Get("/api/v1/tournaments/{id}/entrants", dapi.ListEntrants)
+	director.Post("/api/v1/tournaments/{id}/entrants", dapi.CreateEntrant)
+	director.Patch("/api/v1/tournaments/{id}/entrants/{entrantId}", dapi.PatchEntrant)
+	director.Post("/api/v1/tournaments/{id}/entrants/{entrantId}/check-in", dapi.CheckInEntrant)
+	director.Post("/api/v1/tournaments/{id}/entrants/{entrantId}/archive", dapi.ArchiveEntrant)
 
 	return &testEnv{api: dapi, auth: a, router: r,
 		director: mkUser("director@x.com", auth.RoleTournamentDirector),
