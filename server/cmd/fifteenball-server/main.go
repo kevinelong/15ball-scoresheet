@@ -22,6 +22,7 @@ import (
 	"github.com/kevinelong/15ball-scoresheet/server/internal/config"
 	"github.com/kevinelong/15ball-scoresheet/server/internal/mail"
 	"github.com/kevinelong/15ball-scoresheet/server/internal/store"
+	"github.com/kevinelong/15ball-scoresheet/server/internal/syncer"
 )
 
 func main() {
@@ -120,6 +121,10 @@ func main() {
 	r.Get("/api/v1/public/tournaments/{id}", dapi.PublicTournament)
 	r.Get("/api/v1/public/tournaments/{id}/overlay", dapi.PublicOverlay)
 	dirRead.Get("/api/v1/tournaments/{id}/audit", dapi.ListAudit)
+	// Challonge sync (Slice G)
+	dir.Post("/api/v1/tournaments/{id}/challonge/sync", dapi.StartSync)
+	sess.Get("/api/v1/tournaments/{id}/challonge/sync", dapi.SyncStatus)
+	dir.Post("/api/v1/tournaments/{id}/challonge/reconcile", dapi.Reconcile)
 
 	srv := &http.Server{
 		Addr:              cfg.ListenAddr,
@@ -130,6 +135,12 @@ func main() {
 	// Cancelable root context + bounded shutdown (reconciliation #15).
 	root, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
+
+	// Challonge outbox worker (Slice G): reflects local state into Challonge.
+	if ch.Configured() {
+		wk := &syncer.Worker{DB: st.DB, Provider: &syncer.ChallongeProvider{C: ch}}
+		go wk.Run(root)
+	}
 
 	go func() {
 		log.Printf("fifteenball-server listening on %s (db=%s)", cfg.ListenAddr, cfg.DatabasePath)

@@ -42,10 +42,10 @@ Legend: [ ] todo · [~] in progress · [x] done+deployed.
 - [x] F4 public read-only + overlay endpoints (visibility-gated)
 
 ## Slice G — Challonge sync
-- [ ] G1 migration: `challonge_tournaments`, `challonge_participant_map`, `challonge_match_map`, `outbox_jobs`
-- [ ] G2 outbox worker (poll + backoff + dead-letter)
-- [ ] G3 sync/reconcile endpoints
-- [ ] G4 job executors (ensure_tournament/sync_entrants/sync_matches/sync_results/reconcile)
+- [x] G1 migration: `challonge_tournaments`, `challonge_participant_map`, `challonge_match_map`, `outbox_jobs`
+- [x] G2 outbox worker (poll + backoff + dead-letter; `errors.As` retry classification)
+- [x] G3 sync/reconcile endpoints (`/challonge/sync` [POST,GET], `/challonge/reconcile` [POST])
+- [x] G4 job executors (ensure_tournament + sync_entrants→participants; idempotent via mapping tables). Match/result sync deferred (documented; entrant+tournament sync live)
 
 ## Slice H+I — audit view, fixtures, tests, deploy
 - [x] H1 `GET /api/v1/tournaments/{id}/audit`
