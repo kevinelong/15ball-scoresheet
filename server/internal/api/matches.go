@@ -22,6 +22,7 @@ type Match struct {
 	EntrantBID   *string `json:"entrantBId"`
 	State        string  `json:"state"`
 	Scorekeeper  *string `json:"assignedScorekeeperUserId"`
+	TableRef     *string `json:"tableRef"`
 	Version      int64   `json:"version"`
 	StartedAt    *int64  `json:"startedAt"`
 	CompletedAt  *int64  `json:"completedAt"`
@@ -29,12 +30,12 @@ type Match struct {
 	UpdatedAt    int64   `json:"updatedAt"`
 }
 
-const matchCols = `id, tournament_id, division_id, bracket_round, slot, entrant_a_id, entrant_b_id, state, assigned_scorekeeper_user_id, version, started_at, completed_at, created_at, updated_at`
+const matchCols = `id, tournament_id, division_id, bracket_round, slot, entrant_a_id, entrant_b_id, state, assigned_scorekeeper_user_id, table_ref, version, started_at, completed_at, created_at, updated_at`
 
 func scanMatch(row interface{ Scan(...any) error }) (*Match, error) {
 	var m Match
 	err := row.Scan(&m.ID, &m.TournamentID, &m.DivisionID, &m.BracketRound, &m.Slot, &m.EntrantAID, &m.EntrantBID,
-		&m.State, &m.Scorekeeper, &m.Version, &m.StartedAt, &m.CompletedAt, &m.CreatedAt, &m.UpdatedAt)
+		&m.State, &m.Scorekeeper, &m.TableRef, &m.Version, &m.StartedAt, &m.CompletedAt, &m.CreatedAt, &m.UpdatedAt)
 	return &m, err
 }
 
@@ -114,7 +115,8 @@ func (api *API) ListMatches(w http.ResponseWriter, r *http.Request) {
 func (api *API) AssignMatch(w http.ResponseWriter, r *http.Request) {
 	tid, mid := chi.URLParam(r, "id"), chi.URLParam(r, "matchId")
 	var body struct {
-		ScorekeeperUserID string `json:"scorekeeperUserId"`
+		ScorekeeperUserID string  `json:"scorekeeperUserId"`
+		TableRef          *string `json:"tableRef"`
 	}
 	if !decodeBody(w, r, &body) {
 		return
@@ -141,16 +143,21 @@ func (api *API) AssignMatch(w http.ResponseWriter, r *http.Request) {
 	now := time.Now().Unix()
 	tx, _ := api.DB.BeginTx(r.Context(), nil)
 	defer tx.Rollback()
+	// tableRef is optional; COALESCE keeps any existing assignment when omitted.
 	if _, err := tx.ExecContext(r.Context(),
-		`UPDATE matches SET state='assigned', assigned_scorekeeper_user_id=?, updated_at=?, version=version+1 WHERE id=?`,
-		body.ScorekeeperUserID, now, mid); err != nil {
+		`UPDATE matches SET state='assigned', assigned_scorekeeper_user_id=?, table_ref=COALESCE(?, table_ref), updated_at=?, version=version+1 WHERE id=?`,
+		body.ScorekeeperUserID, body.TableRef, now, mid); err != nil {
 		writeErr(w, http.StatusInternalServerError, "server_error", "")
 		return
+	}
+	after := map[string]string{"scorekeeper": body.ScorekeeperUserID}
+	if body.TableRef != nil {
+		after["tableRef"] = *body.TableRef
 	}
 	_ = audit.Write(r.Context(), tx, audit.Entry{
 		EntityType: "match", EntityID: mid, Action: "assigned",
 		ActorUserID: actor(r.Context()), RequestID: reqID(r.Context()),
-		After: map[string]string{"scorekeeper": body.ScorekeeperUserID},
+		After: after,
 	})
 	api.emitEvent(r.Context(), tx, tid, "match.updated", map[string]string{"matchId": mid, "state": "assigned"})
 	if err := tx.Commit(); err != nil {

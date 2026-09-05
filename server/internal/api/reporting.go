@@ -119,10 +119,10 @@ func (api *API) buildOverlay(r *http.Request, id string) (map[string]interface{}
 	}
 	// pick the most-recently-updated live match
 	var mid string
-	var aID, bID sql.NullString
+	var aID, bID, tableRef sql.NullString
 	err = api.DB.QueryRowContext(r.Context(),
-		`SELECT id, entrant_a_id, entrant_b_id FROM matches WHERE tournament_id=? AND state IN ('in_progress','reopened') ORDER BY updated_at DESC LIMIT 1`, id).
-		Scan(&mid, &aID, &bID)
+		`SELECT id, entrant_a_id, entrant_b_id, table_ref FROM matches WHERE tournament_id=? AND state IN ('in_progress','reopened') ORDER BY updated_at DESC LIMIT 1`, id).
+		Scan(&mid, &aID, &bID, &tableRef)
 	if err != nil {
 		return ov, nil // no live match
 	}
@@ -135,6 +135,9 @@ func (api *API) buildOverlay(r *http.Request, id string) (map[string]interface{}
 		return n
 	}
 	ov["matchId"] = mid
+	if tableRef.Valid {
+		ov["tableRef"] = tableRef.String
+	}
 	ov["players"] = []map[string]interface{}{
 		{"name": name(aID.String)},
 		{"name": name(bID.String)},
