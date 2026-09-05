@@ -166,18 +166,29 @@ func (a *Auth) ConfirmLink(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "server_error"})
 		return
 	}
+	// Backfill role for pre-existing users + record sign-in.
+	_ = a.EnsureProvisioned(r.Context(), userID, "")
+	a.touchLastLogin(r.Context(), userID)
 	http.SetCookie(w, a.sessionCookie(raw, int(a.Cfg.SessionTTL.Seconds())))
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "redirect": "/15ball/"})
 }
 
-// Me: GET /api/me -> {email} (RequireSession wired in main).
+// Me: GET /api/me -> {userId,email,roles,pending} (RequireSession wired in main).
 func (a *Auth) Me(w http.ResponseWriter, r *http.Request) {
-	email, err := a.UserEmail(r.Context(), UserID(r.Context()))
+	uid := UserID(r.Context())
+	email, err := a.UserEmail(r.Context(), uid)
 	if err != nil {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthenticated"})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"email": email})
+	roles, _ := a.Roles(r.Context(), uid)
+	if roles == nil {
+		roles = []string{}
+	}
+	pending, _ := a.Pending(r.Context(), uid)
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"userId": uid, "email": email, "roles": roles, "pending": pending,
+	})
 }
 
 // Signout: POST /api/auth/signout -> revoke + clear cookie (RequireCSRF wired).

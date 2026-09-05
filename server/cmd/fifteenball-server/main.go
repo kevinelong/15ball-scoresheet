@@ -66,6 +66,7 @@ func main() {
 
 	r := chi.NewRouter()
 	r.Use(middleware.RealIP)
+	r.Use(middleware.RequestID) // request_id threaded into audit rows
 	r.Use(middleware.Recoverer)
 
 	// Health is registered before any authenticated routing (reconciliation #14).
@@ -78,6 +79,12 @@ func main() {
 	r.With(a.RequireCSRF).Post("/api/auth/confirm-link", a.ConfirmLink)
 	r.With(a.RequireSession).Get("/api/me", a.Me)
 	r.With(a.RequireCSRF, a.RequireSession).Post("/api/auth/signout", a.Signout)
+
+	// Admin: user role management (system_admin/club_admin only), CSRF + audited.
+	r.With(a.RequireCSRF, a.RequireSession, a.RequireRoles(auth.AdminOnly...)).
+		Post("/api/v1/users/{id}/roles", a.GrantRoleHandler)
+	r.With(a.RequireCSRF, a.RequireSession, a.RequireRoles(auth.AdminOnly...)).
+		Delete("/api/v1/users/{id}/roles/{role}", a.RevokeRoleHandler)
 
 	srv := &http.Server{
 		Addr:              cfg.ListenAddr,

@@ -11,11 +11,11 @@ Legend: [ ] todo · [~] in progress · [x] done+deployed.
 - [x] Challonge Connect OAuth2 client (token cache + JSON:API Do + Ping), verified live
 
 ## Slice A — policy, roles, audit, idempotency
-- [ ] A1 migration: `user_roles`, `users.pending_role`, migrate old org roles → fixed set
-- [ ] A2 `GET /api/me` → `{userId,email,roles[],pending}`
-- [ ] A3 `RequireRoles(...)` middleware (403 on miss)
-- [ ] A4 `audit_log` table + transactional audit-write helper + request_id middleware
-- [ ] A5 `idempotency_keys` table + dedup middleware/helper (needed by E/G; foundational)
+- [x] A1 migration: `user_roles`, `users.pending_role`, migrate old org roles → fixed set
+- [x] A2 `GET /api/me` → `{userId,email,roles[],pending}`
+- [x] A3 `RequireRoles(...)` middleware (403 on miss)
+- [x] A4 `audit_log` table + transactional audit-write helper + request_id middleware
+- [x] A5 `idempotency_keys` table + dedup middleware/helper (needed by E/G; foundational)
 
 ## Slice B — tournaments + divisions
 - [ ] B1 migration: normalize `tournaments` (slug/name/state/visibility/version/archived), `divisions`, drop old `tables`/`assignments`/`challonge_exports*`

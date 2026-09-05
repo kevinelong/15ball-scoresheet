@@ -18,7 +18,8 @@ type Config struct {
 	MagicLinkTTL time.Duration // MAGIC_LINK_TTL_MINUTES, default 15m
 	SessionTTL   time.Duration // SESSION_TTL_DAYS, default 30d
 
-	AllowedEmails []string // ALLOWED_EMAILS, comma-separated; empty = open sign-up
+	AllowedEmails   []string // ALLOWED_EMAILS, comma-separated; empty = open sign-up gate
+	BootstrapAdmins []string // BOOTSTRAP_ADMINS; these emails get system_admin (DECISIONS/019 §D3)
 
 	// Email (SMTP required; Postmark optional behind the same Mailer interface).
 	EmailTransport string // EMAIL_TRANSPORT, default "smtp"
@@ -56,13 +57,20 @@ func atoi(key string, def int) int {
 
 // Load reads config from the process environment, applying safe defaults.
 func Load() *Config {
-	emails := []string{}
-	for _, e := range strings.Split(getenv("ALLOWED_EMAILS", ""), ",") {
-		if s := strings.ToLower(strings.TrimSpace(e)); s != "" {
-			emails = append(emails, s)
+	parseList := func(v string) []string {
+		out := []string{}
+		for _, e := range strings.Split(v, ",") {
+			if s := strings.ToLower(strings.TrimSpace(e)); s != "" {
+				out = append(out, s)
+			}
 		}
+		return out
 	}
+	emails := parseList(getenv("ALLOWED_EMAILS", ""))
+	// Bootstrap admins default to the ALLOWED_EMAILS set for continuity if unset.
+	admins := parseList(getenv("BOOTSTRAP_ADMINS", getenv("ALLOWED_EMAILS", "")))
 	return &Config{
+		BootstrapAdmins:    admins,
 		ListenAddr:         getenv("LISTEN_ADDR", "127.0.0.1:8093"),
 		DatabasePath:       getenv("DATABASE_PATH", "/var/lib/fifteenball/data.db"),
 		BaseURL:            strings.TrimRight(getenv("BASE_URL", "https://codeonline.io/15ball"), "/"),
@@ -92,6 +100,18 @@ func (c *Config) EmailAllowed(email string) bool {
 	}
 	e := strings.ToLower(strings.TrimSpace(email))
 	for _, a := range c.AllowedEmails {
+		if a == e {
+			return true
+		}
+	}
+	return false
+}
+
+// IsBootstrapAdmin reports whether an email should receive system_admin on
+// sign-in (DECISIONS/019 §D3).
+func (c *Config) IsBootstrapAdmin(email string) bool {
+	e := strings.ToLower(strings.TrimSpace(email))
+	for _, a := range c.BootstrapAdmins {
 		if a == e {
 			return true
 		}

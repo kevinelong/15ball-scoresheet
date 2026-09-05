@@ -75,6 +75,8 @@ func (a *Auth) upsertUser(ctx context.Context, email string) (string, error) {
 		}
 		return "", err
 	}
+	// Provision the initial role on first creation (idempotent).
+	_ = a.EnsureProvisioned(ctx, id, email)
 	return id, nil
 }
 
