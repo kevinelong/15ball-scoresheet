@@ -43,6 +43,11 @@ type Config struct {
 	TwilioAuthToken   string
 	TwilioFromNumber  string
 	TwilioAPIBase     string // override for tests; defaults to the live API
+
+	// EnvFilePath is the on-disk env file the service is booted from. The SMS
+	// worker re-reads it at runtime so Twilio creds added to the file take effect
+	// without a restart (requires the file be readable by the service user).
+	EnvFilePath string
 }
 
 // SMSConfigured reports whether Twilio SMS sending is enabled.
@@ -105,7 +110,40 @@ func Load() *Config {
 		TwilioAuthToken:   getenv("TWILIO_AUTH_TOKEN", ""),
 		TwilioFromNumber:  getenv("TWILIO_FROM_NUMBER", ""),
 		TwilioAPIBase:     strings.TrimRight(getenv("TWILIO_API_BASE", "https://api.twilio.com"), "/"),
+		EnvFilePath:       getenv("FIFTEENBALL_ENV_FILE", "/etc/fifteenball/fifteenball.env"),
 	}
+}
+
+// ParseEnvFile reads a shell-style KEY=VALUE env file (as sourced by the OpenRC
+// service) into a map. Blank lines and #-comments are skipped; a leading
+// `export ` is stripped; surrounding single/double quotes are removed. Used to
+// pick up secrets (e.g. Twilio) added to the file after boot, without a restart.
+func ParseEnvFile(path string) (map[string]string, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]string{}
+	for _, line := range strings.Split(string(b), "\n") {
+		s := strings.TrimSpace(line)
+		if s == "" || strings.HasPrefix(s, "#") {
+			continue
+		}
+		s = strings.TrimPrefix(s, "export ")
+		eq := strings.IndexByte(s, '=')
+		if eq <= 0 {
+			continue
+		}
+		key := strings.TrimSpace(s[:eq])
+		val := strings.TrimSpace(s[eq+1:])
+		if len(val) >= 2 {
+			if (val[0] == '"' && val[len(val)-1] == '"') || (val[0] == '\'' && val[len(val)-1] == '\'') {
+				val = val[1 : len(val)-1]
+			}
+		}
+		out[key] = val
+	}
+	return out, nil
 }
 
 // EmailAllowed reports whether an address may sign in. Empty allowlist = open.

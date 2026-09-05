@@ -47,9 +47,24 @@ type Notification struct {
 }
 
 type Worker struct {
-	DB       *sql.DB
-	Sender   Sender
+	DB     *sql.DB
+	Sender Sender // fixed sender (tests); if nil, Resolve is used
+	// Resolve lazily provides a Sender (e.g. built once Twilio creds appear in the
+	// env file). Returns nil while SMS is not yet configured — the worker then
+	// no-ops and leaves jobs pending until creds arrive. No restart required.
+	Resolve  func() Sender
 	Interval time.Duration
+}
+
+// sender returns the active sender, preferring a fixed one, else resolving lazily.
+func (wk *Worker) sender() Sender {
+	if wk.Sender != nil {
+		return wk.Sender
+	}
+	if wk.Resolve != nil {
+		return wk.Resolve()
+	}
+	return nil
 }
 
 func newID(p string) string {
@@ -92,6 +107,10 @@ func (wk *Worker) Run(ctx context.Context) {
 
 // ProcessOne claims and sends at most one ready notification. Returns true if it did.
 func (wk *Worker) ProcessOne(ctx context.Context) bool {
+	sender := wk.sender()
+	if sender == nil {
+		return false // SMS not configured yet — leave jobs pending
+	}
 	var id, to, body string
 	err := wk.DB.QueryRowContext(ctx,
 		`SELECT id, recipient, body FROM notifications
@@ -104,7 +123,7 @@ func (wk *Worker) ProcessOne(ctx context.Context) bool {
 		return true // claimed by someone else; keep looping
 	}
 
-	provID, sendErr := wk.Sender.Send(ctx, to, body)
+	provID, sendErr := sender.Send(ctx, to, body)
 	if sendErr == nil {
 		_, _ = wk.DB.ExecContext(ctx,
 			`UPDATE notifications SET status='sent', provider_message_id=?, last_error=NULL, updated_at=? WHERE id=?`, provID, now(), id)

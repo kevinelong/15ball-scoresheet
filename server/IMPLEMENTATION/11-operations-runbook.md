@@ -28,8 +28,11 @@ TWILIO_FROM_NUMBER=+1XXXXXXXXXX        # a Twilio-owned SMS number
 # TWILIO_API_BASE optional (tests only; defaults to https://api.twilio.com)
 ```
 
-On start the log prints either `notify: Twilio SMS enabled (from …)` or
-`notify: SMS not configured …`. Behaviour:
+The SMS worker is **always running** and resolves creds lazily: it reads the
+process env, then re-reads the env file. So you can add `TWILIO_*` to the file and
+SMS activates **without a restart** — the log prints `notify: Twilio SMS enabled
+(from …)` on the next tick. This requires the file stay **`0640 root:fifteenball`**
+so the service user can read it (see DECISIONS/020). Behaviour:
 
 - A player is texted only if their entrant has a `phone` **and** `notifyOptIn=true`
   (consent). Set both via entrant create/patch.

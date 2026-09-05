@@ -21,12 +21,16 @@ import (
 type API struct {
 	DB   *sql.DB
 	Auth *auth.Auth
-	// SMSEnabled gates match-ready SMS enqueue; set true when Twilio is configured
-	// so notifications aren't queued with no worker to drain them.
-	SMSEnabled bool
+	// SMSReady gates match-ready SMS enqueue; it is evaluated per request so that
+	// Twilio creds added to the env file after boot take effect without a restart.
+	// Nil means SMS is off.
+	SMSReady func() bool
 }
 
 func New(db *sql.DB, a *auth.Auth) *API { return &API{DB: db, Auth: a} }
+
+// smsReady reports whether match-ready SMS should be enqueued right now.
+func (api *API) smsReady() bool { return api.SMSReady != nil && api.SMSReady() }
 
 // ---- response helpers ------------------------------------------------------
 

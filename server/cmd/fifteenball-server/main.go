@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -91,7 +92,6 @@ func main() {
 
 	// Domain API (/api/v1). Reads require a session; mutations require CSRF + director+.
 	dapi := api.New(st.DB, a)
-	dapi.SMSEnabled = cfg.SMSConfigured() // gate match-ready SMS enqueue on Twilio config
 	sess := r.With(a.RequireSession)
 	dir := r.With(a.RequireCSRF, a.RequireSession, a.RequireRoles(auth.DirectorOrAbove...))
 	// tournaments + divisions (Slice B)
@@ -145,13 +145,17 @@ func main() {
 	}
 
 	// SMS notification worker (Slice K): drains match-ready alerts via Twilio.
+	// The worker is always started; Twilio creds are resolved lazily from the
+	// process env, falling back to re-reading the env file — so dropping TWILIO_*
+	// into /etc/fifteenball/fifteenball.env activates SMS without a restart
+	// (the file must be readable by the service user; see DECISIONS/020).
+	resolveSMS := makeSMSResolver(cfg)
+	dapi.SMSReady = func() bool { return resolveSMS() != nil }
+	go (&notify.Worker{DB: st.DB, Resolve: resolveSMS}).Run(root)
 	if cfg.SMSConfigured() {
-		sender := notify.NewTwilio(cfg.TwilioAccountSID, cfg.TwilioAuthToken, cfg.TwilioFromNumber, cfg.TwilioAPIBase)
-		nw := &notify.Worker{DB: st.DB, Sender: sender}
-		go nw.Run(root)
-		log.Printf("notify: Twilio SMS enabled (from %s)", cfg.TwilioFromNumber)
+		log.Printf("notify: Twilio SMS enabled at boot (from %s)", cfg.TwilioFromNumber)
 	} else {
-		log.Printf("notify: SMS not configured (TWILIO_* empty) — match-ready alerts disabled")
+		log.Printf("notify: SMS not configured at boot — worker will activate if TWILIO_* is added to %s", cfg.EnvFilePath)
 	}
 
 	go func() {
@@ -171,6 +175,45 @@ func main() {
 	}
 	log.Printf("stopped")
 	_ = os.Stdout.Sync()
+}
+
+// makeSMSResolver returns a thread-safe function that yields a Twilio sender once
+// all three creds are available. It prefers the values captured at boot, then
+// re-reads the env file (so creds added after boot are picked up). The built
+// sender is cached; while creds are absent it returns nil (SMS stays off).
+func makeSMSResolver(cfg *config.Config) func() notify.Sender {
+	var mu sync.Mutex
+	var sender notify.Sender
+	return func() notify.Sender {
+		mu.Lock()
+		defer mu.Unlock()
+		if sender != nil {
+			return sender
+		}
+		sid, token, from, apiBase := cfg.TwilioAccountSID, cfg.TwilioAuthToken, cfg.TwilioFromNumber, cfg.TwilioAPIBase
+		if sid == "" || token == "" || from == "" {
+			if m, err := config.ParseEnvFile(cfg.EnvFilePath); err == nil {
+				if sid == "" {
+					sid = m["TWILIO_ACCOUNT_SID"]
+				}
+				if token == "" {
+					token = m["TWILIO_AUTH_TOKEN"]
+				}
+				if from == "" {
+					from = m["TWILIO_FROM_NUMBER"]
+				}
+				if apiBase == "" {
+					apiBase = m["TWILIO_API_BASE"]
+				}
+			}
+		}
+		if sid == "" || token == "" || from == "" {
+			return nil // not configured yet
+		}
+		sender = notify.NewTwilio(sid, token, from, apiBase)
+		log.Printf("notify: Twilio SMS enabled (from %s)", from)
+		return sender
+	}
 }
 
 // healthHandler pings the DB with a 1s deadline; 200 healthy / 503 degraded,

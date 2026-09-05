@@ -177,7 +177,7 @@ func (api *API) AssignMatch(w http.ResponseWriter, r *http.Request) {
 // No-op unless SMS is enabled and the match has a table assigned. Best-effort:
 // enqueue failures never block the assign (the alert is advisory).
 func (api *API) enqueueMatchReady(ctx context.Context, tx *sql.Tx, tid, mid string) {
-	if !api.SMSEnabled {
+	if !api.smsReady() {
 		return
 	}
 	var aID, bID, tableRef sql.NullString

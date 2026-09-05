@@ -39,7 +39,7 @@ func boolStr(b bool) string {
 
 func TestMatchReadySMS(t *testing.T) {
 	e := newTestEnv(t)
-	e.api.SMSEnabled = true
+	e.api.SMSReady = func() bool { return true }
 	ctx := context.Background()
 
 	// Ann opts in; Bob has a phone but did NOT opt in → only Ann is texted.

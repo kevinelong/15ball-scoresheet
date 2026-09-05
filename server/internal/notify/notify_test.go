@@ -77,6 +77,44 @@ func TestSendRetryThenSucceed(t *testing.T) {
 	}
 }
 
+// TestLazyResolveActivates verifies the worker no-ops while Resolve returns nil
+// (SMS not configured), then sends once a sender becomes available — the
+// hot-load-without-restart path.
+func TestLazyResolveActivates(t *testing.T) {
+	st := setup(t)
+	ctx := context.Background()
+	Enqueue(ctx, st.DB, mk("t1", "dk1"))
+
+	fake := &FakeSender{}
+	var ready bool
+	wk := &Worker{DB: st.DB, Resolve: func() Sender {
+		if !ready {
+			return nil
+		}
+		return fake
+	}}
+
+	// Not configured yet → job stays pending, nothing sent.
+	if wk.ProcessOne(ctx) {
+		t.Fatalf("should no-op while resolver returns nil")
+	}
+	var status string
+	st.DB.QueryRow(`SELECT status FROM notifications WHERE dedupe_key='dk1'`).Scan(&status)
+	if status != "pending" {
+		t.Fatalf("job should remain pending, got %s", status)
+	}
+
+	// Creds arrive → worker activates and sends.
+	ready = true
+	if !wk.ProcessOne(ctx) {
+		t.Fatalf("should send once resolver yields a sender")
+	}
+	st.DB.QueryRow(`SELECT status FROM notifications WHERE dedupe_key='dk1'`).Scan(&status)
+	if status != "sent" || len(fake.Messages) != 1 {
+		t.Fatalf("after activation: status=%s sent=%d", status, len(fake.Messages))
+	}
+}
+
 func TestSendDeadLetter(t *testing.T) {
 	st := setup(t)
 	ctx := context.Background()
