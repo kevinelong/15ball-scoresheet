@@ -27,9 +27,9 @@ Legend: [ ] todo · [~] in progress · [x] done+deployed.
 - [x] C2 entrant CRUD + `/check-in` + `/archive`
 
 ## Slice D — brackets + matches
-- [ ] D1 migration: `matches`, `match_results`
-- [ ] D2 bracket generation on `in_progress` transition
-- [ ] D3 match list/assign/start/history endpoints
+- [x] D1 migration: `matches`, `match_results`
+- [x] D2 bracket generation on `in_progress` transition
+- [x] D3 match list/assign/start/history endpoints
 
 ## Slice E — scoring + corrections
 - [ ] E1 result submission (immutable, versioned) + reopen (reason+director)

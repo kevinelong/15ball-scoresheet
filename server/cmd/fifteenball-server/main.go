@@ -105,6 +105,11 @@ func main() {
 	dir.Patch("/api/v1/tournaments/{id}/entrants/{entrantId}", dapi.PatchEntrant)
 	dir.Post("/api/v1/tournaments/{id}/entrants/{entrantId}/check-in", dapi.CheckInEntrant)
 	dir.Post("/api/v1/tournaments/{id}/entrants/{entrantId}/archive", dapi.ArchiveEntrant)
+	// matches (Slice D)
+	sess.Get("/api/v1/tournaments/{id}/matches", dapi.ListMatches)
+	dir.Post("/api/v1/tournaments/{id}/matches/{matchId}/assign", dapi.AssignMatch)
+	sess.With(a.RequireCSRF).Post("/api/v1/tournaments/{id}/matches/{matchId}/start", dapi.StartMatch)
+	sess.Get("/api/v1/tournaments/{id}/matches/{matchId}/history", dapi.MatchHistory)
 
 	srv := &http.Server{
 		Addr:              cfg.ListenAddr,

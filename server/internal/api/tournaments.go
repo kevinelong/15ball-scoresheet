@@ -39,7 +39,10 @@ func scanTournament(row interface{ Scan(...any) error }) (*Tournament, error) {
 func tournamentTransitionSupported(from, to string) bool {
 	switch from + "->" + to {
 	case "draft->registration_open", "registration_open->registration_closed",
-		"registration_closed->registration_open":
+		"registration_closed->registration_open",
+		"registration_closed->in_progress", // Slice D: generates the bracket
+		"in_progress->completed",           // guard: all matches terminal
+		"completed->in_progress":            // reopen (reason required)
 		return true
 	}
 	return false
@@ -178,6 +181,7 @@ func (api *API) PatchTournament(w http.ResponseWriter, r *http.Request) {
 		Name       *string `json:"name"`
 		Visibility *string `json:"visibility"`
 		State      *string `json:"state"`
+		Reason     string  `json:"reason"`
 	}
 	if !decodeBody(w, r, &body) {
 		return
@@ -201,11 +205,33 @@ func (api *API) PatchTournament(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, http.StatusConflict, "invalid_transition", "state change "+cur.State+"→"+*body.State+" is not allowed")
 			return
 		}
-		// guard: draft→registration_open requires at least one division
-		if cur.State == "draft" && *body.State == "registration_open" {
+		// transition guards
+		switch cur.State + "->" + *body.State {
+		case "draft->registration_open":
 			divs, _ := api.listDivisions(r.Context(), id, false)
 			if len(divs) == 0 {
 				writeErr(w, http.StatusConflict, "invalid_transition", "at least one division is required to open registration")
+				return
+			}
+		case "registration_closed->in_progress":
+			var n int
+			_ = api.DB.QueryRowContext(r.Context(),
+				`SELECT COUNT(*) FROM entrants WHERE tournament_id=? AND state='checked_in' AND archived_at IS NULL`, id).Scan(&n)
+			if n < 2 {
+				writeErr(w, http.StatusConflict, "invalid_transition", "need at least 2 checked-in entrants to start")
+				return
+			}
+		case "in_progress->completed":
+			var open int
+			_ = api.DB.QueryRowContext(r.Context(),
+				`SELECT COUNT(*) FROM matches WHERE tournament_id=? AND state <> 'completed'`, id).Scan(&open)
+			if open > 0 {
+				writeErr(w, http.StatusConflict, "invalid_transition", "cannot complete: matches are still open")
+				return
+			}
+		case "completed->in_progress":
+			if body.Reason == "" {
+				writeErr(w, http.StatusBadRequest, "reason_required", "reopening a completed tournament requires a reason")
 				return
 			}
 		}
@@ -233,10 +259,17 @@ func (api *API) PatchTournament(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "server_error", "")
 		return
 	}
+	// side effect: generate the round-1 bracket when starting the tournament.
+	if body.State != nil && cur.State == "registration_closed" && *body.State == "in_progress" {
+		if _, err := api.generateBracket(r.Context(), tx, id); err != nil {
+			writeErr(w, http.StatusInternalServerError, "server_error", "")
+			return
+		}
+	}
 	_ = audit.Write(r.Context(), tx, audit.Entry{
-		EntityType: "tournament", EntityID: id, Action: action,
+		EntityType: "tournament", EntityID: id, Action: action, Reason: body.Reason,
 		ActorUserID: actor(r.Context()), RequestID: reqID(r.Context()),
-		Before: map[string]string{"state": cur.State}, After: body,
+		Before: map[string]string{"state": cur.State}, After: map[string]string{"state": derefOr(body.State, cur.State)},
 	})
 	if err := tx.Commit(); err != nil {
 		writeErr(w, http.StatusInternalServerError, "server_error", "")

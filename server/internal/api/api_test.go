@@ -22,8 +22,9 @@ type testEnv struct {
 	api      *API
 	auth     *auth.Auth
 	router   *chi.Mux
-	director string // session cookie value
-	viewer   string
+	director    string // session cookie value
+	viewer      string
+	scorekeeper string
 }
 
 func newTestEnv(t *testing.T) *testEnv {
@@ -77,9 +78,15 @@ func newTestEnv(t *testing.T) *testEnv {
 	director.Post("/api/v1/tournaments/{id}/entrants/{entrantId}/check-in", dapi.CheckInEntrant)
 	director.Post("/api/v1/tournaments/{id}/entrants/{entrantId}/archive", dapi.ArchiveEntrant)
 
+	sess.Get("/api/v1/tournaments/{id}/matches", dapi.ListMatches)
+	director.Post("/api/v1/tournaments/{id}/matches/{matchId}/assign", dapi.AssignMatch)
+	sess.With(a.RequireCSRF).Post("/api/v1/tournaments/{id}/matches/{matchId}/start", dapi.StartMatch)
+	sess.Get("/api/v1/tournaments/{id}/matches/{matchId}/history", dapi.MatchHistory)
+
 	return &testEnv{api: dapi, auth: a, router: r,
-		director: mkUser("director@x.com", auth.RoleTournamentDirector),
-		viewer:   mkUser("viewer@x.com", auth.RoleViewer)}
+		director:   mkUser("director@x.com", auth.RoleTournamentDirector),
+		viewer:     mkUser("viewer@x.com", auth.RoleViewer),
+		scorekeeper: mkUser("scorekeeper@x.com", auth.RoleScorekeeper)}
 }
 
 func (e *testEnv) do(t *testing.T, method, path, cookie, body string) (int, map[string]interface{}) {

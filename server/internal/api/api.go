@@ -65,6 +65,13 @@ func slugify(s string) string {
 func reqID(ctx context.Context) string { return middleware.GetReqID(ctx) }
 func actor(ctx context.Context) string { return auth.UserID(ctx) }
 
+func derefOr(p *string, def string) string {
+	if p != nil {
+		return *p
+	}
+	return def
+}
+
 func limitParam(r *http.Request, def, max int) int {
 	if v := r.URL.Query().Get("limit"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
