@@ -32,8 +32,8 @@ Legend: [ ] todo · [~] in progress · [x] done+deployed.
 - [x] D3 match list/assign/start/history endpoints
 
 ## Slice E — scoring + corrections
-- [ ] E1 result submission (immutable, versioned) + reopen (reason+director)
-- [ ] E2 idempotency dedup wired into E1 (+ creates)
+- [x] E1 result submission (immutable, versioned) + reopen (reason+director)
+- [x] E2 idempotency dedup wired into E1 (+ creates)
 
 ## Slice F — SSE + snapshot + public/overlay
 - [ ] F1 migration: `sse_event_log`

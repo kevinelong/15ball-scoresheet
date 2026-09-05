@@ -110,6 +110,9 @@ func main() {
 	dir.Post("/api/v1/tournaments/{id}/matches/{matchId}/assign", dapi.AssignMatch)
 	sess.With(a.RequireCSRF).Post("/api/v1/tournaments/{id}/matches/{matchId}/start", dapi.StartMatch)
 	sess.Get("/api/v1/tournaments/{id}/matches/{matchId}/history", dapi.MatchHistory)
+	// scoring (Slice E)
+	sess.With(a.RequireCSRF).Post("/api/v1/tournaments/{id}/matches/{matchId}/result", dapi.SubmitResult)
+	dir.Post("/api/v1/tournaments/{id}/matches/{matchId}/reopen", dapi.ReopenMatch)
 
 	srv := &http.Server{
 		Addr:              cfg.ListenAddr,
