@@ -49,6 +49,13 @@ Legend: [ ] todo · [~] in progress · [x] done+deployed.
 
 ## Slice H+I — audit view, fixtures, tests, deploy
 - [x] H1 `GET /api/v1/tournaments/{id}/audit`
-- [ ] I1 idempotent seed fixtures (10-fixtures)
-- [ ] I2 acceptance test suite (09-acceptance-tests A–G)
-- [ ] I3 final migration validation + deploy verification
+- [x] I1 idempotent seed fixtures — `internal/seed` (7 users, 4 tournaments, mixed
+      entrant/match states, corrected-match result versions, Challonge mapping
+      success + partial + failed/dead-lettered paths); re-seed is a no-op (test-verified)
+- [x] I2 acceptance test suite — `internal/api/acceptance_test.go` maps all 30
+      scenarios (A1–G30); auth via auth pkg, sync via HTTP + fake provider (no live calls)
+- [x] I3 final migration validation + deploy verification — full suite + vet green,
+      CGO-free rebuild deployed to live `fifteenball`, health 200, sync endpoints gated,
+      overlay 404 schema-valid, worker + Challonge up, migrations clean in logs
+
+## Status: v1 backend COMPLETE — all slices A–I implemented, tested, deployed.

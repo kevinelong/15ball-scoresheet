@@ -105,6 +105,10 @@ func (wk *Worker) Run(ctx context.Context) {
 	}
 }
 
+// ProcessOne claims and runs at most one ready job, returning true if it did.
+// Exported so callers can drain the outbox synchronously (tests, manual triggers).
+func (wk *Worker) ProcessOne(ctx context.Context) bool { return wk.processOne(ctx) }
+
 // processOne claims and runs a single ready job. Returns true if it processed one.
 func (wk *Worker) processOne(ctx context.Context) bool {
 	var id, kind, aggID string
