@@ -184,6 +184,7 @@ func (api *API) applyEntrantState(w http.ResponseWriter, r *http.Request, tid, e
 		ActorUserID: actor(r.Context()), Reason: reason, RequestID: reqID(r.Context()),
 		Before: map[string]string{"state": cur.State}, After: map[string]string{"state": to},
 	})
+	api.emitEvent(r.Context(), tx, tid, "entrant.updated", map[string]string{"entrantId": eid, "state": to})
 	if err := tx.Commit(); err != nil {
 		writeErr(w, http.StatusInternalServerError, "server_error", "")
 		return

@@ -271,6 +271,7 @@ func (api *API) PatchTournament(w http.ResponseWriter, r *http.Request) {
 		ActorUserID: actor(r.Context()), RequestID: reqID(r.Context()),
 		Before: map[string]string{"state": cur.State}, After: map[string]string{"state": derefOr(body.State, cur.State)},
 	})
+	api.emitEvent(r.Context(), tx, id, "tournament.updated", map[string]string{"state": derefOr(body.State, cur.State)})
 	if err := tx.Commit(); err != nil {
 		writeErr(w, http.StatusInternalServerError, "server_error", "")
 		return

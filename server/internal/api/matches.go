@@ -152,6 +152,7 @@ func (api *API) AssignMatch(w http.ResponseWriter, r *http.Request) {
 		ActorUserID: actor(r.Context()), RequestID: reqID(r.Context()),
 		After: map[string]string{"scorekeeper": body.ScorekeeperUserID},
 	})
+	api.emitEvent(r.Context(), tx, tid, "match.updated", map[string]string{"matchId": mid, "state": "assigned"})
 	if err := tx.Commit(); err != nil {
 		writeErr(w, http.StatusInternalServerError, "server_error", "")
 		return
@@ -194,6 +195,7 @@ func (api *API) StartMatch(w http.ResponseWriter, r *http.Request) {
 		EntityType: "match", EntityID: mid, Action: "started",
 		ActorUserID: actor(r.Context()), RequestID: reqID(r.Context()),
 	})
+	api.emitEvent(r.Context(), tx, tid, "match.updated", map[string]string{"matchId": mid, "state": "in_progress"})
 	if err := tx.Commit(); err != nil {
 		writeErr(w, http.StatusInternalServerError, "server_error", "")
 		return

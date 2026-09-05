@@ -36,8 +36,8 @@ Legend: [ ] todo · [~] in progress · [x] done+deployed.
 - [x] E2 idempotency dedup wired into E1 (+ creates)
 
 ## Slice F — SSE + snapshot + public/overlay
-- [ ] F1 migration: `sse_event_log`
-- [ ] F2 SSE stream endpoint (hello/replay/heartbeat/snapshot_required)
+- [x] F1 migration: `sse_event_log`
+- [x] F2 SSE stream endpoint (hello/replay/heartbeat/snapshot_required)
 - [x] F3 snapshot endpoint (+ OBS overlay normalization)
 - [x] F4 public read-only + overlay endpoints (visibility-gated)
 

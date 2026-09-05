@@ -86,6 +86,7 @@ func newTestEnv(t *testing.T) *testEnv {
 	director.Post("/api/v1/tournaments/{id}/matches/{matchId}/reopen", dapi.ReopenMatch)
 	dirRead := r.With(a.RequireSession, a.RequireRoles(auth.DirectorOrAbove...))
 	sess.Get("/api/v1/tournaments/{id}/snapshot", dapi.Snapshot)
+	r.Get("/api/v1/tournaments/{id}/events", dapi.Events)
 	r.Get("/api/v1/public/tournaments/{id}", dapi.PublicTournament)
 	r.Get("/api/v1/public/tournaments/{id}/overlay", dapi.PublicOverlay)
 	dirRead.Get("/api/v1/tournaments/{id}/audit", dapi.ListAudit)

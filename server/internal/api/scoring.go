@@ -111,6 +111,7 @@ func (api *API) SubmitResult(w http.ResponseWriter, r *http.Request) {
 			ActorUserID: actor(r.Context()), RequestID: reqID(r.Context()),
 			After: map[string]interface{}{"winner": body.WinnerEntrantID, "resultVersion": rv},
 		})
+		api.emitEvent(r.Context(), tx, tid, "match.result_submitted", map[string]interface{}{"matchId": mid, "winner": body.WinnerEntrantID, "resultVersion": rv})
 		// outbox enqueue for Challonge sync is added in Slice G.
 		if err := tx.Commit(); err != nil {
 			return http.StatusInternalServerError, errBody("server_error", "")
@@ -160,6 +161,7 @@ func (api *API) ReopenMatch(w http.ResponseWriter, r *http.Request) {
 			ActorUserID: actor(r.Context()), Reason: body.Reason, RequestID: reqID(r.Context()),
 			Before: map[string]string{"state": "completed"},
 		})
+		api.emitEvent(r.Context(), tx, tid, "match.reopened", map[string]string{"matchId": mid})
 		if err := tx.Commit(); err != nil {
 			return http.StatusInternalServerError, errBody("server_error", "")
 		}
