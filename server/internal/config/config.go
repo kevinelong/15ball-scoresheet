@@ -38,11 +38,14 @@ type Config struct {
 	ChallongeScope        string
 	ChallongeSubdomain    string
 
-	// Twilio SMS (match-ready alerts). All three required to enable sending.
-	TwilioAccountSID  string
-	TwilioAuthToken   string
-	TwilioFromNumber  string
-	TwilioAPIBase     string // override for tests; defaults to the live API
+	// Twilio SMS (match-ready alerts). Requires the Account SID + From number plus
+	// EITHER the Auth Token OR an API Key SID+Secret (preferred, revocable).
+	TwilioAccountSID   string
+	TwilioAuthToken    string
+	TwilioAPIKeySID    string
+	TwilioAPIKeySecret string
+	TwilioFromNumber   string
+	TwilioAPIBase      string // override for tests; defaults to the live API
 
 	// EnvFilePath is the on-disk env file the service is booted from. The SMS
 	// worker re-reads it at runtime so Twilio creds added to the file take effect
@@ -50,9 +53,13 @@ type Config struct {
 	EnvFilePath string
 }
 
-// SMSConfigured reports whether Twilio SMS sending is enabled.
+// SMSConfigured reports whether Twilio SMS sending is enabled: Account SID + From
+// plus either an Auth Token or an API Key SID+Secret.
 func (c *Config) SMSConfigured() bool {
-	return c.TwilioAccountSID != "" && c.TwilioAuthToken != "" && c.TwilioFromNumber != ""
+	if c.TwilioAccountSID == "" || c.TwilioFromNumber == "" {
+		return false
+	}
+	return c.TwilioAuthToken != "" || (c.TwilioAPIKeySID != "" && c.TwilioAPIKeySecret != "")
 }
 
 func getenv(key, def string) string {
@@ -106,11 +113,13 @@ func Load() *Config {
 		ChallongeAPIBase:      strings.TrimRight(getenv("CHALLONGE_API_BASE", "https://api.challonge.com/v2"), "/"),
 		ChallongeScope:        getenv("CHALLONGE_SCOPE", "me application:manage tournaments:read tournaments:write matches:read matches:write participants:read participants:write"),
 		ChallongeSubdomain:    getenv("CHALLONGE_SUBDOMAIN", ""),
-		TwilioAccountSID:  getenv("TWILIO_ACCOUNT_SID", ""),
-		TwilioAuthToken:   getenv("TWILIO_AUTH_TOKEN", ""),
-		TwilioFromNumber:  getenv("TWILIO_FROM_NUMBER", ""),
-		TwilioAPIBase:     strings.TrimRight(getenv("TWILIO_API_BASE", "https://api.twilio.com"), "/"),
-		EnvFilePath:       getenv("FIFTEENBALL_ENV_FILE", "/etc/fifteenball/fifteenball.env"),
+		TwilioAccountSID:   getenv("TWILIO_ACCOUNT_SID", ""),
+		TwilioAuthToken:    getenv("TWILIO_AUTH_TOKEN", ""),
+		TwilioAPIKeySID:    getenv("TWILIO_API_KEY_SID", ""),
+		TwilioAPIKeySecret: getenv("TWILIO_API_KEY_SECRET", ""),
+		TwilioFromNumber:   getenv("TWILIO_FROM_NUMBER", ""),
+		TwilioAPIBase:      strings.TrimRight(getenv("TWILIO_API_BASE", "https://api.twilio.com"), "/"),
+		EnvFilePath:        getenv("FIFTEENBALL_ENV_FILE", "/etc/fifteenball/fifteenball.env"),
 	}
 }
 

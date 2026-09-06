@@ -191,13 +191,21 @@ func makeSMSResolver(cfg *config.Config) func() notify.Sender {
 		// The env file is the live source of truth (start_pre sources it at boot):
 		// prefer file values so a corrected/added cred hot-loads, falling back to the
 		// values captured at boot if the file can't be read.
-		sid, token, from, apiBase := cfg.TwilioAccountSID, cfg.TwilioAuthToken, cfg.TwilioFromNumber, cfg.TwilioAPIBase
+		sid, token := cfg.TwilioAccountSID, cfg.TwilioAuthToken
+		keySID, keySecret := cfg.TwilioAPIKeySID, cfg.TwilioAPIKeySecret
+		from, apiBase := cfg.TwilioFromNumber, cfg.TwilioAPIBase
 		if m, err := config.ParseEnvFile(cfg.EnvFilePath); err == nil {
 			if v := m["TWILIO_ACCOUNT_SID"]; v != "" {
 				sid = v
 			}
 			if v := m["TWILIO_AUTH_TOKEN"]; v != "" {
 				token = v
+			}
+			if v := m["TWILIO_API_KEY_SID"]; v != "" {
+				keySID = v
+			}
+			if v := m["TWILIO_API_KEY_SECRET"]; v != "" {
+				keySecret = v
 			}
 			if v := m["TWILIO_FROM_NUMBER"]; v != "" {
 				from = v
@@ -206,18 +214,31 @@ func makeSMSResolver(cfg *config.Config) func() notify.Sender {
 				apiBase = v
 			}
 		}
-		if sid == "" || token == "" || from == "" {
+		if sid == "" || from == "" {
 			return nil // not configured yet
 		}
-		// Rebuild the sender only when the creds actually change (so a corrected
-		// token is picked up without a restart, but we don't rebuild every tick).
-		key := sid + "\x00" + token + "\x00" + from + "\x00" + apiBase
+		// Prefer API-key auth (revocable) when a key SID+secret is present; else the
+		// Account Auth Token.
+		var newSender notify.Sender
+		var authKind, key string
+		switch {
+		case keySID != "" && keySecret != "":
+			newSender = notify.NewTwilioAPIKey(sid, keySID, keySecret, from, apiBase)
+			authKind, key = "api_key", sid+"\x00K\x00"+keySID+"\x00"+keySecret+"\x00"+from+"\x00"+apiBase
+		case token != "":
+			newSender = notify.NewTwilio(sid, token, from, apiBase)
+			authKind, key = "auth_token", sid+"\x00T\x00"+token+"\x00"+from+"\x00"+apiBase
+		default:
+			return nil // no usable credential yet
+		}
+		// Rebuild only when creds actually change (picks up corrections without a
+		// restart; avoids rebuilding every tick).
 		if sender != nil && key == lastKey {
 			return sender
 		}
-		sender = notify.NewTwilio(sid, token, from, apiBase)
+		sender = newSender
 		lastKey = key
-		log.Printf("notify: Twilio SMS sender (re)configured (from %s)", from)
+		log.Printf("notify: Twilio SMS sender (re)configured (from %s, auth=%s)", from, authKind)
 		return sender
 	}
 }

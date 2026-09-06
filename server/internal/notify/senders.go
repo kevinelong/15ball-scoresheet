@@ -22,25 +22,39 @@ func (e *sendErr) Retryable() bool { return e.retryable }
 
 // ---- Twilio sender ---------------------------------------------------------
 
-// TwilioSender posts to the Twilio Messages API using HTTP Basic auth
-// (AccountSID:AuthToken). 429/5xx are retried; 4xx (bad number, unsubscribed,
-// insufficient funds) are permanent.
+// TwilioSender posts to the Twilio Messages API using HTTP Basic auth. The URL is
+// always scoped to the Account SID; the Basic-auth credentials are either the
+// Account SID + Auth Token, or an API Key SID + Secret (preferred, revocable).
+// 429/5xx are retried; 4xx (bad number, unsubscribed, insufficient funds) are permanent.
 type TwilioSender struct {
-	AccountSID string
-	AuthToken  string
+	AccountSID string // used in the request URL
+	AuthUser   string // Basic-auth username: Account SID or API Key SID
+	AuthPass   string // Basic-auth password: Auth Token or API Key Secret
 	From       string
 	APIBase    string // e.g. https://api.twilio.com
 	HTTP       *http.Client
 }
 
-func NewTwilio(sid, token, from, apiBase string) *TwilioSender {
+func newTwilioSender(accountSID, user, pass, from, apiBase string) *TwilioSender {
 	if apiBase == "" {
 		apiBase = "https://api.twilio.com"
 	}
 	return &TwilioSender{
-		AccountSID: sid, AuthToken: token, From: from, APIBase: strings.TrimRight(apiBase, "/"),
-		HTTP: &http.Client{Timeout: 15 * time.Second},
+		AccountSID: accountSID, AuthUser: user, AuthPass: pass, From: from,
+		APIBase: strings.TrimRight(apiBase, "/"),
+		HTTP:    &http.Client{Timeout: 15 * time.Second},
 	}
+}
+
+// NewTwilio authenticates with the Account SID + Auth Token.
+func NewTwilio(accountSID, authToken, from, apiBase string) *TwilioSender {
+	return newTwilioSender(accountSID, accountSID, authToken, from, apiBase)
+}
+
+// NewTwilioAPIKey authenticates with an API Key SID + Secret (URL still scoped to
+// the Account SID). Preferred over the long-lived Auth Token.
+func NewTwilioAPIKey(accountSID, keySID, keySecret, from, apiBase string) *TwilioSender {
+	return newTwilioSender(accountSID, keySID, keySecret, from, apiBase)
 }
 
 func (s *TwilioSender) Send(ctx context.Context, to, body string) (string, error) {
@@ -53,7 +67,7 @@ func (s *TwilioSender) Send(ctx context.Context, to, body string) (string, error
 	if err != nil {
 		return "", &sendErr{err.Error(), false}
 	}
-	req.SetBasicAuth(s.AccountSID, s.AuthToken)
+	req.SetBasicAuth(s.AuthUser, s.AuthPass)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	resp, err := s.HTTP.Do(req)
 	if err != nil {

@@ -23,10 +23,17 @@ env file (`/etc/fifteenball/fifteenball.env`, chmod 600 — never commit secrets
 
 ```
 TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-TWILIO_AUTH_TOKEN=<from console.twilio.com>
 TWILIO_FROM_NUMBER=+1XXXXXXXXXX        # a Twilio-owned SMS number
+# Auth: EITHER an API key (preferred, revocable) ...
+TWILIO_API_KEY_SID=SKxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+TWILIO_API_KEY_SECRET=<shown once at key creation>
+# ... OR the account Auth Token:
+# TWILIO_AUTH_TOKEN=<32-hex from console.twilio.com>
 # TWILIO_API_BASE optional (tests only; defaults to https://api.twilio.com)
 ```
+API-key auth (SID+secret) is preferred when present; the request URL is always
+scoped to the Account SID. Note: the Auth Token is 32 hex chars; an API Key SID
+starts with `SK` — don't put the `SK…` value in `TWILIO_AUTH_TOKEN`.
 
 The SMS worker is **always running** and resolves creds lazily: it reads the
 process env, then re-reads the env file. So you can add `TWILIO_*` to the file and
