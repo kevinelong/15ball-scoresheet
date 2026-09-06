@@ -69,6 +69,54 @@
   function checked(id) { var e = document.getElementById(id); return !!(e && e.checked); }
   async function guard(fn) { try { await fn(); } catch (e) { toast(e && e.message ? e.message : 'error'); } }
 
+  // ---- dedup confidence tiers (shared by single-add, bulk, and merge) ----
+  // STRONG (default = LINK): exact phone/email match, or a very-high fuzzy name score.
+  // POSSIBLE (default = NEW, offer link, mark "review"): a fuzzy name-only match.
+  function tierOf(item) {
+    if (!item) return 'possible';
+    if (item.matchReason === 'phone' || item.matchReason === 'email') return 'strong';
+    if ((item.score || 0) >= 0.90) return 'strong';
+    return 'possible';
+  }
+  // Short reason chip label for a candidate.
+  function reasonChip(item) {
+    if (!item) return '';
+    if (item.matchReason === 'phone') return 'same phone';
+    if (item.matchReason === 'email') return 'same email';
+    return 'similar name';
+  }
+  // Mask a phone to just the last 4 digits, e.g. "•••‑0123".
+  function maskPhone(p) {
+    var d = String(p || '').replace(/\D/g, '');
+    if (!d) return '';
+    return '•••‑' + d.slice(-4);
+  }
+  // Mask an email: first char + "•••@" + domain, e.g. "j•••@x.com".
+  function maskEmail(e) {
+    e = String(e || '');
+    var at = e.indexOf('@');
+    if (at < 1) return e ? (e.charAt(0) + '•••') : '';
+    return e.charAt(0) + '•••@' + e.slice(at + 1);
+  }
+  // Compact context string for a candidate item.
+  function ctxLine(item) {
+    var n = item.pastEntries || 0;
+    var s = n + ' event' + (n === 1 ? '' : 's');
+    if (item.lastEvent) s += ' · last: ' + item.lastEvent;
+    if (item.fargo != null && item.fargo !== '') s += ' · Fargo ' + item.fargo;
+    if (item.phone) s += ' · ' + maskPhone(item.phone);
+    else if (item.email) s += ' · ' + maskEmail(item.email);
+    return s;
+  }
+  // Sort candidates strong-first, then by score desc.
+  function sortCandidates(list) {
+    return list.slice().sort(function (a, b) {
+      var ta = tierOf(a) === 'strong' ? 0 : 1, tb = tierOf(b) === 'strong' ? 0 : 1;
+      if (ta !== tb) return ta - tb;
+      return (b.score || 0) - (a.score || 0);
+    });
+  }
+
   // ---- boot / auth ----
   async function boot() {
     try {
@@ -240,21 +288,41 @@
     return { flags: flags, names: distinctDupes(nameSeen), phones: distinctDupes(phoneSeen), emails: distinctDupes(emailSeen) };
   }
 
-  // Preview table for parsed bulk rows (Feature A), with in-paste duplicate flags.
+  // The per-row match control for the bulk preview: a <select> whose value is the
+  // chosen playerId ('' = New person). Options list the candidates strong-first.
+  function matchControl(pv, i) {
+    var cands = (pv.matches && pv.matches[i]) || [];
+    if (!cands.length) return '<span class="note">New</span>';
+    var chosen = (pv.choice && pv.choice[i]) || '';
+    var opts = cands.map(function (c) {
+      var n = c.pastEntries || 0;
+      var label = 'Link → ' + c.displayName + ' (' + n + ' ev)';
+      return '<option value="' + esc(c.playerId) + '"' + (c.playerId === chosen ? ' selected' : '') + '>' + esc(label) + '</option>';
+    }).join('');
+    opts += '<option value=""' + (chosen ? '' : ' selected') + '>New person</option>';
+    return '<select class="bulkchoose" data-row="' + i + '">' + opts + '</select>';
+  }
+  // Preview table for parsed bulk rows (Feature B), with in-paste duplicate flags and
+  // per-row cross-event dedup controls.
   function previewMarkup(pv) {
     var dup = findDupes(pv.list);
+    var linked = 0, review = 0, newc = 0;
     var rows = pv.list.map(function (p, i) {
       var f = dup.flags[i];
       var warn = [];
       if (f.name) warn.push('duplicate name');
       if (f.phone) warn.push('duplicate phone');
       if (f.email) warn.push('duplicate email');
-      return '<div class="prow' + (warn.length ? ' dupe' : '') + '">' +
+      var chosen = (pv.choice && pv.choice[i]) || '';
+      var cands = (pv.matches && pv.matches[i]) || [];
+      var isReview = !chosen && cands.length && tierOf(cands[0]) === 'possible';
+      if (chosen) linked++; else if (isReview) review++; else newc++;
+      return '<div class="prow' + (warn.length ? ' dupe' : '') + (isReview ? ' review' : '') + '">' +
         '<b>' + esc(p.name) + (warn.length ? ' <span class="pill warn">' + esc(warn.join(' · ')) + '</span>' : '') + '</b>' +
         '<span class="note">' + (p.fargo != null ? 'Fargo ' + esc(p.fargo) : '') + '</span>' +
         '<span class="note">' + (p.phone ? esc(Roster.e164(p.phone)) : '') + '</span>' +
         '<span class="note">' + (p.email ? esc(p.email) : '') + '</span>' +
-        '<span class="note">' + (p.externalId ? 'Id ' + esc(p.externalId) : '') + '</span>' +
+        '<span class="mcell">' + matchControl(pv, i) + '</span>' +
         '</div>';
     }).join('');
     var n = pv.list.length;
@@ -264,8 +332,10 @@
     if (dup.phones) dupParts.push(dup.phones + ' duplicate phone' + (dup.phones > 1 ? 's' : ''));
     if (dup.emails) dupParts.push(dup.emails + ' duplicate email' + (dup.emails > 1 ? 's' : ''));
     var dupLine = dupParts.length ? '<p class="note warn">⚠ ' + esc(dupParts.join(' · ')) + ' in this list — duplicates by name are skipped on add.</p>' : '';
-    return '<div class="preview">' +
-      '<div class="prow phead"><b>Name</b><span>Fargo</span><span>Phone</span><span>Email</span><span>Id</span></div>' +
+    var summary = '<p class="note"><b>' + linked + ' linked · ' + newc + ' new · ' + review + ' to review</b></p>';
+    return summary +
+      '<div class="preview">' +
+      '<div class="prow phead"><b>Name</b><span>Fargo</span><span>Phone</span><span>Email</span><span>Match</span></div>' +
       rows + '</div>' +
       dupLine +
       '<p class="note">' + n + ' player' + (n === 1 ? '' : 's') + ' ready · ' + skipped + ' line' + (skipped === 1 ? '' : 's') + ' skipped</p>' +
@@ -274,46 +344,63 @@
       '<button class="ghost" data-action="bulk-cancel">Back</button></div>';
   }
 
-  // One candidate row: "Jane Doe · N past events · phone/email" + action button(s).
-  function candidateContact(c) {
-    var bits = [];
-    if (c.phone) bits.push(esc(c.phone));
-    if (c.email) bits.push(esc(c.email));
-    return bits.join(' · ');
-  }
-  function candidateMeta(c) {
-    var n = c.pastEntries || 0;
-    var meta = n + ' past event' + (n === 1 ? '' : 's');
-    if (c.fargo != null) meta += ' · Fargo ' + esc(c.fargo);
-    return meta;
-  }
-
   // Feature A: "Is this the same person?" confirm panel shown before a single add.
+  // Candidates are shown strong-first, each with a context line + a reason chip. When
+  // the top candidate is STRONG, "Same person" is the primary choice; otherwise
+  // "New person" stays primary and the panel is labelled a possible match.
   function pendingAddMarkup(pa) {
-    var rows = pa.candidates.map(function (c) {
-      var contact = candidateContact(c);
-      return '<li><span class="vs"><b>' + esc(c.displayName) + '</b>' +
-        '<div class="note">' + candidateMeta(c) + (contact ? ' · ' + contact : '') + '</div></span>' +
-        '<button class="pri" data-action="add-link" data-pid="' + esc(c.playerId) + '">Same person</button></li>';
+    var cands = sortCandidates(pa.candidates);
+    var topStrong = cands.length && tierOf(cands[0]) === 'strong';
+    var rows = cands.map(function (c) {
+      var strong = tierOf(c) === 'strong';
+      return '<li><span class="vs"><b>' + esc(c.displayName) + '</b> ' +
+        '<span class="pill' + (strong ? '' : ' warn') + '">' + esc(reasonChip(c)) + '</span>' +
+        '<div class="note">' + esc(ctxLine(c)) + '</div></span>' +
+        '<button class="' + (strong ? 'pri' : 'ghost') + '" data-action="add-link" data-pid="' + esc(c.playerId) + '">Same person</button></li>';
     }).join('');
-    return '<div class="confirm"><h3>Is this the same person?</h3>' +
-      '<p class="note">Adding <b>' + esc(pa.body.displayName) + '</b>. We found ' + pa.candidates.length +
-      ' player' + (pa.candidates.length === 1 ? '' : 's') + ' who may be the same person.</p>' +
+    return '<div class="confirm"><h3>' + (topStrong ? 'Likely the same person' : 'Possible match') + '</h3>' +
+      '<p class="note">Adding <b>' + esc(pa.body.displayName) + '</b>. We found ' + cands.length +
+      ' player' + (cands.length === 1 ? '' : 's') + ' who may be the same person.</p>' +
       '<ul class="list">' + rows + '</ul>' +
       '<div class="spacer"></div>' +
-      '<div class="row"><button class="pri" data-action="add-new">New person</button>' +
+      '<div class="row"><button class="' + (topStrong ? 'ghost' : 'pri') + '" data-action="add-new">New person</button>' +
       '<button class="ghost" data-action="add-cancel">Cancel</button></div></div>';
   }
 
-  // Feature B: duplicate-player candidates for the entrant being edited.
+  // Feature C: side-by-side compare of one field between the current entrant and a
+  // candidate duplicate. Highlights when the two values differ.
+  function cmpRow(label, thisVal, otherVal) {
+    var a = thisVal == null ? '' : String(thisVal);
+    var o = otherVal == null ? '' : String(otherVal);
+    var diff = a !== o;
+    return '<div class="cmprow' + (diff ? ' cmpdiff' : '') + '">' +
+      '<span class="cmplbl">' + esc(label) + '</span>' +
+      '<span class="cmpv">' + (a ? esc(a) : '—') + '</span>' +
+      '<span class="cmpv">' + (o ? esc(o) : '—') + '</span></div>';
+  }
+  // Feature B/C: duplicate-player candidates for the entrant being edited, each shown
+  // as a compact side-by-side compare against the current entrant.
   function dupesMarkup(d) {
     if (!d.candidates.length) return '<div class="note warn">No duplicates found.</div>';
-    var rows = d.candidates.map(function (c) {
-      var contact = candidateContact(c);
-      return '<li><span class="vs"><b>' + esc(c.displayName) + '</b>' +
-        '<div class="note">' + candidateMeta(c) + (contact ? ' · ' + contact : '') + '</div></span>' +
+    var self = d.entrant || {};
+    var rows = sortCandidates(d.candidates).map(function (c) {
+      var n = c.pastEntries || 0;
+      var moveNote = '≈' + n + ' past entr' + (n === 1 ? 'y' : 'ies') + ' will move onto this player.';
+      return '<li><div class="vs" style="flex:1">' +
+        '<b>' + esc(c.displayName) + '</b> <span class="pill' + (tierOf(c) === 'strong' ? '' : ' warn') + '">' + esc(reasonChip(c)) + '</span>' +
+        '<div class="cmp">' +
+        '<div class="cmprow cmphead"><span class="cmplbl"></span><span class="cmpv">This entrant</span><span class="cmpv">Duplicate</span></div>' +
+        cmpRow('Name', self.displayName, c.displayName) +
+        cmpRow('Phone', maskPhone(self.phone), maskPhone(c.phone)) +
+        cmpRow('Email', maskEmail(self.email), maskEmail(c.email)) +
+        cmpRow('Fargo', self.fargo, c.fargo) +
+        cmpRow('Past events', self.pastEntries, c.pastEntries) +
+        '</div>' +
+        '<div class="note">' + esc(moveNote) + '</div>' +
+        '<div class="spacer"></div>' +
         '<button class="pri" data-action="entrant-merge" data-src="' + esc(c.playerId) +
-        '" data-into="' + esc(d.intoId) + '">Merge into this player</button></li>';
+        '" data-into="' + esc(d.intoId) + '">Merge into this player</button>' +
+        '</div></li>';
     }).join('');
     return '<div class="confirm"><h4>Possible duplicates</h4>' +
       '<p class="note">Merging keeps this entrant\'s player and absorbs the duplicate.</p>' +
@@ -758,7 +845,23 @@
       var list = Roster.parse(raw, { lastFirst: checked('ebulklf') });
       if (!list.length) return toast('Nothing to add');
       var rawLines = raw.split(/\r?\n/).filter(function (ln) { return ln.trim(); }).length;
-      state.preview = { list: list, consent: checked('ebulkopt'), rawLines: rawLines };
+      // Best-effort per-row dedup lookup against existing players.
+      var matches = {}, choice = {};
+      try {
+        var queries = list.map(function (p, i) {
+          return { key: String(i), name: p.name, phone: p.phone ? Roster.e164(p.phone) : '', email: p.email || '' };
+        });
+        var r = await api.playerSuggestionsBatch(state.t.id, queries);
+        var results = (r && r.results) || {};
+        list.forEach(function (p, i) {
+          var cands = sortCandidates(results[String(i)] || []);
+          matches[i] = cands;
+          // Default the per-row decision: link to a strong top candidate, else new.
+          if (cands.length && tierOf(cands[0]) === 'strong') choice[i] = cands[0].playerId;
+          else choice[i] = null;
+        });
+      } catch (e) { /* batch is best-effort — proceed with no matches */ }
+      state.preview = { list: list, consent: checked('ebulkopt'), rawLines: rawLines, matches: matches, choice: choice };
       renderTournament();
     });
     if (act === 'bulk-cancel') return guard(async function () {
@@ -768,7 +871,8 @@
     if (act === 'bulk-confirm') return guard(async function () {
       var pv = state.preview; if (!pv) return;
       var consent = pv.consent;
-      var added = 0, dupes = 0;
+      var choice = pv.choice || {};
+      var added = 0, linked = 0, dupes = 0;
       for (var i = 0; i < pv.list.length; i++) {
         var p = pv.list[i];
         var body = { displayName: p.name };
@@ -776,10 +880,13 @@
         if (p.email) body.email = p.email;
         if (p.fargo != null) body.fargo = p.fargo;
         if (p.externalId) body.externalId = p.externalId;
-        try { await addEntrantChecked(body); added++; }
+        var pid = choice[i]; // playerId to LINK to, or null/undefined for a new player
+        if (pid) body.playerId = pid;
+        try { await addEntrantChecked(body); added++; if (pid) linked++; }
         catch (e) { if (e.code === 'duplicate_display_name') dupes++; else throw e; }
       }
-      toast('Added ' + added + (dupes ? ' · ' + dupes + ' duplicate' + (dupes > 1 ? 's' : '') + ' skipped' : ''));
+      toast('Added ' + added + (linked ? ' · ' + linked + ' linked' : '') +
+        (dupes ? ' · ' + dupes + ' duplicate' + (dupes > 1 ? 's' : '') + ' skipped' : ''));
       state.preview = null;
       await openTournament(state.t.id);
     });
@@ -797,10 +904,10 @@
     if (act === 'entrant-dupes') return guard(async function () {
       var ent = state.roster.filter(function (e) { return e.id === id; })[0];
       if (!ent) return;
-      if (!ent.playerId) { state.dupes = { entrantId: id, intoId: '', candidates: [] }; renderTournament(); return; }
+      if (!ent.playerId) { state.dupes = { entrantId: id, intoId: '', entrant: ent, candidates: [] }; renderTournament(); return; }
       var r = await api.playerSuggestions(state.t.id, { name: ent.displayName, phone: ent.phone || '', email: ent.email || '' });
       var cands = ((r && r.items) || []).filter(function (c) { return c.playerId !== ent.playerId; });
-      state.dupes = { entrantId: id, intoId: ent.playerId, candidates: cands };
+      state.dupes = { entrantId: id, intoId: ent.playerId, entrant: ent, candidates: cands };
       renderTournament();
     });
     // Feature B: absorb the duplicate player INTO this entrant's player.
@@ -874,7 +981,16 @@
   // any saved venue selection just remembers the choice.
   document.addEventListener('change', function (ev) {
     var sel = ev.target;
-    if (!sel || sel.id !== 'tvenue') return;
+    if (!sel) return;
+    // Bulk preview per-row match choice: record it and repaint (updates the summary).
+    if (sel.classList && sel.classList.contains('bulkchoose') && state.preview) {
+      var row = parseInt(sel.getAttribute('data-row'), 10);
+      state.preview.choice = state.preview.choice || {};
+      state.preview.choice[row] = sel.value || null; // '' → New person
+      renderTournament();
+      return;
+    }
+    if (sel.id !== 'tvenue') return;
     if (sel.value === '__new__') {
       state.newVenue = true; state.selVenue = '';
     } else {

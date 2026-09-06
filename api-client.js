@@ -144,6 +144,9 @@
       // Suggest existing players matching a name/phone/email (session required):
       // { items:[{playerId, displayName, phone, email, fargo, score, pastEntries}] }.
       playerSuggestions: (id, params) => get(T(id) + '/player-suggestions', params), // {name?, phone?, email?}
+      // Batch variant for bulk preview: body {queries:[{key,name?,phone?,email?}]} (≤300).
+      // Returns { results:{ <key>:[item,...] } } with the same item shape (top ~5 each).
+      playerSuggestionsBatch: (id, queries) => post(T(id) + '/player-suggestions/batch', { queries }),
       // Absorb one player INTO another (director+, CSRF): repoints entrants, backfills
       // contact, deletes the source. Returns { player: <intoId row> }.
       mergePlayers: (playerId, intoId) => post('/v1/players/' + encodeURIComponent(playerId) + '/merge', { intoId }),
