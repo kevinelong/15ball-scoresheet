@@ -25,6 +25,13 @@
   GAMES.forEach(function (g) { GAME_LABELS[g[0]] = g[1]; });
   function gameLabel(id) { return id ? (GAME_LABELS[id] || id) : ''; }
   function venueClub(t) { var p = []; if (t.club) p.push(t.club); if (t.venue) p.push(t.venue); return p.join(' · '); }
+  // create → register → check in (shared by single and bulk add)
+  async function addEntrantChecked(body) {
+    var r = await api.createEntrant(state.t.id, body);
+    var eid = r.entrant.id;
+    await api.patchEntrant(state.t.id, eid, { state: 'registered' });
+    await api.checkInEntrant(state.t.id, eid);
+  }
   function gameOptions(sel) {
     return GAMES.map(function (g) {
       return '<option value="' + esc(g[0]) + '"' + (g[0] === sel ? ' selected' : '') + '>' + esc(g[1]) + '</option>';
@@ -166,11 +173,17 @@
       h += '<label>Name</label><input id="en" placeholder="Player name" />' +
         '<div class="row"><div><label>Mobile (optional)</label><input id="ephone" type="tel" inputmode="tel" placeholder="+1503…" /></div></div>' +
         '<label><input id="eopt" type="checkbox" />Send match-ready SMS (player consented)</label>' +
-        '<div class="spacer"></div><button class="pri" data-action="add-entrant">Add &amp; check in</button><div class="spacer"></div>';
+        '<div class="spacer"></div><button class="pri" data-action="add-entrant">Add &amp; check in</button>' +
+        '<div class="spacer"></div><label>Or paste a list — one player per line</label>' +
+        '<textarea id="ebulk" rows="4" placeholder="Jane Doe, 512, 503-369-9277, jane@x.com&#10;John Smith (487)&#10;Kim Lee"></textarea>' +
+        '<div class="note">Detects email, phone (7/10/11 digits), a 3-digit Fargo (seeds the bracket), and other numbers as an id. Blank lines skipped.</div>' +
+        '<label><input id="ebulkopt" type="checkbox" />These players consented to match-ready SMS</label>' +
+        '<div class="spacer"></div><button class="pri" data-action="add-bulk">Add all &amp; check in</button><div class="spacer"></div>';
     }
     if (!state.roster.length) h += '<p class="muted">No entrants yet.</p>';
     else h += '<ul class="list">' + state.roster.map(function (e) {
       return '<li><span class="vs"><b>' + esc(e.displayName) + '</b>' +
+        (e.fargo != null ? ' <span class="note">Fargo ' + esc(e.fargo) + '</span>' : '') +
         (e.phone ? ' <span class="note">' + esc(e.phone) + (e.notifyOptIn ? ' ✓sms' : '') + '</span>' : '') +
         '</span><span class="pill">' + esc(e.state) + '</span></li>';
     }).join('') + '</ul>';
@@ -265,10 +278,25 @@
       var name = val('en'); if (!name) return toast('Enter a name');
       var body = { displayName: name };
       var ph = val('ephone'); if (ph) { body.phone = ph; body.notifyOptIn = checked('eopt'); }
-      var r = await api.createEntrant(state.t.id, body);
-      var eid = r.entrant.id;
-      await api.patchEntrant(state.t.id, eid, { state: 'registered' });
-      await api.checkInEntrant(state.t.id, eid);
+      await addEntrantChecked(body);
+      await openTournament(state.t.id);
+    });
+    if (act === 'add-bulk') return guard(async function () {
+      var list = Roster.parse(val('ebulk'));
+      if (!list.length) return toast('Nothing to add');
+      var consent = checked('ebulkopt');
+      var added = 0, dupes = 0;
+      for (var i = 0; i < list.length; i++) {
+        var p = list[i];
+        var body = { displayName: p.name };
+        if (p.phone) { body.phone = p.phone; body.notifyOptIn = consent; }
+        if (p.email) body.email = p.email;
+        if (p.fargo != null) body.fargo = p.fargo;
+        if (p.externalId) body.externalId = p.externalId;
+        try { await addEntrantChecked(body); added++; }
+        catch (e) { if (e.code === 'duplicate_display_name') dupes++; else throw e; }
+      }
+      toast('Added ' + added + (dupes ? ' · ' + dupes + ' duplicate' + (dupes > 1 ? 's' : '') + ' skipped' : ''));
       await openTournament(state.t.id);
     });
     if (act === 'open-reg') return guard(async function () {
