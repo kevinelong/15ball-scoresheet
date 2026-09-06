@@ -70,6 +70,18 @@ eq(R.parse('1. Ann\n2) Bob\n- Cal\n• Dee').map(r => r.name), ['Ann', 'Bob', 'C
 // a real first-line name that is not a header word is kept
 eq(R.parse('Ray Charles\nAnn').map(r => r.name), ['Ray Charles', 'Ann'], 'non-header first line kept');
 
+// quoted CSV: "Last, First" name field → "First Last"
+eq(R.parseLine('"Smith, John",512'),
+  { name: 'John Smith', email: '', phone: '', fargo: 512, externalId: '' }, 'quoted last,first name');
+// quoted last,first with semicolon delim + email
+eq(R.parseLine('"Doe, Jane";640;jane@x.com'),
+  { name: 'Jane Doe', email: 'jane@x.com', phone: '', fargo: 640, externalId: '' }, 'quoted last,first semicolon + email');
+// a quoted field containing the delimiter is not split
+eq(R.parseLine('"Ann, Bee & Co", 512').name, 'Bee & Co Ann', 'quoted delimiter not split');
+eq(R.parseLine('"Ann, Bee & Co", 512').fargo, 512, 'quoted delimiter keeps other fields');
+// ""-escaped quote becomes a literal quote inside the field
+eq(R.parseLine('"Jon ""JD"" Doe", 512').name, 'Jon "JD" Doe', 'doubled quote escape');
+
 // E.164 normalization
 eq(R.e164('503-369-9277'), '+15033699277', 'e164 10-digit');
 eq(R.e164('1 (503) 369-9277'), '+15033699277', 'e164 11-digit leading 1');

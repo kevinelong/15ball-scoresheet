@@ -60,7 +60,7 @@ func (api *API) generateDoubleElim(ctx context.Context, tx *sql.Tx, tid, divisio
 	var ent []string
 	rows, err := tx.QueryContext(ctx,
 		`SELECT id FROM entrants WHERE tournament_id=? AND state='checked_in' AND archived_at IS NULL
-		 ORDER BY (fargo IS NULL), fargo DESC, created_at, id`, tid)
+		 ORDER BY (seed IS NULL), seed ASC, (fargo IS NULL), fargo DESC, created_at, id`, tid)
 	if err != nil {
 		return 0, err
 	}

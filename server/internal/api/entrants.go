@@ -23,6 +23,7 @@ type Entrant struct {
 	Email        *string `json:"email"`
 	Fargo        *int64  `json:"fargo"`
 	ExternalID   *string `json:"externalId"`
+	Seed         *int64  `json:"seed"`
 	CheckInAt    *int64  `json:"checkInAt"`
 	ArchivedAt   *int64  `json:"archivedAt"`
 	CreatedAt    int64   `json:"createdAt"`
@@ -30,12 +31,12 @@ type Entrant struct {
 	Version      int64   `json:"version"`
 }
 
-const entrantCols = `id, tournament_id, division_id, display_name, state, phone, notify_opt_in, check_in_at, archived_at, created_at, updated_at, version, email, fargo, external_id`
+const entrantCols = `id, tournament_id, division_id, display_name, state, phone, notify_opt_in, check_in_at, archived_at, created_at, updated_at, version, email, fargo, external_id, seed`
 
 func scanEntrant(row interface{ Scan(...any) error }) (*Entrant, error) {
 	var e Entrant
 	var optIn int
-	err := row.Scan(&e.ID, &e.TournamentID, &e.DivisionID, &e.DisplayName, &e.State, &e.Phone, &optIn, &e.CheckInAt, &e.ArchivedAt, &e.CreatedAt, &e.UpdatedAt, &e.Version, &e.Email, &e.Fargo, &e.ExternalID)
+	err := row.Scan(&e.ID, &e.TournamentID, &e.DivisionID, &e.DisplayName, &e.State, &e.Phone, &optIn, &e.CheckInAt, &e.ArchivedAt, &e.CreatedAt, &e.UpdatedAt, &e.Version, &e.Email, &e.Fargo, &e.ExternalID, &e.Seed)
 	e.NotifyOptIn = optIn == 1
 	return &e, err
 }
@@ -71,6 +72,7 @@ func (api *API) CreateEntrant(w http.ResponseWriter, r *http.Request) {
 		Email       *string `json:"email"`
 		Fargo       *int64  `json:"fargo"`
 		ExternalID  *string `json:"externalId"`
+		Seed        *int64  `json:"seed"`
 	}
 	if !decodeBody(w, r, &body) {
 		return
@@ -88,9 +90,9 @@ func (api *API) CreateEntrant(w http.ResponseWriter, r *http.Request) {
 	tx, _ := api.DB.BeginTx(r.Context(), nil)
 	defer tx.Rollback()
 	_, err := tx.ExecContext(r.Context(),
-		`INSERT INTO entrants (id, tournament_id, division_id, display_name, state, phone, notify_opt_in, email, fargo, external_id, created_at, updated_at)
-		 VALUES (?,?,?,?, 'pending', ?, ?, ?, ?, ?, ?, ?)`,
-		id, tid, body.DivisionID, body.DisplayName, body.Phone, optIn, body.Email, body.Fargo, body.ExternalID, now, now)
+		`INSERT INTO entrants (id, tournament_id, division_id, display_name, state, phone, notify_opt_in, email, fargo, external_id, seed, created_at, updated_at)
+		 VALUES (?,?,?,?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?)`,
+		id, tid, body.DivisionID, body.DisplayName, body.Phone, optIn, body.Email, body.Fargo, body.ExternalID, body.Seed, now, now)
 	if err != nil {
 		writeErr(w, http.StatusConflict, "duplicate_display_name", "an entrant with that name already exists")
 		return
@@ -224,6 +226,7 @@ func (api *API) PatchEntrant(w http.ResponseWriter, r *http.Request) {
 		Email       *string `json:"email"`
 		Fargo       *int64  `json:"fargo"`
 		ExternalID  *string `json:"externalId"`
+		Seed        *int64  `json:"seed"`
 	}
 	if !decodeBody(w, r, &body) {
 		return
@@ -278,6 +281,11 @@ func (api *API) PatchEntrant(w http.ResponseWriter, r *http.Request) {
 		sets = append(sets, "external_id=?")
 		args = append(args, *body.ExternalID)
 		after["externalId"] = *body.ExternalID
+	}
+	if body.Seed != nil {
+		sets = append(sets, "seed=?")
+		args = append(args, *body.Seed)
+		after["seed"] = *body.Seed
 	}
 	if len(sets) == 0 {
 		writeJSON(w, http.StatusOK, map[string]interface{}{"entrant": cur})

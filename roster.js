@@ -29,6 +29,25 @@
     return ',';
   }
   function stripBullet(line) { return line.replace(/^\s*(?:\d+[.)]|[-*•])\s+/, ''); }
+
+  // Quote-aware split: a double-quote toggles "in quotes"; the delimiter only splits
+  // when NOT inside quotes. One surrounding layer of double quotes is stripped from
+  // each field, and a doubled "" inside a quoted field becomes a literal ".
+  function splitFields(line, delim) {
+    var out = [], buf = '', inQ = false, quoted = false;
+    for (var i = 0; i < line.length; i++) {
+      var c = line.charAt(i);
+      if (c === '"') {
+        if (inQ && line.charAt(i + 1) === '"') { buf += '"'; i++; } // "" → literal "
+        else { inQ = !inQ; if (inQ) quoted = true; }
+        continue;
+      }
+      if (c === delim && !inQ) { out.push({ v: buf, quoted: quoted }); buf = ''; quoted = false; continue; }
+      buf += c;
+    }
+    out.push({ v: buf, quoted: quoted });
+    return out;
+  }
   function isHeaderLine(line) {
     var toks = line.toLowerCase().split(/[\t;,\s]+/).filter(Boolean);
     if (!toks.length) return false;
@@ -66,9 +85,15 @@
     line = stripBullet(String(line));
     var rec = { name: '', email: '', phone: '', fargo: null, externalId: '' };
     var nameFields = [];
-    line.split(detectDelim(line)).forEach(function (f) {
-      var s = classifyField(f, rec);
-      if (s) nameFields.push(s);
+    var delim = detectDelim(line);
+    splitFields(line, delim).forEach(function (f) {
+      var s = classifyField(f.v, rec);
+      if (s == null) return;
+      // A name that itself contains a comma is "Last, First" → "First Last". This is
+      // what quoting a comma into a name means (e.g. "Smith, John" → John Smith).
+      var m = s.match(/^([^,]+),\s*(.+)$/);
+      if (m) s = (m[2] + ' ' + m[1]).replace(/\s+/g, ' ').trim();
+      nameFields.push(s);
     });
     if (opts.lastFirst && nameFields.length >= 2) {
       nameFields = [nameFields[1], nameFields[0]].concat(nameFields.slice(2)); // Last, First → First Last
