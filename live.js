@@ -176,7 +176,8 @@
         '<div class="spacer"></div><button class="pri" data-action="add-entrant">Add &amp; check in</button>' +
         '<div class="spacer"></div><label>Or paste a list — one player per line</label>' +
         '<textarea id="ebulk" rows="4" placeholder="Jane Doe, 512, 503-369-9277, jane@x.com&#10;John Smith (487)&#10;Kim Lee"></textarea>' +
-        '<div class="note">Detects email, phone (7/10/11 digits), a 3-digit Fargo (seeds the bracket), and other numbers as an id. Blank lines skipped.</div>' +
+        '<div class="note">Commas, tabs (paste from a spreadsheet), or semicolons all work. Detects email, phone (7/10/11 digits), a 3-digit Fargo (seeds the bracket), and other numbers as an id. Blank lines, bullets/numbering, and a header row are skipped.</div>' +
+        '<label><input id="ebulklf" type="checkbox" />Names are &ldquo;Last, First&rdquo;</label>' +
         '<label><input id="ebulkopt" type="checkbox" />These players consented to match-ready SMS</label>' +
         '<div class="spacer"></div><button class="pri" data-action="add-bulk">Add all &amp; check in</button><div class="spacer"></div>';
     }
@@ -282,7 +283,7 @@
       await openTournament(state.t.id);
     });
     if (act === 'add-bulk') return guard(async function () {
-      var list = Roster.parse(val('ebulk'));
+      var list = Roster.parse(val('ebulk'), { lastFirst: checked('ebulklf') });
       if (!list.length) return toast('Nothing to add');
       var consent = checked('ebulkopt');
       var added = 0, dupes = 0;

@@ -43,5 +43,32 @@ eq(R.parseLine('Sam Ray sam@z.io').email, 'sam@z.io', 'inline email');
 // a row with no name is dropped
 eq(R.parse('512, 503-369-9277').length, 0, 'nameless row dropped');
 
+// TAB-delimited (spreadsheet paste)
+eq(R.parseLine('John Smith\t512\t503-369-9277'),
+  { name: 'John Smith', email: '', phone: '503-369-9277', fargo: 512, externalId: '' }, 'tab-delimited');
+
+// semicolon-delimited
+eq(R.parseLine('Ann; 640; ann@x.com'),
+  { name: 'Ann', email: 'ann@x.com', phone: '', fargo: 640, externalId: '' }, 'semicolon-delimited');
+
+// Last, First mode (comma) — swap first two name fields
+eq(R.parseLine('Smith, John, 512', { lastFirst: true }).name, 'John Smith', 'lastFirst comma');
+// Last, First mode with separate spreadsheet columns (tab)
+eq(R.parseLine('Smith\tJohn\t512', { lastFirst: true }).name, 'John Smith', 'lastFirst tab columns');
+// default (no mode) keeps field order
+eq(R.parseLine('Smith, John').name, 'Smith John', 'default keeps order');
+// single name field is not swapped
+eq(R.parseLine('John Smith', { lastFirst: true }).name, 'John Smith', 'lastFirst single field unchanged');
+
+// header row skipped (only the first line)
+eq(R.parse('Name, Fargo, Phone\nAnn, 500\nBob, 600').map(r => r.name), ['Ann', 'Bob'], 'header row skipped');
+eq(R.parse('first\tlast\tfargo\nAnn\tLee\t500', { lastFirst: true })[0].name, 'Lee Ann', 'header + lastFirst');
+
+// bullets / numbering stripped
+eq(R.parse('1. Ann\n2) Bob\n- Cal\n• Dee').map(r => r.name), ['Ann', 'Bob', 'Cal', 'Dee'], 'bullets/numbers stripped');
+
+// a real first-line name that is not a header word is kept
+eq(R.parse('Ray Charles\nAnn').map(r => r.name), ['Ray Charles', 'Ann'], 'non-header first line kept');
+
 console.log(pass + ' passed, ' + fail + ' failed');
 if (fail) process.exit(1);
