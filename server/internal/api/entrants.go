@@ -29,14 +29,15 @@ type Entrant struct {
 	CreatedAt    int64   `json:"createdAt"`
 	UpdatedAt    int64   `json:"updatedAt"`
 	Version      int64   `json:"version"`
+	PlayerID     *string `json:"playerId"`
 }
 
-const entrantCols = `id, tournament_id, division_id, display_name, state, phone, notify_opt_in, check_in_at, archived_at, created_at, updated_at, version, email, fargo, external_id, seed`
+const entrantCols = `id, tournament_id, division_id, display_name, state, phone, notify_opt_in, check_in_at, archived_at, created_at, updated_at, version, email, fargo, external_id, seed, player_id`
 
 func scanEntrant(row interface{ Scan(...any) error }) (*Entrant, error) {
 	var e Entrant
 	var optIn int
-	err := row.Scan(&e.ID, &e.TournamentID, &e.DivisionID, &e.DisplayName, &e.State, &e.Phone, &optIn, &e.CheckInAt, &e.ArchivedAt, &e.CreatedAt, &e.UpdatedAt, &e.Version, &e.Email, &e.Fargo, &e.ExternalID, &e.Seed)
+	err := row.Scan(&e.ID, &e.TournamentID, &e.DivisionID, &e.DisplayName, &e.State, &e.Phone, &optIn, &e.CheckInAt, &e.ArchivedAt, &e.CreatedAt, &e.UpdatedAt, &e.Version, &e.Email, &e.Fargo, &e.ExternalID, &e.Seed, &e.PlayerID)
 	e.NotifyOptIn = optIn == 1
 	return &e, err
 }
@@ -73,6 +74,7 @@ func (api *API) CreateEntrant(w http.ResponseWriter, r *http.Request) {
 		Fargo       *int64  `json:"fargo"`
 		ExternalID  *string `json:"externalId"`
 		Seed        *int64  `json:"seed"`
+		PlayerID    *string `json:"playerId"`
 	}
 	if !decodeBody(w, r, &body) {
 		return
@@ -95,6 +97,21 @@ func (api *API) CreateEntrant(w http.ResponseWriter, r *http.Request) {
 		id, tid, body.DivisionID, body.DisplayName, body.Phone, optIn, body.Email, body.Fargo, body.ExternalID, body.Seed, now, now)
 	if err != nil {
 		writeErr(w, http.StatusConflict, "duplicate_display_name", "an entrant with that name already exists")
+		return
+	}
+	// Cross-event identity: ensure a player scoped to the tournament's organizer
+	// and link this entrant to it (new player, or a verified existing one).
+	org, oerr := api.tournamentOrganizer(r.Context(), tx, tid)
+	if oerr != nil {
+		writeErr(w, http.StatusInternalServerError, "server_error", "")
+		return
+	}
+	if _, perr := api.ensurePlayerForEntrant(r.Context(), tx, org, id, body.DisplayName, body.Phone, body.Email, body.ExternalID, body.Fargo, body.PlayerID); perr != nil {
+		if errors.Is(perr, sql.ErrNoRows) {
+			writeErr(w, http.StatusBadRequest, "invalid_player", "playerId does not belong to this organizer")
+			return
+		}
+		writeErr(w, http.StatusInternalServerError, "server_error", "")
 		return
 	}
 	_ = audit.Write(r.Context(), tx, audit.Entry{

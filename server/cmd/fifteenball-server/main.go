@@ -116,6 +116,8 @@ func main() {
 	// entrants + check-in (Slice C)
 	matchRead.Get("/api/v1/tournaments/{id}/entrants", dapi.ListEntrants)
 	dir.Post("/api/v1/tournaments/{id}/entrants", dapi.CreateEntrant)
+	sess.Get("/api/v1/tournaments/{id}/player-suggestions", dapi.PlayerSuggestions)
+	dir.Post("/api/v1/players/{id}/merge", dapi.MergePlayers)
 	dir.Patch("/api/v1/tournaments/{id}/entrants/{entrantId}", dapi.PatchEntrant)
 	dir.Post("/api/v1/tournaments/{id}/entrants/{entrantId}/check-in", dapi.CheckInEntrant)
 	dir.Post("/api/v1/tournaments/{id}/entrants/{entrantId}/archive", dapi.ArchiveEntrant)

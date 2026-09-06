@@ -19,9 +19,9 @@ import (
 )
 
 type testEnv struct {
-	api      *API
-	auth     *auth.Auth
-	router   *chi.Mux
+	api         *API
+	auth        *auth.Auth
+	router      *chi.Mux
 	director    string // session cookie value
 	viewer      string
 	scorekeeper string
@@ -74,6 +74,8 @@ func newTestEnv(t *testing.T) *testEnv {
 	director.Post("/api/v1/tournaments/{id}/divisions", dapi.CreateDivision)
 	sess.Get("/api/v1/tournaments/{id}/entrants", dapi.ListEntrants)
 	director.Post("/api/v1/tournaments/{id}/entrants", dapi.CreateEntrant)
+	sess.Get("/api/v1/tournaments/{id}/player-suggestions", dapi.PlayerSuggestions)
+	director.Post("/api/v1/players/{id}/merge", dapi.MergePlayers)
 	director.Patch("/api/v1/tournaments/{id}/entrants/{entrantId}", dapi.PatchEntrant)
 	director.Post("/api/v1/tournaments/{id}/entrants/{entrantId}/check-in", dapi.CheckInEntrant)
 	director.Post("/api/v1/tournaments/{id}/entrants/{entrantId}/archive", dapi.ArchiveEntrant)
@@ -92,8 +94,8 @@ func newTestEnv(t *testing.T) *testEnv {
 	dirRead.Get("/api/v1/tournaments/{id}/audit", dapi.ListAudit)
 
 	return &testEnv{api: dapi, auth: a, router: r,
-		director:   mkUser("director@x.com", auth.RoleTournamentDirector),
-		viewer:     mkUser("viewer@x.com", auth.RoleViewer),
+		director:    mkUser("director@x.com", auth.RoleTournamentDirector),
+		viewer:      mkUser("viewer@x.com", auth.RoleViewer),
 		scorekeeper: mkUser("scorekeeper@x.com", auth.RoleScorekeeper)}
 }
 
