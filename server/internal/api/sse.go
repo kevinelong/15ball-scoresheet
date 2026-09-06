@@ -29,6 +29,11 @@ func (api *API) canViewTournament(r *http.Request, id string) (bool, bool) {
 	if err != nil {
 		return false, false // not found
 	}
+	// Open match editing exposes tournament/match/entrant reads publicly; mirror
+	// that here so the OBS overlay can receive SSE without a session.
+	if api.OpenMatchEditing {
+		return true, true
+	}
 	if vis.String == "public" {
 		return true, true
 	}

@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>15-Ball — Live Overlay</title>
+  <style>
+    /* Transparent page so OBS composites this over the video feed. */
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: transparent;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      color: #fff;
+    }
+    *, *::before, *::after { box-sizing: border-box; }
+
+    /* Lower-third anchored to the bottom-left; scales for 1920x1080 but responsive. */
+    #wrap {
+      position: fixed;
+      left: 3vw;
+      bottom: 4vh;
+      right: 3vw;
+      display: flex;
+      justify-content: flex-start;
+    }
+
+    .card {
+      display: inline-block;
+      min-width: min(52vw, 900px);
+      max-width: 92vw;
+      padding: 1.1rem 1.6rem 1.25rem;
+      border-radius: 16px;
+      background: linear-gradient(180deg, rgba(10, 14, 24, 0.82), rgba(6, 9, 16, 0.9));
+      border: 2px solid rgba(255, 255, 255, 0.14);
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.55);
+      backdrop-filter: blur(3px);
+      /* readable over any footage */
+      text-shadow: 0 2px 6px rgba(0, 0, 0, 0.9), 0 0 2px rgba(0, 0, 0, 0.9);
+    }
+
+    .tourney {
+      display: flex;
+      align-items: baseline;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+      margin-bottom: 0.35rem;
+    }
+    .tourney .name {
+      font-size: clamp(1.1rem, 2.1vw, 2rem);
+      font-weight: 800;
+      letter-spacing: 0.01em;
+      color: #ffe9a8;
+    }
+    .tourney .game {
+      font-size: clamp(0.75rem, 1.1vw, 1rem);
+      font-weight: 600;
+      color: rgba(255, 255, 255, 0.72);
+    }
+
+    .tags {
+      display: flex;
+      align-items: center;
+      gap: 0.55rem;
+      flex-wrap: wrap;
+      margin-bottom: 0.55rem;
+    }
+    .tag {
+      font-size: clamp(0.7rem, 1.1vw, 1rem);
+      font-weight: 700;
+      padding: 0.16em 0.7em;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.12);
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      text-shadow: none;
+    }
+    .tag.bracket-W { background: rgba(56, 142, 60, 0.55); border-color: rgba(129, 199, 132, 0.7); }
+    .tag.bracket-L { background: rgba(211, 84, 0, 0.5); border-color: rgba(255, 167, 102, 0.7); }
+    .tag.bracket-GF { background: rgba(156, 39, 176, 0.55); border-color: rgba(206, 147, 216, 0.75); }
+    .tag.table { background: rgba(21, 101, 192, 0.5); border-color: rgba(144, 202, 249, 0.7); }
+
+    .players {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+    .player {
+      font-size: clamp(1.4rem, 3.4vw, 3.2rem);
+      font-weight: 900;
+      line-height: 1.05;
+      color: #fff;
+      -webkit-text-stroke: 1px rgba(0, 0, 0, 0.5);
+    }
+    .vs {
+      font-size: clamp(0.9rem, 1.6vw, 1.5rem);
+      font-weight: 700;
+      color: #ffd54f;
+      opacity: 0.95;
+    }
+
+    .standby {
+      font-size: clamp(1.2rem, 2.4vw, 2.2rem);
+      font-weight: 800;
+      color: rgba(255, 255, 255, 0.9);
+    }
+    .subtle {
+      font-size: clamp(0.8rem, 1.3vw, 1.1rem);
+      color: rgba(255, 255, 255, 0.6);
+      margin-top: 0.35rem;
+    }
+    .hint {
+      font-size: clamp(0.9rem, 1.5vw, 1.3rem);
+      color: rgba(255, 255, 255, 0.55);
+      font-weight: 600;
+    }
+    .notfound { color: #ffb3b3; }
+  </style>
+</head>
+<body>
+  <div id="wrap">
+    <div id="card" class="card" role="status" aria-live="polite">
+      <div class="standby">Loading…</div>
+    </div>
+  </div>
+  <script src="api-client.js"></script>
+  <script src="overlay-live.js"></script>
+</body>
+</html>
