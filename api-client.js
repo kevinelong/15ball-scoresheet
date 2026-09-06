@@ -115,10 +115,17 @@
       grantRole: (userId, role) => post('/v1/users/' + encodeURIComponent(userId) + '/roles', { role }),
       revokeRole: (userId, role) => del('/v1/users/' + encodeURIComponent(userId) + '/roles/' + encodeURIComponent(role)),
 
+      // ---- venues (organizer-scoped, best-effort geocoded) ----
+      listVenues: () => get('/v1/venues'),                         // { items:[{id,name,address,lat,lng,...}] }
+      createVenue: (body) => post('/v1/venues', body),            // {name, address?, lat?, lng?} → { venue }
+      // Players who played this organizer's OTHER tournaments at the SAME venue,
+      // excluding those already in this one: { items:[{playerId,displayName,phone,email,fargo}] }.
+      recentPlayers: (id) => get(T(id) + '/recent-players'),
+
       // ---- tournaments ----
       listTournaments: (params) => get('/v1/tournaments', params), // {archived, state, cursor}
       getTournament: (id) => get(T(id)),
-      createTournament: (body) => post('/v1/tournaments', body),   // {name, game?, visibility?}
+      createTournament: (body) => post('/v1/tournaments', body),   // {name, game?, visibility?, venue?, club?, venueId?}
       patchTournament: (id, body) => patch(T(id), body),           // {name?, state?, visibility?}
       archiveTournament: (id, reason) => post(T(id) + '/archive', { reason }),
 

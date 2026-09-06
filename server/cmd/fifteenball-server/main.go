@@ -105,9 +105,13 @@ func main() {
 		open := r.With(a.RequireCSRF)
 		matchRead, matchAssign, matchScore = r, open, open
 	}
+	// venues (organizer-scoped, with best-effort geocoding)
+	sess.Get("/api/v1/venues", dapi.ListVenues)
+	dir.Post("/api/v1/venues", dapi.CreateVenue)
 	// tournaments + divisions (Slice B)
 	sess.Get("/api/v1/tournaments", dapi.ListTournaments)
 	dir.Post("/api/v1/tournaments", dapi.CreateTournament)
+	sess.Get("/api/v1/tournaments/{id}/recent-players", dapi.RecentPlayersAtVenue)
 	matchRead.Get("/api/v1/tournaments/{id}", dapi.GetTournament)
 	dir.Patch("/api/v1/tournaments/{id}", dapi.PatchTournament)
 	dir.Post("/api/v1/tournaments/{id}/archive", dapi.ArchiveTournament)

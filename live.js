@@ -9,7 +9,7 @@
   var api = FB.createClient();
   var DIRECTOR = ['tournament_director', 'club_admin', 'system_admin'];
 
-  var state = { view: 'boot', me: null, public: false, tournaments: [], t: null, roster: [], names: {}, matches: [], es: null, err: '', preview: null, editEntrant: null, pendingAdd: null, dupes: null };
+  var state = { view: 'boot', me: null, public: false, tournaments: [], t: null, roster: [], names: {}, matches: [], es: null, err: '', preview: null, editEntrant: null, pendingAdd: null, dupes: null, venues: [], newVenue: false, selVenue: '', newName: '', newClub: '', recent: null };
 
   // Canonical disciplines (id -> display name); mirrors the backend validGames set.
   var GAMES = [
@@ -36,6 +36,23 @@
     return GAMES.map(function (g) {
       return '<option value="' + esc(g[0]) + '"' + (g[0] === sel ? ' selected' : '') + '>' + esc(g[1]) + '</option>';
     }).join('');
+  }
+  // Venue picker for the create-tournament form: a <select id="tvenue"> of the
+  // organizer's saved venues plus a "＋ New venue" option that reveals name/address
+  // inputs. selId keeps the chosen venue selected across re-renders.
+  function venuePickerMarkup(selId) {
+    var opts = '<option value="">No venue</option>' +
+      (state.venues || []).map(function (v) {
+        return '<option value="' + esc(v.id) + '"' + (v.id === selId ? ' selected' : '') + '>' + esc(v.name) + '</option>';
+      }).join('') +
+      '<option value="__new__"' + (state.newVenue ? ' selected' : '') + '>＋ New venue</option>';
+    var h = '<div class="row"><select id="tvenue">' + opts + '</select></div>';
+    if (state.newVenue) {
+      h += '<div class="row"><input id="tvenuename" placeholder="Venue name" /></div>' +
+        '<div class="row"><input id="tvenueaddr" placeholder="Address (auto-located, optional)" /></div>' +
+        '<div class="spacer"></div><div class="row"><button class="ghost" data-action="add-venue">Add venue</button></div>';
+    }
+    return h;
   }
 
   var appEl = document.getElementById('app');
@@ -81,13 +98,31 @@
     state.t = null; closeSSE();
     var resp = await api.listTournaments();
     state.tournaments = resp.items || [];
+    if (isDirector()) {
+      try { state.venues = (await api.listVenues()).items || []; }
+      catch (e) { state.venues = []; } // venue list is best-effort — plain create still works
+    }
+    state.newVenue = false;      // reset the "＋ New venue" reveal each time home opens
+    state.selVenue = '';         // reset the chosen venue
+    state.newName = '';          // draft tournament name preserved across venue re-renders
+    state.newClub = '';
+    renderHome();
+  }
+
+  // renderHome (re)paints the home card from current state without refetching, so
+  // toggling the venue picker keeps the list + typed values.
+  function renderHome() {
+    // capture any in-progress typing before we replace the DOM
+    if (document.getElementById('tname')) state.newName = val('tname');
+    if (document.getElementById('tclub')) state.newClub = val('tclub');
     state.view = 'home';
     var html = '<div class="card"><h2>Tournaments</h2>';
     if (isDirector()) {
-      html += '<input id="tname" placeholder="New tournament name" />' +
+      html += '<input id="tname" placeholder="New tournament name" value="' + esc(state.newName || '') + '" />' +
         '<div class="spacer"></div>' +
         '<div class="row"><select id="tgame">' + gameOptions('15ball_rotation') + '</select></div>' +
-        '<div class="row"><input id="tvenue" placeholder="Venue (optional)" /><input id="tclub" placeholder="Club (optional)" /></div>' +
+        venuePickerMarkup(state.selVenue) +
+        '<div class="row"><input id="tclub" placeholder="Club (optional)" value="' + esc(state.newClub || '') + '" /></div>' +
         '<div class="spacer"></div><button class="pri" data-action="create-tournament">Create</button><div class="spacer"></div>';
     }
     if (!state.tournaments.length) {
@@ -105,6 +140,12 @@
     appEl.innerHTML = html;
   }
 
+  // The selected venue id, or '' — treats the "＋ New venue" sentinel as none.
+  function venueSelectValue() {
+    var v = val('tvenue');
+    return (v && v !== '__new__') ? v : '';
+  }
+
   // ---- tournament detail ----
   async function openTournament(idOrSlug) {
     closeSSE();
@@ -115,6 +156,12 @@
     state.names = {}; all.forEach(function (e) { state.names[e.id] = e.displayName; });
     state.roster = all.filter(function (e) { return !e.archivedAt; });
     state.matches = (state.t.state === 'in_progress' || state.t.state === 'completed') ? ((await api.listMatches(cid)).items || []) : [];
+    // Recent players at this venue (director + tournament linked to a venue).
+    state.recent = null;
+    if (isDirector() && state.t.venueId) {
+      try { state.recent = (await api.recentPlayers(cid)).items || []; }
+      catch (e) { state.recent = null; } // best-effort — section just hides on error
+    }
     state.view = 'tournament';
     renderTournament();
     paintQR();
@@ -290,6 +337,27 @@
       '</div></li>';
   }
 
+  // "Recent players at this venue": players who played this organizer's other
+  // tournaments at the same venue and aren't in this one yet. Hidden when empty.
+  function recentPlayersMarkup() {
+    var list = state.recent;
+    if (!list || !list.length) return '';
+    var rows = list.map(function (p) {
+      var meta = [];
+      if (p.fargo != null) meta.push('Fargo ' + esc(p.fargo));
+      if (p.phone) meta.push(esc(Roster.e164(p.phone)));
+      return '<li><label><input type="checkbox" class="recentchk" data-pid="' + esc(p.playerId) + '" /> ' +
+        '<b>' + esc(p.displayName) + '</b>' +
+        (meta.length ? ' <span class="note">' + meta.join(' · ') + '</span>' : '') +
+        '</label></li>';
+    }).join('');
+    return '<div class="spacer"></div><label>Recent players at this venue</label>' +
+      '<div class="note">Played your other events here. Check any to add + check in.</div>' +
+      '<ul class="list">' + rows + '</ul>' +
+      '<div class="row"><button class="ghost" data-action="recent-all">Select all</button>' +
+      '<button class="pri" data-action="recent-add">Add selected</button></div><div class="spacer"></div>';
+  }
+
   function renderEntrants(dir) {
     var h = '<div class="card"><h2>Entrants</h2>';
     if (dir && state.pendingAdd) {
@@ -311,6 +379,7 @@
         '<label><input id="ebulklf" type="checkbox" />Names are &ldquo;Last, First&rdquo;</label>' +
         '<label><input id="ebulkopt" type="checkbox" />These players consented to match-ready SMS</label>' +
         '<div class="spacer"></div><button class="pri" data-action="bulk-preview">Preview</button><div class="spacer"></div>';
+      h += recentPlayersMarkup();
     }
     if (!state.roster.length) h += '<p class="muted">No entrants yet.</p>';
     else h += '<ul class="list">' + state.roster.map(function (e) {
@@ -558,9 +627,27 @@
     if (act === 'continue') return guard(boot);
     if (act === 'home') return guard(openHome);
     if (act === 'open-t') return guard(function () { return openTournament(id); });
+    if (act === 'add-venue') return guard(async function () {
+      var vname = val('tvenuename'); if (!vname) return toast('Enter a venue name');
+      var r = await api.createVenue({ name: vname, address: val('tvenueaddr') }); // geocode is server-side
+      var v = r.venue;
+      state.venues = (state.venues || []).concat([v]);
+      state.newVenue = false;
+      state.selVenue = v.id; // pre-select the just-added venue
+      renderHome();
+    });
     if (act === 'create-tournament') return guard(async function () {
       var name = val('tname'); if (!name) return toast('Enter a name');
-      var r = await api.createTournament({ name: name, game: val('tgame') || '15ball_rotation', venue: val('tvenue'), club: val('tclub') }); await openTournament(r.tournament.id);
+      var vid = venueSelectValue();
+      var venueName = '';
+      if (vid) {
+        var v = (state.venues || []).filter(function (x) { return x.id === vid; })[0];
+        if (v) venueName = v.name;
+      }
+      // Pass venueId (the link) AND venue (the name label) so the existing
+      // Club · Venue display keeps working.
+      var r = await api.createTournament({ name: name, game: val('tgame') || '15ball_rotation', venue: venueName, club: val('tclub'), venueId: vid || undefined });
+      await openTournament(r.tournament.id);
     });
     if (act === 'add-entrant') return guard(async function () {
       var name = val('en'); if (!name) return toast('Enter a name');
@@ -599,6 +686,32 @@
     if (act === 'add-cancel') return guard(async function () {
       state.pendingAdd = null;
       renderTournament();
+    });
+    if (act === 'recent-all') return guard(async function () {
+      var boxes = document.querySelectorAll('.recentchk');
+      var anyUnchecked = false;
+      boxes.forEach(function (c) { if (!c.checked) anyUnchecked = true; });
+      boxes.forEach(function (c) { c.checked = anyUnchecked; }); // toggle: all on, else all off
+    });
+    if (act === 'recent-add') return guard(async function () {
+      var picks = [];
+      document.querySelectorAll('.recentchk').forEach(function (c) {
+        if (c.checked) picks.push(c.getAttribute('data-pid'));
+      });
+      if (!picks.length) return toast('Select at least one player');
+      var byId = {}; (state.recent || []).forEach(function (p) { byId[p.playerId] = p; });
+      var added = 0;
+      for (var i = 0; i < picks.length; i++) {
+        var p = byId[picks[i]]; if (!p) continue;
+        var body = { displayName: p.displayName, playerId: p.playerId }; // LINK to the existing player
+        if (p.phone) body.phone = Roster.e164(p.phone);
+        if (p.email) body.email = p.email;
+        if (p.fargo != null) body.fargo = p.fargo;
+        try { await addEntrantChecked(body); added++; }
+        catch (e) { if (e.code !== 'duplicate_display_name') throw e; }
+      }
+      toast('Added ' + added);
+      await openTournament(state.t.id);
     });
     if (act === 'bulk-preview') return guard(async function () {
       var raw = val('ebulk');
@@ -715,6 +828,19 @@
       toast('Recorded');
       await openTournament(state.t.id);
     });
+  });
+
+  // Venue picker: toggling to "＋ New venue" reveals the name/address inputs;
+  // any saved venue selection just remembers the choice.
+  document.addEventListener('change', function (ev) {
+    var sel = ev.target;
+    if (!sel || sel.id !== 'tvenue') return;
+    if (sel.value === '__new__') {
+      state.newVenue = true; state.selVenue = '';
+    } else {
+      state.newVenue = false; state.selVenue = sel.value;
+    }
+    renderHome();
   });
 
   // A ?t=<id> link opens a public scoring board (no sign-in); otherwise normal boot.

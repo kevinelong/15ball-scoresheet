@@ -16,8 +16,9 @@ type Tournament struct {
 	Slug       string  `json:"slug"`
 	Name       string  `json:"name"`
 	Game       string  `json:"game"`
-	Venue      *string `json:"venue"` // optional free-form venue label
-	Club       *string `json:"club"`  // optional free-form club label
+	Venue      *string `json:"venue"`   // optional free-form venue label
+	Club       *string `json:"club"`    // optional free-form club label
+	VenueID    *string `json:"venueId"` // optional link to a venues row (organizer-scoped)
 	State      string  `json:"state"`
 	Visibility string  `json:"visibility"`
 	ArchivedAt *int64  `json:"archivedAt"`
@@ -27,7 +28,7 @@ type Tournament struct {
 	Version    int64   `json:"version"`
 }
 
-const tournamentCols = `id, slug, name, game, state, visibility, archived_at, created_by, created_at, updated_at, version, venue, club`
+const tournamentCols = `id, slug, name, game, state, visibility, archived_at, created_by, created_at, updated_at, version, venue, club, venue_id`
 
 // validGames is the canonical set of supported disciplines (id -> display name).
 var validGames = map[string]string{
@@ -42,7 +43,7 @@ var validGames = map[string]string{
 
 func scanTournament(row interface{ Scan(...any) error }) (*Tournament, error) {
 	var t Tournament
-	err := row.Scan(&t.ID, &t.Slug, &t.Name, &t.Game, &t.State, &t.Visibility, &t.ArchivedAt, &t.CreatedBy, &t.CreatedAt, &t.UpdatedAt, &t.Version, &t.Venue, &t.Club)
+	err := row.Scan(&t.ID, &t.Slug, &t.Name, &t.Game, &t.State, &t.Visibility, &t.ArchivedAt, &t.CreatedBy, &t.CreatedAt, &t.UpdatedAt, &t.Version, &t.Venue, &t.Club, &t.VenueID)
 	return &t, err
 }
 
@@ -69,6 +70,7 @@ func (api *API) CreateTournament(w http.ResponseWriter, r *http.Request) {
 		Visibility string `json:"visibility"`
 		Venue      string `json:"venue"`
 		Club       string `json:"club"`
+		VenueID    string `json:"venueId"`
 	}
 	if !decodeBody(w, r, &body) {
 		return
@@ -93,6 +95,17 @@ func (api *API) CreateTournament(w http.ResponseWriter, r *http.Request) {
 	if body.Visibility == "public" {
 		vis = "public"
 	}
+	// Optional venue link: it must belong to the creating organizer (actor).
+	if body.VenueID != "" {
+		if _, verr := api.getVenue(r.Context(), body.VenueID, actor(r.Context())); verr != nil {
+			if errors.Is(verr, sql.ErrNoRows) {
+				writeErr(w, http.StatusBadRequest, "invalid_venue", "venueId does not belong to this organizer")
+				return
+			}
+			writeErr(w, http.StatusInternalServerError, "server_error", "")
+			return
+		}
+	}
 	base := slugify(body.Name)
 	if base == "" {
 		base = "tournament"
@@ -109,9 +122,9 @@ func (api *API) CreateTournament(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		_, err = tx.ExecContext(r.Context(),
-			`INSERT INTO tournaments (id, slug, name, game, venue, club, state, visibility, created_by, created_at, updated_at, version)
-			 VALUES (?,?,?,?,?,?,?,?,?,?,?,1)`,
-			id, slug, body.Name, game, nullIfEmpty(body.Venue), nullIfEmpty(body.Club), "draft", vis, actor(r.Context()), now, now)
+			`INSERT INTO tournaments (id, slug, name, game, venue, club, venue_id, state, visibility, created_by, created_at, updated_at, version)
+			 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,1)`,
+			id, slug, body.Name, game, nullIfEmpty(body.Venue), nullIfEmpty(body.Club), nullIfEmpty(body.VenueID), "draft", vis, actor(r.Context()), now, now)
 		if err != nil {
 			_ = tx.Rollback()
 			if attempt < 4 { // slug collision → retry with suffix
