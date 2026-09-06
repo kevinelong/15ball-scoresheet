@@ -128,8 +128,12 @@ func (api *API) CreateTournament(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, map[string]interface{}{"tournament": t})
 }
 
-func (api *API) getTournament(ctx context.Context, id string) (*Tournament, error) {
-	row := api.DB.QueryRowContext(ctx, `SELECT `+tournamentCols+` FROM tournaments WHERE id = ?`, id)
+// getTournament resolves by canonical id OR human-readable slug (exact id wins),
+// so a shareable link can use the memorable slug, e.g. /live.html?t=fall-open.
+func (api *API) getTournament(ctx context.Context, idOrSlug string) (*Tournament, error) {
+	row := api.DB.QueryRowContext(ctx,
+		`SELECT `+tournamentCols+` FROM tournaments WHERE id = ? OR slug = ? ORDER BY (id = ?) DESC LIMIT 1`,
+		idOrSlug, idOrSlug, idOrSlug)
 	return scanTournament(row)
 }
 

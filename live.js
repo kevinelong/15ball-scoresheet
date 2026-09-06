@@ -95,17 +95,31 @@
   }
 
   // ---- tournament detail ----
-  async function openTournament(id) {
+  async function openTournament(idOrSlug) {
     closeSSE();
-    var got = await api.getTournament(id);
+    var got = await api.getTournament(idOrSlug);
     state.t = got.tournament;
-    var all = (await api.listEntrants(id, { archived: true })).items || [];
+    var cid = state.t.id; // canonical id for all subsequent calls (idOrSlug may be a slug)
+    var all = (await api.listEntrants(cid, { archived: true })).items || [];
     state.names = {}; all.forEach(function (e) { state.names[e.id] = e.displayName; });
     state.roster = all.filter(function (e) { return !e.archivedAt; });
-    state.matches = (state.t.state === 'in_progress' || state.t.state === 'completed') ? ((await api.listMatches(id)).items || []) : [];
+    state.matches = (state.t.state === 'in_progress' || state.t.state === 'completed') ? ((await api.listMatches(cid)).items || []) : [];
     state.view = 'tournament';
     renderTournament();
-    if (state.t.state === 'in_progress') openSSE(id);
+    paintQR();
+    if (state.t.state === 'in_progress') openSSE(cid);
+  }
+
+  // Shareable scoring link uses the memorable slug (backend resolves slug or id).
+  function scoringLink() {
+    return location.origin + location.pathname + '?t=' + encodeURIComponent(state.t.slug || state.t.id);
+  }
+  // Paint the QR into #qrbox after innerHTML is set (director view only).
+  function paintQR() {
+    var box = document.getElementById('qrbox');
+    if (!box || typeof QRCode === 'undefined') return;
+    box.innerHTML = '';
+    try { new QRCode(box, { text: scoringLink(), width: 148, height: 148, correctLevel: QRCode.CorrectLevel.M }); } catch (e) {}
   }
 
   function renderTournament() {
@@ -198,8 +212,14 @@
   function shortName(id) { var s = nm(id); return s.length > 10 ? s.slice(0, 9) + '…' : s; }
 
   function renderMatches(dir) {
-    var h = '<div class="card"><div class="row"><h2 style="flex:1">Matches</h2>';
-    if (dir) h += '<button data-action="copy-link" class="ghost" style="flex:0 0 auto">Copy scoring link</button>';
+    var h = '';
+    if (dir) {
+      h += '<div class="card"><h3>Scan to score</h3>' +
+        '<div class="qrwrap"><div id="qrbox" class="qr"></div>' +
+        '<div class="lnk"><div>Players scan this, or open:</div><div><b>' + esc(scoringLink()) + '</b></div>' +
+        '<div class="spacer"></div><button data-action="copy-link" class="ghost">Copy link</button></div></div></div>';
+    }
+    h += '<div class="card"><div class="row"><h2 style="flex:1">Matches</h2>';
     if (dir) h += '<button data-action="complete" class="ghost" style="flex:0 0 auto">Complete</button>';
     h += '</div>';
     h += '<p class="note">Tap a player to record them as the winner.' + (canScore() ? '' : ' (Sign in to score.)') + '</p>';
@@ -262,7 +282,7 @@
       await api.patchTournament(state.t.id, { state: 'completed' }); await openTournament(state.t.id);
     });
     if (act === 'copy-link') return guard(async function () {
-      var link = location.origin + location.pathname + '?t=' + state.t.id;
+      var link = scoringLink();
       try { await navigator.clipboard.writeText(link); toast('Scoring link copied'); }
       catch (e) { toast(link); }
     });

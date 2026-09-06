@@ -54,6 +54,9 @@
   .toast{position:fixed;left:50%;bottom:1.2rem;transform:translateX(-50%);background:var(--panel2);border:1px solid var(--line);
        padding:.6rem 1rem;border-radius:10px;max-width:90%;z-index:50;box-shadow:0 6px 24px rgba(0,0,0,.4)}
   a{color:#93b4ff}
+  .qrwrap{display:flex;align-items:center;gap:.9rem;flex-wrap:wrap;margin:.5rem 0}
+  .qrwrap .qr{background:#fff;padding:8px;border-radius:8px;line-height:0}
+  .qrwrap .lnk{font-size:.82rem;color:var(--mut);word-break:break-all;flex:1;min-width:180px}
 </style>
 </head>
 <body>
@@ -65,6 +68,7 @@
   <div id="toast" class="toast" hidden></div>
 
   <script src="api-client.js"></script>
+  <script src="qrcode.min.js"></script>
   <script src="live.js"></script>
 </body>
 </html>
