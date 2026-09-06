@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"log"
 	"net/http"
 	"regexp"
 	"sort"
@@ -449,4 +450,197 @@ func (api *API) MergePlayers(w http.ResponseWriter, r *http.Request) {
 	}
 	p, _ := scanPlayer(api.DB.QueryRowContext(r.Context(), `SELECT `+playerCols+` FROM players WHERE id = ?`, into.ID))
 	writeJSON(w, http.StatusOK, map[string]interface{}{"player": p})
+}
+
+// canonPair returns the two ids in canonical (lexicographic) order so an
+// unordered pair has a single stable key: a = min, b = max.
+func canonPair(id1, id2 string) (string, string) {
+	if id1 <= id2 {
+		return id1, id2
+	}
+	return id2, id1
+}
+
+// nameDupThreshold is the normalized-name similarity at/above which a pair is a
+// likely duplicate (organizer-wide review). Strong phone/email matches always win.
+const nameDupThreshold = 0.80
+
+// dupScanCap bounds the O(n²) pairwise scan for very large pools; realistic
+// organizer pools are small. Above this we still work but cap the scan.
+const dupScanCap = 1500
+
+// playerItem enriches a Player with decision context (pastEntries, lastEvent),
+// reusing the same shape as suggestPlayers items minus score/reason.
+func (api *API) playerItem(ctx context.Context, p *Player) map[string]interface{} {
+	var past int
+	_ = api.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM entrants WHERE player_id = ?`, p.ID).Scan(&past)
+	lastEvent := ""
+	var ln sql.NullString
+	_ = api.DB.QueryRowContext(ctx,
+		`SELECT t.name FROM entrants e JOIN tournaments t ON t.id = e.tournament_id
+		 WHERE e.player_id = ? ORDER BY t.created_at DESC LIMIT 1`, p.ID).Scan(&ln)
+	if ln.Valid {
+		lastEvent = ln.String
+	}
+	return map[string]interface{}{
+		"playerId":    p.ID,
+		"displayName": p.DisplayName,
+		"phone":       p.Phone,
+		"email":       p.Email,
+		"fargo":       p.Fargo,
+		"pastEntries": past,
+		"lastEvent":   lastEvent,
+	}
+}
+
+// DuplicatePlayers: GET /api/v1/players/duplicates (session-required). Scans the
+// current user's (organizer's) players and returns likely-duplicate PAIRS: same
+// E.164 phone (reason "phone"), same lowercased email (reason "email"), or a
+// normalized-name Levenshtein similarity >= 0.80 (reason "name"). Pairs the
+// organizer previously marked "not a duplicate" (player_dismissed_pairs) are
+// excluded. Returns {pairs:[{a,b,score,reason}]} sorted by score desc, cap 100.
+func (api *API) DuplicatePlayers(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	org := actor(ctx)
+
+	rows, err := api.DB.QueryContext(ctx,
+		`SELECT `+playerCols+` FROM players WHERE organizer_user_id = ? ORDER BY name_key`, org)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "server_error", "")
+		return
+	}
+	players := []*Player{}
+	for rows.Next() {
+		p, err := scanPlayer(rows)
+		if err != nil {
+			rows.Close()
+			writeErr(w, http.StatusInternalServerError, "server_error", "")
+			return
+		}
+		players = append(players, p)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		writeErr(w, http.StatusInternalServerError, "server_error", "")
+		return
+	}
+
+	n := len(players)
+	if n > dupScanCap {
+		log.Printf("duplicates: organizer %s has %d players (>%d) — capping pairwise scan", org, n, dupScanCap)
+		players = players[:dupScanCap]
+		n = dupScanCap
+	}
+
+	// dismissed pairs (canonical order) for this organizer
+	dismissed := map[string]bool{}
+	drows, err := api.DB.QueryContext(ctx,
+		`SELECT player_a, player_b FROM player_dismissed_pairs WHERE organizer_user_id = ?`, org)
+	if err == nil {
+		for drows.Next() {
+			var a, b string
+			if drows.Scan(&a, &b) == nil {
+				dismissed[a+"\x00"+b] = true
+			}
+		}
+		drows.Close()
+	}
+
+	type pair struct {
+		a, b   *Player
+		score  float64
+		reason string
+	}
+	pairs := []pair{}
+	for i := 0; i < n; i++ {
+		pi := players[i]
+		var phi string
+		if pi.Phone != nil && *pi.Phone != "" {
+			phi = e164(*pi.Phone)
+		}
+		var emi string
+		if pi.Email != nil && *pi.Email != "" {
+			emi = strings.ToLower(*pi.Email)
+		}
+		for j := i + 1; j < n; j++ {
+			pj := players[j]
+			score := 0.0
+			reason := ""
+			if phi != "" && pj.Phone != nil && *pj.Phone != "" && e164(*pj.Phone) == phi {
+				score, reason = 1.0, "phone"
+			} else if emi != "" && pj.Email != nil && *pj.Email != "" && strings.ToLower(*pj.Email) == emi {
+				score, reason = 1.0, "email"
+			} else if s := nameSimilarity(pi.NameKey, pj.NameKey); s >= nameDupThreshold {
+				score, reason = s, "name"
+			}
+			if reason == "" {
+				continue
+			}
+			ca, cb := canonPair(pi.ID, pj.ID)
+			if dismissed[ca+"\x00"+cb] {
+				continue
+			}
+			pairs = append(pairs, pair{a: pi, b: pj, score: score, reason: reason})
+		}
+	}
+
+	sort.SliceStable(pairs, func(i, j int) bool { return pairs[i].score > pairs[j].score })
+	if len(pairs) > 100 {
+		pairs = pairs[:100]
+	}
+
+	out := make([]map[string]interface{}, 0, len(pairs))
+	for _, pr := range pairs {
+		out = append(out, map[string]interface{}{
+			"a":      api.playerItem(ctx, pr.a),
+			"b":      api.playerItem(ctx, pr.b),
+			"score":  pr.score,
+			"reason": pr.reason,
+		})
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"pairs": out})
+}
+
+// DismissDuplicate: POST /api/v1/players/dismiss-duplicate (director+, CSRF).
+// Body {"aId","bId"}. Records the (organizer, canonical pair) as "not a duplicate"
+// so the review screen stops surfacing it. 400 if ids are empty/equal or belong
+// to different organizers; 404 if a player is missing.
+func (api *API) DismissDuplicate(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	org := actor(ctx)
+	var body struct {
+		AID string `json:"aId"`
+		BID string `json:"bId"`
+	}
+	if !decodeBody(w, r, &body) {
+		return
+	}
+	if body.AID == "" || body.BID == "" || body.AID == body.BID {
+		writeErr(w, http.StatusBadRequest, "invalid_pair", "aId and bId are required and must differ")
+		return
+	}
+	for _, id := range []string{body.AID, body.BID} {
+		var pOrg string
+		err := api.DB.QueryRowContext(ctx, `SELECT organizer_user_id FROM players WHERE id = ?`, id).Scan(&pOrg)
+		if errors.Is(err, sql.ErrNoRows) {
+			writeErr(w, http.StatusNotFound, "not_found", "player not found")
+			return
+		}
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, "server_error", "")
+			return
+		}
+		if pOrg != org {
+			writeErr(w, http.StatusBadRequest, "invalid_pair", "players belong to different organizers")
+			return
+		}
+	}
+	a, b := canonPair(body.AID, body.BID)
+	if _, err := api.DB.ExecContext(ctx,
+		`INSERT OR IGNORE INTO player_dismissed_pairs (organizer_user_id, player_a, player_b, created_at) VALUES (?,?,?,?)`,
+		org, a, b, time.Now().Unix()); err != nil {
+		writeErr(w, http.StatusInternalServerError, "server_error", "")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true})
 }

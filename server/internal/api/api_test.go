@@ -80,6 +80,8 @@ func newTestEnv(t *testing.T) *testEnv {
 	sess.Get("/api/v1/tournaments/{id}/player-suggestions", dapi.PlayerSuggestions)
 	sess.Post("/api/v1/tournaments/{id}/player-suggestions/batch", dapi.PlayerSuggestionsBatch)
 	director.Post("/api/v1/players/{id}/merge", dapi.MergePlayers)
+	sess.Get("/api/v1/players/duplicates", dapi.DuplicatePlayers)
+	director.Post("/api/v1/players/dismiss-duplicate", dapi.DismissDuplicate)
 	director.Patch("/api/v1/tournaments/{id}/entrants/{entrantId}", dapi.PatchEntrant)
 	director.Post("/api/v1/tournaments/{id}/entrants/{entrantId}/check-in", dapi.CheckInEntrant)
 	director.Post("/api/v1/tournaments/{id}/entrants/{entrantId}/archive", dapi.ArchiveEntrant)

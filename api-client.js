@@ -150,6 +150,13 @@
       // Absorb one player INTO another (director+, CSRF): repoints entrants, backfills
       // contact, deletes the source. Returns { player: <intoId row> }.
       mergePlayers: (playerId, intoId) => post('/v1/players/' + encodeURIComponent(playerId) + '/merge', { intoId }),
+      // Organizer-wide proactive duplicate review (session required):
+      // { pairs:[{ a:<playerItem>, b:<playerItem>, score, reason }] } where
+      // reason is "phone"|"email"|"name". playerItem = {playerId, displayName,
+      // phone, email, fargo, pastEntries, lastEvent}.
+      duplicatePlayers: () => get('/v1/players/duplicates'),
+      // Mark a pair "not a duplicate" (director+, CSRF) so it stops surfacing.
+      dismissDuplicate: (aId, bId) => post('/v1/players/dismiss-duplicate', { aId, bId }),
 
       // ---- matches ----
       listMatches: (id, params) => get(T(id) + '/matches', params),

@@ -208,6 +208,111 @@ func TestPlayerMerge(t *testing.T) {
 	}
 }
 
+// dupPairFor returns the {a,b,score,reason} pair from a /duplicates response
+// whose two player ids match p1/p2 (order-insensitive), or nil.
+func dupPairFor(resp map[string]interface{}, p1, p2 string) map[string]interface{} {
+	pairs, _ := resp["pairs"].([]interface{})
+	for _, raw := range pairs {
+		pr, _ := raw.(map[string]interface{})
+		if pr == nil {
+			continue
+		}
+		a, _ := pr["a"].(map[string]interface{})
+		b, _ := pr["b"].(map[string]interface{})
+		if a == nil || b == nil {
+			continue
+		}
+		ai, _ := a["playerId"].(string)
+		bi, _ := b["playerId"].(string)
+		if (ai == p1 && bi == p2) || (ai == p2 && bi == p1) {
+			return pr
+		}
+	}
+	return nil
+}
+
+// TestDuplicatePlayersNameAndDismiss: two players in the SAME organizer with
+// near-identical names (across two tournaments) surface as a "name" pair; after
+// dismissing it, the pair no longer appears.
+func TestDuplicatePlayersNameAndDismiss(t *testing.T) {
+	e := newTestEnv(t)
+	t1 := e.mkOpenTournament(t)
+	t2 := e.mkOpenTournament(t)
+
+	_, r1 := e.do(t, "POST", "/api/v1/tournaments/"+t1+"/entrants", e.director, `{"displayName":"Jon Smith"}`)
+	p1 := r1["entrant"].(map[string]interface{})["playerId"].(string)
+	_, r2 := e.do(t, "POST", "/api/v1/tournaments/"+t2+"/entrants", e.director, `{"displayName":"Jhon Smith"}`)
+	p2 := r2["entrant"].(map[string]interface{})["playerId"].(string)
+	if p1 == p2 {
+		t.Fatalf("expected two distinct players, got %s twice", p1)
+	}
+
+	code, resp := e.do(t, "GET", "/api/v1/players/duplicates", e.director, "")
+	if code != http.StatusOK {
+		t.Fatalf("duplicates: want 200, got %d (%v)", code, resp)
+	}
+	pr := dupPairFor(resp, p1, p2)
+	if pr == nil {
+		t.Fatalf("expected the Jon/Jhon Smith pair, got %v", resp["pairs"])
+	}
+	if pr["reason"] != "name" {
+		t.Fatalf("reason should be 'name', got %v", pr["reason"])
+	}
+	// each side carries decision context
+	a := pr["a"].(map[string]interface{})
+	if a["pastEntries"].(float64) != 1 || a["lastEvent"] == "" {
+		t.Fatalf("pair sides should carry pastEntries/lastEvent, got %v", a)
+	}
+
+	// dismiss the pair → gone
+	code, dr := e.do(t, "POST", "/api/v1/players/dismiss-duplicate", e.director,
+		`{"aId":"`+p1+`","bId":"`+p2+`"}`)
+	if code != http.StatusOK || dr["ok"] != true {
+		t.Fatalf("dismiss: want 200 ok, got %d (%v)", code, dr)
+	}
+	_, resp2 := e.do(t, "GET", "/api/v1/players/duplicates", e.director, "")
+	if dupPairFor(resp2, p1, p2) != nil {
+		t.Fatalf("dismissed pair should not reappear, got %v", resp2["pairs"])
+	}
+
+	// dismiss with equal ids → 400; missing player → 404
+	if code, _ := e.do(t, "POST", "/api/v1/players/dismiss-duplicate", e.director,
+		`{"aId":"`+p1+`","bId":"`+p1+`"}`); code != http.StatusBadRequest {
+		t.Fatalf("equal-ids dismiss: want 400, got %d", code)
+	}
+	if code, _ := e.do(t, "POST", "/api/v1/players/dismiss-duplicate", e.director,
+		`{"aId":"`+p1+`","bId":"plr_missing"}`); code != http.StatusNotFound {
+		t.Fatalf("missing-player dismiss: want 404, got %d", code)
+	}
+}
+
+// TestDuplicatePlayersPhoneMatch: two players sharing an E.164 phone (distinct
+// names) surface as a "phone" pair with score 1.0.
+func TestDuplicatePlayersPhoneMatch(t *testing.T) {
+	e := newTestEnv(t)
+	t1 := e.mkOpenTournament(t)
+	t2 := e.mkOpenTournament(t)
+
+	_, r1 := e.do(t, "POST", "/api/v1/tournaments/"+t1+"/entrants", e.director,
+		`{"displayName":"Alice Anderson","phone":"+15035550199"}`)
+	p1 := r1["entrant"].(map[string]interface{})["playerId"].(string)
+	_, r2 := e.do(t, "POST", "/api/v1/tournaments/"+t2+"/entrants", e.director,
+		`{"displayName":"Ally A","phone":"503-555-0199"}`)
+	p2 := r2["entrant"].(map[string]interface{})["playerId"].(string)
+
+	code, resp := e.do(t, "GET", "/api/v1/players/duplicates", e.director, "")
+	if code != http.StatusOK {
+		t.Fatalf("duplicates: want 200, got %d", code)
+	}
+	pr := dupPairFor(resp, p1, p2)
+	if pr == nil {
+		t.Fatalf("expected the phone-equal pair, got %v", resp["pairs"])
+	}
+	if pr["reason"] != "phone" || pr["score"].(float64) < 1.0 {
+		t.Fatalf("expected reason phone score 1.0, got %v", pr)
+	}
+}
+
 // TestCreateEntrantWithExplicitPlayerID: passing a known playerId reuses that
 // player and backfills its empty contact fields from the entrant.
 func TestCreateEntrantWithExplicitPlayerID(t *testing.T) {

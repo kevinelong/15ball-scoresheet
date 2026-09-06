@@ -9,7 +9,7 @@
   var api = FB.createClient();
   var DIRECTOR = ['tournament_director', 'club_admin', 'system_admin'];
 
-  var state = { view: 'boot', me: null, public: false, tournaments: [], t: null, roster: [], names: {}, matches: [], es: null, err: '', preview: null, editEntrant: null, pendingAdd: null, dupes: null, venues: [], newVenue: false, selVenue: '', newName: '', newClub: '', recent: null };
+  var state = { view: 'boot', me: null, public: false, tournaments: [], t: null, roster: [], names: {}, matches: [], es: null, err: '', preview: null, editEntrant: null, pendingAdd: null, dupes: null, venues: [], newVenue: false, selVenue: '', newName: '', newClub: '', recent: null, dupePairs: null };
 
   // Canonical disciplines (id -> display name); mirrors the backend validGames set.
   var GAMES = [
@@ -171,7 +171,8 @@
         '<div class="row"><select id="tgame">' + gameOptions('15ball_rotation') + '</select></div>' +
         venuePickerMarkup(state.selVenue) +
         '<div class="row"><input id="tclub" placeholder="Club (optional)" value="' + esc(state.newClub || '') + '" /></div>' +
-        '<div class="spacer"></div><button class="pri" data-action="create-tournament">Create</button><div class="spacer"></div>';
+        '<div class="spacer"></div><button class="pri" data-action="create-tournament">Create</button><div class="spacer"></div>' +
+        '<div class="row"><button class="ghost" data-action="dupes-review">Review duplicate players</button></div><div class="spacer"></div>';
     }
     if (!state.tournaments.length) {
       html += '<p class="muted">No tournaments yet.</p>';
@@ -192,6 +193,83 @@
   function venueSelectValue() {
     var v = val('tvenue');
     return (v && v !== '__new__') ? v : '';
+  }
+
+  // ---- organizer-wide duplicate-player review (proactive) ----
+  async function openDuplicates() {
+    state.t = null; closeSSE();
+    state.view = 'duplicates';
+    state.dupePairs = null;
+    renderDuplicates(); // paint a loading shell first
+    try {
+      var resp = await api.duplicatePlayers();
+      state.dupePairs = (resp && resp.pairs) || [];
+    } catch (e) {
+      state.dupePairs = [];
+      toast(e && e.message ? e.message : 'error');
+    }
+    renderDuplicates();
+  }
+
+  // One side of a duplicate pair, rendered as a labeled compare column feeder.
+  function dupeSide(item) {
+    var n = (item && item.pastEntries) || 0;
+    return {
+      name: (item && item.displayName) || '',
+      phone: maskPhone(item && item.phone),
+      email: maskEmail(item && item.email),
+      fargo: (item && item.fargo != null && item.fargo !== '') ? String(item.fargo) : '',
+      events: n + ' event' + (n === 1 ? '' : 's'),
+      last: (item && item.lastEvent) || ''
+    };
+  }
+
+  // Reason chip label from a pair's reason ("phone"|"email"|"name").
+  function pairReasonChip(reason) {
+    if (reason === 'phone') return 'same phone';
+    if (reason === 'email') return 'same email';
+    return 'similar name';
+  }
+
+  function dupePairCard(pr) {
+    var A = pr.a || {}, B = pr.b || {};
+    var sa = dupeSide(A), sb = dupeSide(B);
+    var strong = (pr.reason === 'phone' || pr.reason === 'email');
+    var head = '<div class="cmprow cmphead"><span class="cmplbl"></span>' +
+      '<span class="cmpv">' + esc(sa.name || '—') + '</span>' +
+      '<span class="cmpv">' + esc(sb.name || '—') + '</span></div>';
+    return '<li><div class="vs" style="flex:1">' +
+      '<span class="pill' + (strong ? '' : ' warn') + '">' + esc(pairReasonChip(pr.reason)) + '</span>' +
+      '<div class="cmp">' + head +
+      cmpRow('Phone', sa.phone, sb.phone) +
+      cmpRow('Email', sa.email, sb.email) +
+      cmpRow('Fargo', sa.fargo, sb.fargo) +
+      cmpRow('Events', sa.events, sb.events) +
+      cmpRow('Last event', sa.last, sb.last) +
+      '</div>' +
+      '<div class="spacer"></div>' +
+      '<div class="row">' +
+      '<button class="pri" data-action="dupe-mergeinto" data-into="' + esc(A.playerId) + '" data-src="' + esc(B.playerId) + '">Keep ' + esc(sa.name) + '</button>' +
+      '<button class="pri" data-action="dupe-mergeinto" data-into="' + esc(B.playerId) + '" data-src="' + esc(A.playerId) + '">Keep ' + esc(sb.name) + '</button>' +
+      '</div>' +
+      '<div class="row"><button class="ghost" data-action="dupe-dismiss" data-a="' + esc(A.playerId) + '" data-b="' + esc(B.playerId) + '">Not duplicates</button></div>' +
+      '</div></li>';
+  }
+
+  function renderDuplicates() {
+    var html = '<div class="card">' +
+      '<div class="row"><button class="ghost" data-action="home">‹ All tournaments</button></div>' +
+      '<h2>Review duplicate players</h2>';
+    if (state.dupePairs == null) {
+      html += '<p class="muted">Scanning…</p>';
+    } else if (!state.dupePairs.length) {
+      html += '<p class="muted">No likely duplicates 🎉</p>';
+    } else {
+      html += '<p class="note">These players look like the same person. Keep one (merging the other into it) or mark them as different people.</p>';
+      html += '<ul class="list dupelist">' + state.dupePairs.map(dupePairCard).join('') + '</ul>';
+    }
+    html += '</div>';
+    appEl.innerHTML = html;
   }
 
   // ---- tournament detail ----
@@ -753,6 +831,21 @@
     });
     if (act === 'continue') return guard(boot);
     if (act === 'home') return guard(openHome);
+    if (act === 'dupes-review') return guard(openDuplicates);
+    if (act === 'dupe-mergeinto') return guard(async function () {
+      var into = b.getAttribute('data-into'), src = b.getAttribute('data-src');
+      if (!into || !src) return;
+      await api.mergePlayers(src, into); // src absorbed into the kept player
+      toast('Merged');
+      await openDuplicates();
+    });
+    if (act === 'dupe-dismiss') return guard(async function () {
+      var a = b.getAttribute('data-a'), bb = b.getAttribute('data-b');
+      if (!a || !bb) return;
+      await api.dismissDuplicate(a, bb);
+      toast('Marked as different people');
+      await openDuplicates();
+    });
     if (act === 'open-t') return guard(function () { return openTournament(id); });
     if (act === 'add-venue') return guard(async function () {
       var vname = val('tvenuename'); if (!vname) return toast('Enter a venue name');
