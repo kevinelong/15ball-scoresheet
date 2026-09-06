@@ -4,6 +4,17 @@ Online tournament manager for 15-Ball Rotation. Enter a participant list, seed b
 
 Zero dependencies — three JS/CSS/HTML files, no build step.
 
+## What this is (intent)
+
+At its core this project exists to **make running a real pool tournament effortless — and to let everyone in the room take part live from their own phone.** Turn a pool hall into a live, self-running bracket: build it, call players to their tables, score by tapping a winner, and put it on stream — without accounts, paperwork, or a laptop at the desk.
+
+It ships in two layers that share one bracket model:
+
+- **Static app (this folder)** — zero-dependency, offline, single-device double-elimination bracket + printable 15-Ball Rotation score sheets. Runs anywhere static; nothing leaves the device.
+- **Live cloud edition (`server/` + `live.html`)** — a multi-user backend and mobile console: magic-link sign-in, server-persisted double-elimination tournaments across several disciplines, real-time updates over SSE, role-gated setup, **open scoring links + QR** so anyone in the room can score from their phone, **SMS "your match is ready at table N"** alerts, Challonge sync, and a transparent **OBS overlay** (`overlay-live.html`) for streaming.
+
+**Design philosophy:** remove every point of friction between "we're holding a tournament" and "it's running" — no installs, no accounts to score, short links/QR instead of typing, and the software fading into the background so the room just plays.
+
 ## What it does
 
 ### Tournament bracket
@@ -132,6 +143,16 @@ other tournament platforms.
 - Sound effects on ball toggle (opt-in)
 - Match history browser (list saved JSON files)
 - QR code render of the share link so you can scan it from the table
+
+## Could other clubs & venues use this?
+
+Yes — two ways today, with an honest caveat on the third.
+
+- **Self-host your own instance (works now).** The whole system is a single static frontend + one static Go binary + a SQLite file. A venue deploys its own copy and sets its own config — club name/branding, SMS sender, Challonge account, sign-in allowlist — and runs independently. Rules, brackets, scoring, SMS alerts, and the OBS overlay are all generic; only the "Columbia Cue Club" labels and the SMS compliance pages are club-specific text to swap.
+- **The static bracket app is already universal.** `index.html` + `bracket.js` work for any club, any N players, fully offline — nothing is hard-wired to one venue.
+- **A shared multi-tenant service is not built yet.** The live backend is currently **single-club**: one database, global roles, no per-club data isolation (an early `organizations` concept was intentionally dropped when the schema was normalized). Hosting many clubs on one instance would mean re-introducing club/org scoping — tournaments and roles scoped per club, per-club branding + config (SMS/Challonge), and tenant isolation. The foundation (auth, brackets, scoring, real-time, SMS, overlay) is reusable; the missing piece is the tenancy layer.
+
+**Short version:** any club can run their own copy now; a shared "sign up your club" SaaS is a well-scoped addition, not a rewrite.
 
 ## License
 
