@@ -448,6 +448,44 @@
     var mo = lbl.match(/^[WL](\d+)M/);
     return mo ? parseInt(mo[1], 10) : (m.bracketRound || 1);
   }
+  // Short origin label: prefix of a match label before "M" (W2M1 -> "W2", L4M1 -> "L4");
+  // Grand-Final labels (GF, GF1, GF2) collapse to "GF".
+  function shortLabel(m) {
+    var lbl = m.matchLabel || '';
+    if (m.bracket === 'GF' || /^GF/.test(lbl)) return 'GF';
+    var mo = lbl.match(/^([WL]\d+)M/);
+    if (mo) return mo[1];
+    // fallback for unlabeled: bracket + round
+    return (m.bracket || '') + (m.bracketRound || '');
+  }
+  // Reverse feeder map: for each source match S with a cross-region drop/feed into
+  // (targetMatchId, slot), record targetMatchId -> {0|1: S}. Only cross-region edges
+  // (W->L, W->GF, L->GF) are kept — same-bracket advancement is omitted (matches mockup).
+  function buildOriginMap() {
+    var byId = {};
+    state.matches.forEach(function (m) { byId[m.id] = m; });
+    var map = {}; // targetMatchId -> { slot: sourceMatch }
+    function add(srcId, targetId, slot) {
+      if (targetId == null || slot == null) return;
+      var src = byId[srcId], tgt = byId[targetId];
+      if (!src || !tgt) return;
+      if (src.bracket === tgt.bracket) return; // same-region advancement: no chip
+      (map[targetId] = map[targetId] || {})[slot] = src;
+    }
+    state.matches.forEach(function (S) {
+      add(S.id, S.feedsWinnerMatch, S.feedsWinnerSlot);
+      add(S.id, S.feedsLoserMatch, S.feedsLoserSlot);
+    });
+    return map;
+  }
+  // Origins for one match card from the reverse-feeder map: {a, b} short chips.
+  function originsFor(map, m) {
+    var e = map[m.id]; if (!e) return {};
+    var o = {};
+    if (e[0]) o.a = '‹ ' + shortLabel(e[0]);
+    if (e[1]) o.b = '‹ ' + shortLabel(e[1]);
+    return o;
+  }
 
   // One entrant slot inside a bracket card. When tappable, renders a <button> that
   // reuses the existing "win" action (assign→start→submitResult) — do not change it.
@@ -536,6 +574,8 @@
     if (!anyBracketed) return matchesMarkup(interactive); // single-elim / flat fallback
     seedById = null; // recompute per render (roster may have changed)
 
+    var originMap = buildOriginMap();
+    var originsOf = function (m) { return originsFor(originMap, m); };
     var canvas = '';
 
     // ----- Winners -----
@@ -554,7 +594,7 @@
       var lr = roundsOf(groups.L), lLast = lr.length;
       var lCols = lr.map(function (rc, i) {
         var head = (i === lLast - 1) ? 'Losers final' : 'Losers R' + rc.round;
-        return bracketColumn(head, rc.matches, interactive, { leadOnly: true, first: i === 0 });
+        return bracketColumn(head, rc.matches, interactive, { leadOnly: true, first: i === 0, origins: originsOf });
       }).join('');
       canvas += '<section class="region los"><div class="region-title"><span class="dot"></span>Losers bracket</div>' +
         '<div class="rounds">' + lCols + '</div></section>';
@@ -566,7 +606,7 @@
         return (x.matchLabel || '').localeCompare(y.matchLabel || '');
       });
       var cards = gf.map(function (m, i) {
-        return bracketCard(m, interactive, {}, {});
+        return bracketCard(m, interactive, {}, originsOf(m));
       }).join('');
       var cond = '<div class="cond">GF2 played only if the losers champ wins GF1 (bracket reset).</div>';
       // Champion: from the last GF match if it is completed; else TBD.
