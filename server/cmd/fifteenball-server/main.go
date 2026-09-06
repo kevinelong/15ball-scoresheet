@@ -121,6 +121,7 @@ func main() {
 	matchRead.Get("/api/v1/tournaments/{id}/entrants", dapi.ListEntrants)
 	dir.Post("/api/v1/tournaments/{id}/entrants", dapi.CreateEntrant)
 	sess.Get("/api/v1/tournaments/{id}/player-suggestions", dapi.PlayerSuggestions)
+	sess.Post("/api/v1/tournaments/{id}/player-suggestions/batch", dapi.PlayerSuggestionsBatch)
 	dir.Post("/api/v1/players/{id}/merge", dapi.MergePlayers)
 	dir.Patch("/api/v1/tournaments/{id}/entrants/{entrantId}", dapi.PatchEntrant)
 	dir.Post("/api/v1/tournaments/{id}/entrants/{entrantId}/check-in", dapi.CheckInEntrant)

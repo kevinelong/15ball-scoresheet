@@ -40,6 +40,90 @@ func TestPlayerSuggestionsFuzzyName(t *testing.T) {
 	}
 }
 
+// TestPlayerSuggestionsEnriched: suggestion items carry decision context —
+// matchReason ("name" for a fuzzy hit, "phone" for an exact phone hit) and
+// lastEvent (the most recent tournament the player entered).
+func TestPlayerSuggestionsEnriched(t *testing.T) {
+	e := newTestEnv(t)
+	tid := e.mkOpenTournament(t)
+
+	// fetch the tournament name for the lastEvent assertion
+	var tname string
+	_ = e.api.DB.QueryRow(`SELECT name FROM tournaments WHERE id=?`, tid).Scan(&tname)
+
+	if code, _ := e.do(t, "POST", "/api/v1/tournaments/"+tid+"/entrants", e.director,
+		`{"displayName":"Jane Doe","phone":"+15035550123"}`); code != http.StatusCreated {
+		t.Fatalf("create Jane Doe: want 201, got %d", code)
+	}
+
+	// fuzzy name → matchReason "name", lastEvent = the tournament name
+	code, sug := e.do(t, "GET", "/api/v1/tournaments/"+tid+"/player-suggestions?name=Jane%20Doh", e.director, "")
+	if code != http.StatusOK {
+		t.Fatalf("suggestions: want 200, got %d", code)
+	}
+	items := sug["items"].([]interface{})
+	if len(items) == 0 {
+		t.Fatalf("expected a suggestion for 'Jane Doh'")
+	}
+	top := items[0].(map[string]interface{})
+	if top["matchReason"] != "name" {
+		t.Errorf("matchReason should be 'name', got %v", top["matchReason"])
+	}
+	if top["lastEvent"] != tname {
+		t.Errorf("lastEvent should be %q, got %v", tname, top["lastEvent"])
+	}
+	if top["lastEventAt"].(float64) <= 0 {
+		t.Errorf("lastEventAt should be a positive unix time, got %v", top["lastEventAt"])
+	}
+
+	// exact phone → matchReason "phone"
+	code, sug2 := e.do(t, "GET", "/api/v1/tournaments/"+tid+"/player-suggestions?name=Nope&phone=503-555-0123", e.director, "")
+	if code != http.StatusOK {
+		t.Fatalf("phone suggestions: want 200, got %d", code)
+	}
+	pitems := sug2["items"].([]interface{})
+	if len(pitems) == 0 {
+		t.Fatalf("expected a phone-match suggestion")
+	}
+	ptop := pitems[0].(map[string]interface{})
+	if ptop["matchReason"] != "phone" {
+		t.Errorf("matchReason should be 'phone', got %v", ptop["matchReason"])
+	}
+}
+
+// TestPlayerSuggestionsBatch: POST batch with two queries (one matching an
+// existing player, one not) keys results by the caller-supplied key.
+func TestPlayerSuggestionsBatch(t *testing.T) {
+	e := newTestEnv(t)
+	tid := e.mkOpenTournament(t)
+
+	if code, _ := e.do(t, "POST", "/api/v1/tournaments/"+tid+"/entrants", e.director,
+		`{"displayName":"Jane Doe"}`); code != http.StatusCreated {
+		t.Fatalf("create Jane Doe: want 201, got %d", code)
+	}
+
+	body := `{"queries":[
+		{"key":"row-1","name":"Jane Doh"},
+		{"key":"row-2","name":"Zzxqwv Nobody"}
+	]}`
+	code, resp := e.do(t, "POST", "/api/v1/tournaments/"+tid+"/player-suggestions/batch", e.director, body)
+	if code != http.StatusOK {
+		t.Fatalf("batch: want 200, got %d (%v)", code, resp)
+	}
+	results := resp["results"].(map[string]interface{})
+	r1, ok := results["row-1"].([]interface{})
+	if !ok || len(r1) == 0 {
+		t.Fatalf("row-1 should match Jane Doe, got %v", results["row-1"])
+	}
+	if r1[0].(map[string]interface{})["displayName"] != "Jane Doe" {
+		t.Errorf("row-1 top should be Jane Doe, got %v", r1[0])
+	}
+	r2, ok := results["row-2"].([]interface{})
+	if !ok || len(r2) != 0 {
+		t.Errorf("row-2 should have no matches, got %v", results["row-2"])
+	}
+}
+
 // TestPlayerSuggestionsPhoneMatch: an exact phone match surfaces the player even
 // when the queried name differs.
 func TestPlayerSuggestionsPhoneMatch(t *testing.T) {

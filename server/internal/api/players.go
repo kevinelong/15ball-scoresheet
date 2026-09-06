@@ -191,6 +191,106 @@ func (api *API) ensurePlayerForEntrant(ctx context.Context, tx *sql.Tx, org, ent
 	return pid, nil
 }
 
+// suggestPlayers returns up to limit candidate players for an organizer, ranked
+// by match strength against the (name, phone, email) query. Each item carries
+// decision context: matchReason ("phone"|"email"|"name"), pastEntries, and the
+// most recent tournament the player entered (lastEvent / lastEventAt). Shared by
+// the single and batch suggestion handlers so behavior is identical.
+func (api *API) suggestPlayers(ctx context.Context, org, name, phone, email string, limit int) ([]map[string]interface{}, error) {
+	name = strings.TrimSpace(name)
+	phone = strings.TrimSpace(phone)
+	email = strings.ToLower(strings.TrimSpace(email))
+	nameKey := normalizeName(name)
+	phoneKey := ""
+	if phone != "" {
+		phoneKey = e164(phone)
+	}
+
+	rows, err := api.DB.QueryContext(ctx, `SELECT `+playerCols+` FROM players WHERE organizer_user_id = ?`, org)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	type cand struct {
+		p      *Player
+		score  float64
+		reason string
+	}
+	cands := []cand{}
+	for rows.Next() {
+		p, err := scanPlayer(rows)
+		if err != nil {
+			return nil, err
+		}
+		score := 0.0
+		reason := "name"
+		// strong: exact phone (E.164) or lowercased email match
+		if phoneKey != "" && p.Phone != nil && e164(*p.Phone) == phoneKey {
+			score = 1.0
+			reason = "phone"
+		}
+		if email != "" && p.Email != nil && strings.ToLower(*p.Email) == email {
+			score = 1.0
+			if reason != "phone" {
+				reason = "email"
+			}
+		}
+		// fuzzy name
+		if nameKey != "" {
+			if s := nameSimilarity(nameKey, p.NameKey); s > score {
+				score = s
+				reason = "name"
+			}
+		}
+		// keep strong matches unconditionally; otherwise require the fuzzy threshold
+		if score >= 1.0 || (nameKey != "" && nameSimilarity(nameKey, p.NameKey) >= 0.72) {
+			cands = append(cands, cand{p: p, score: score, reason: reason})
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	sort.SliceStable(cands, func(i, j int) bool { return cands[i].score > cands[j].score })
+	if limit > 0 && len(cands) > limit {
+		cands = cands[:limit]
+	}
+
+	items := make([]map[string]interface{}, 0, len(cands))
+	for _, c := range cands {
+		var past int
+		_ = api.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM entrants WHERE player_id = ?`, c.p.ID).Scan(&past)
+		// most recent tournament this player entered (by tournaments.created_at desc)
+		lastEvent := ""
+		var lastEventAt int64
+		var ln sql.NullString
+		var lat sql.NullInt64
+		_ = api.DB.QueryRowContext(ctx,
+			`SELECT t.name, t.created_at FROM entrants e JOIN tournaments t ON t.id = e.tournament_id
+			 WHERE e.player_id = ? ORDER BY t.created_at DESC LIMIT 1`, c.p.ID).Scan(&ln, &lat)
+		if ln.Valid {
+			lastEvent = ln.String
+		}
+		if lat.Valid {
+			lastEventAt = lat.Int64
+		}
+		items = append(items, map[string]interface{}{
+			"playerId":    c.p.ID,
+			"displayName": c.p.DisplayName,
+			"phone":       c.p.Phone,
+			"email":       c.p.Email,
+			"fargo":       c.p.Fargo,
+			"score":       c.score,
+			"pastEntries": past,
+			"matchReason": c.reason,
+			"lastEvent":   lastEvent,
+			"lastEventAt": lastEventAt,
+		})
+	}
+	return items, nil
+}
+
 // PlayerSuggestions: GET /api/v1/tournaments/{id}/player-suggestions?name=&phone=&email=
 // (session-required). Returns up to 6 candidate players for this tournament's
 // organizer ranked by match strength.
@@ -205,73 +305,62 @@ func (api *API) PlayerSuggestions(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "server_error", "")
 		return
 	}
-	name := strings.TrimSpace(r.URL.Query().Get("name"))
-	phone := strings.TrimSpace(r.URL.Query().Get("phone"))
-	email := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("email")))
-	nameKey := normalizeName(name)
-	phoneKey := ""
-	if phone != "" {
-		phoneKey = e164(phone)
-	}
-
-	rows, err := api.DB.QueryContext(r.Context(), `SELECT `+playerCols+` FROM players WHERE organizer_user_id = ?`, org)
+	items, err := api.suggestPlayers(r.Context(),
+		org,
+		r.URL.Query().Get("name"),
+		r.URL.Query().Get("phone"),
+		r.URL.Query().Get("email"),
+		6)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "server_error", "")
 		return
 	}
-	defer rows.Close()
+	writeJSON(w, http.StatusOK, map[string]interface{}{"items": items})
+}
 
-	type cand struct {
-		p     *Player
-		score float64
+// PlayerSuggestionsBatch: POST /api/v1/tournaments/{id}/player-suggestions/batch
+// (session-required). Body {"queries":[{"key","name","phone","email"}]} (cap 300).
+// Returns {"results": {"<key>": [<top ~5 items>]}} using the same matching logic
+// as the single endpoint. For the bulk-paste dedup preview.
+func (api *API) PlayerSuggestionsBatch(w http.ResponseWriter, r *http.Request) {
+	tid := chi.URLParam(r, "id")
+	if !api.tournamentExists(r.Context(), tid) {
+		writeErr(w, http.StatusNotFound, "not_found", "tournament not found")
+		return
 	}
-	cands := []cand{}
-	for rows.Next() {
-		p, err := scanPlayer(rows)
+	var body struct {
+		Queries []struct {
+			Key   string `json:"key"`
+			Name  string `json:"name"`
+			Phone string `json:"phone"`
+			Email string `json:"email"`
+		} `json:"queries"`
+	}
+	if !decodeBody(w, r, &body) {
+		return
+	}
+	if len(body.Queries) > 300 {
+		writeErr(w, http.StatusBadRequest, "too_many", "at most 300 queries per batch")
+		return
+	}
+	org, err := api.tournamentOrganizer(r.Context(), api.DB, tid)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "server_error", "")
+		return
+	}
+	results := make(map[string][]map[string]interface{}, len(body.Queries))
+	for _, q := range body.Queries {
+		if q.Key == "" {
+			continue
+		}
+		items, err := api.suggestPlayers(r.Context(), org, q.Name, q.Phone, q.Email, 5)
 		if err != nil {
 			writeErr(w, http.StatusInternalServerError, "server_error", "")
 			return
 		}
-		score := 0.0
-		// strong: exact phone (E.164) or lowercased email match
-		if phoneKey != "" && p.Phone != nil && e164(*p.Phone) == phoneKey {
-			score = 1.0
-		}
-		if email != "" && p.Email != nil && strings.ToLower(*p.Email) == email {
-			score = 1.0
-		}
-		// fuzzy name
-		if nameKey != "" {
-			if s := nameSimilarity(nameKey, p.NameKey); s > score {
-				score = s
-			}
-		}
-		// keep strong matches unconditionally; otherwise require the fuzzy threshold
-		if score >= 1.0 || (nameKey != "" && nameSimilarity(nameKey, p.NameKey) >= 0.72) {
-			cands = append(cands, cand{p: p, score: score})
-		}
+		results[q.Key] = items
 	}
-
-	sort.SliceStable(cands, func(i, j int) bool { return cands[i].score > cands[j].score })
-	if len(cands) > 6 {
-		cands = cands[:6]
-	}
-
-	items := make([]map[string]interface{}, 0, len(cands))
-	for _, c := range cands {
-		var past int
-		_ = api.DB.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM entrants WHERE player_id = ?`, c.p.ID).Scan(&past)
-		items = append(items, map[string]interface{}{
-			"playerId":    c.p.ID,
-			"displayName": c.p.DisplayName,
-			"phone":       c.p.Phone,
-			"email":       c.p.Email,
-			"fargo":       c.p.Fargo,
-			"score":       c.score,
-			"pastEntries": past,
-		})
-	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{"items": items})
+	writeJSON(w, http.StatusOK, map[string]interface{}{"results": results})
 }
 
 // MergePlayers: POST /api/v1/players/{id}/merge  body {"intoId":"<player id>"}

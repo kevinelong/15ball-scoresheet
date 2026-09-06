@@ -76,6 +76,44 @@ func str(v interface{}) string { s, _ := v.(string); return s }
 // aWins: entrant_a always wins (winners champ wins GF1 → no reset).
 func aWins(a, b, _ string) (string, string) { return a, b }
 
+// TestDoubleElimFeederEdgesExposed: GET matches on a 4-player double-elim exposes
+// the persisted feeder edges (migration 0010). Winners matches feed their winner
+// forward and their loser down to the losers bracket; assert at least one match
+// surfaces a non-null feeder edge.
+func TestDoubleElimFeederEdgesExposed(t *testing.T) {
+	e := newTestEnv(t)
+	tid := e.startDoubleElim(t, 4)
+
+	byLabel := map[string]map[string]interface{}{}
+	anyEdge := false
+	for _, m := range e.matches(t, tid) {
+		byLabel[str(m["matchLabel"])] = m
+		if m["feedsWinnerMatch"] != nil || m["feedsLoserMatch"] != nil {
+			anyEdge = true
+		}
+	}
+	if !anyEdge {
+		t.Fatalf("expected at least one match to expose a feeder edge")
+	}
+	// A round-1 winners match feeds its winner forward and its loser into L.
+	w1 := byLabel["W1M1"]
+	if w1 == nil {
+		t.Fatalf("missing W1M1")
+	}
+	if w1["feedsWinnerMatch"] == nil {
+		t.Errorf("W1M1 should feed its winner forward, got nil")
+	}
+	if w1["feedsLoserMatch"] == nil {
+		t.Errorf("W1M1 should feed its loser to the losers bracket, got nil")
+	}
+	// slots are 0/1 int64 → JSON numbers; if present they must decode as numbers.
+	if v := w1["feedsWinnerSlot"]; v != nil {
+		if _, ok := v.(float64); !ok {
+			t.Errorf("feedsWinnerSlot should be a number, got %T", v)
+		}
+	}
+}
+
 func TestDoubleElimStructure4(t *testing.T) {
 	e := newTestEnv(t)
 	tid := e.startDoubleElim(t, 4)
