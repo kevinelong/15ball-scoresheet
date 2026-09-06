@@ -91,6 +91,67 @@ func TestPlayerSuggestionsEnriched(t *testing.T) {
 	}
 }
 
+// TestPlayerSuggestionsSameVenue: a fuzzy-name player is seeded at a venue via
+// tournament A. A suggestion query from tournament B at the SAME venue reports
+// sameVenue=true; the same query from a tournament at a DIFFERENT venue, and one
+// with NO venue, reports sameVenue=false.
+func TestPlayerSuggestionsSameVenue(t *testing.T) {
+	e := newTestEnv(t)
+
+	// two venues with explicit coords (no network geocode)
+	_, v1r := e.do(t, "POST", "/api/v1/venues", e.director,
+		`{"name":"Venue One","address":"1 Cue St","lat":45.5,"lng":-122.6}`)
+	venue1 := v1r["venue"].(map[string]interface{})["id"].(string)
+	_, v2r := e.do(t, "POST", "/api/v1/venues", e.director,
+		`{"name":"Venue Two","address":"2 Cue St","lat":45.6,"lng":-122.7}`)
+	venue2 := v2r["venue"].(map[string]interface{})["id"].(string)
+
+	// tournament A at venue1 seeds a player "Jon Smith"
+	tidA := e.mkOpenTournamentAtVenue(t, "A at V1", venue1)
+	e.addCheckedEntrant(t, tidA, "Jon Smith")
+
+	// tournament B at the SAME venue → fuzzy query "Jhon Smith" → sameVenue true
+	tidB := e.mkOpenTournamentAtVenue(t, "B at V1", venue1)
+	code, sug := e.do(t, "GET", "/api/v1/tournaments/"+tidB+"/player-suggestions?name=Jhon%20Smith", e.director, "")
+	if code != http.StatusOK {
+		t.Fatalf("suggestions B (same venue): want 200, got %d", code)
+	}
+	items := sug["items"].([]interface{})
+	if len(items) == 0 {
+		t.Fatalf("expected a fuzzy-name suggestion at the same venue")
+	}
+	top := items[0].(map[string]interface{})
+	if top["displayName"] != "Jon Smith" {
+		t.Fatalf("expected Jon Smith suggested, got %v", top["displayName"])
+	}
+	if top["sameVenue"] != true {
+		t.Fatalf("same-venue suggestion should have sameVenue:true, got %v", top["sameVenue"])
+	}
+
+	// tournament C at a DIFFERENT venue → same fuzzy query → sameVenue false
+	tidC := e.mkOpenTournamentAtVenue(t, "C at V2", venue2)
+	_, sug2 := e.do(t, "GET", "/api/v1/tournaments/"+tidC+"/player-suggestions?name=Jhon%20Smith", e.director, "")
+	items2 := sug2["items"].([]interface{})
+	if len(items2) == 0 {
+		t.Fatalf("expected a fuzzy-name suggestion at the different venue")
+	}
+	if items2[0].(map[string]interface{})["sameVenue"] != false {
+		t.Fatalf("different-venue suggestion should have sameVenue:false, got %v", items2[0].(map[string]interface{})["sameVenue"])
+	}
+
+	// tournament D with NO venue → sameVenue false
+	_, dr := e.do(t, "POST", "/api/v1/tournaments", e.director, `{"name":"D no venue"}`)
+	tidD := dr["tournament"].(map[string]interface{})["id"].(string)
+	_, sug3 := e.do(t, "GET", "/api/v1/tournaments/"+tidD+"/player-suggestions?name=Jhon%20Smith", e.director, "")
+	items3 := sug3["items"].([]interface{})
+	if len(items3) == 0 {
+		t.Fatalf("expected a fuzzy-name suggestion for the no-venue tournament")
+	}
+	if items3[0].(map[string]interface{})["sameVenue"] != false {
+		t.Fatalf("no-venue suggestion should have sameVenue:false, got %v", items3[0].(map[string]interface{})["sameVenue"])
+	}
+}
+
 // TestPlayerSuggestionsBatch: POST batch with two queries (one matching an
 // existing player, one not) keys results by the caller-supplied key.
 func TestPlayerSuggestionsBatch(t *testing.T) {

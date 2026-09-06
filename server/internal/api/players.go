@@ -133,6 +133,19 @@ func (api *API) tournamentOrganizer(ctx context.Context, q interface {
 	return org, err
 }
 
+// tournamentVenueID returns the venue_id for a tournament, or "" when the
+// tournament has no venue (nullable column) or on error.
+func (api *API) tournamentVenueID(ctx context.Context, q interface {
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+}, tid string) string {
+	var v sql.NullString
+	_ = q.QueryRowContext(ctx, `SELECT venue_id FROM tournaments WHERE id = ?`, tid).Scan(&v)
+	if v.Valid {
+		return v.String
+	}
+	return ""
+}
+
 // ensurePlayerForEntrant links an entrant to a player inside tx. If wantPlayerID
 // is non-nil it verifies that player belongs to organizer and reuses it
 // (backfilling empty contact fields from the entrant); otherwise it creates a new
@@ -195,9 +208,12 @@ func (api *API) ensurePlayerForEntrant(ctx context.Context, tx *sql.Tx, org, ent
 // suggestPlayers returns up to limit candidate players for an organizer, ranked
 // by match strength against the (name, phone, email) query. Each item carries
 // decision context: matchReason ("phone"|"email"|"name"), pastEntries, and the
-// most recent tournament the player entered (lastEvent / lastEventAt). Shared by
-// the single and batch suggestion handlers so behavior is identical.
-func (api *API) suggestPlayers(ctx context.Context, org, name, phone, email string, limit int) ([]map[string]interface{}, error) {
+// most recent tournament the player entered (lastEvent / lastEventAt), and
+// sameVenue (whether the candidate has played the current tournament's venue
+// before). Shared by the single and batch suggestion handlers so behavior is
+// identical. venueID is the current tournament's venue_id ("" when it has none);
+// when empty, sameVenue is always false.
+func (api *API) suggestPlayers(ctx context.Context, org, name, phone, email, venueID string, limit int) ([]map[string]interface{}, error) {
 	name = strings.TrimSpace(name)
 	phone = strings.TrimSpace(phone)
 	email = strings.ToLower(strings.TrimSpace(email))
@@ -276,6 +292,16 @@ func (api *API) suggestPlayers(ctx context.Context, org, name, phone, email stri
 		if lat.Valid {
 			lastEventAt = lat.Int64
 		}
+		// sameVenue: has this candidate played the current tournament's venue before?
+		sameVenue := false
+		if venueID != "" {
+			var one int
+			if err := api.DB.QueryRowContext(ctx,
+				`SELECT 1 FROM entrants e JOIN tournaments t ON t.id = e.tournament_id
+				 WHERE e.player_id = ? AND t.venue_id = ? LIMIT 1`, c.p.ID, venueID).Scan(&one); err == nil {
+				sameVenue = true
+			}
+		}
 		items = append(items, map[string]interface{}{
 			"playerId":    c.p.ID,
 			"displayName": c.p.DisplayName,
@@ -287,6 +313,7 @@ func (api *API) suggestPlayers(ctx context.Context, org, name, phone, email stri
 			"matchReason": c.reason,
 			"lastEvent":   lastEvent,
 			"lastEventAt": lastEventAt,
+			"sameVenue":   sameVenue,
 		})
 	}
 	return items, nil
@@ -306,11 +333,13 @@ func (api *API) PlayerSuggestions(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "server_error", "")
 		return
 	}
+	venueID := api.tournamentVenueID(r.Context(), api.DB, tid)
 	items, err := api.suggestPlayers(r.Context(),
 		org,
 		r.URL.Query().Get("name"),
 		r.URL.Query().Get("phone"),
 		r.URL.Query().Get("email"),
+		venueID,
 		6)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "server_error", "")
@@ -349,12 +378,13 @@ func (api *API) PlayerSuggestionsBatch(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "server_error", "")
 		return
 	}
+	venueID := api.tournamentVenueID(r.Context(), api.DB, tid)
 	results := make(map[string][]map[string]interface{}, len(body.Queries))
 	for _, q := range body.Queries {
 		if q.Key == "" {
 			continue
 		}
-		items, err := api.suggestPlayers(r.Context(), org, q.Name, q.Phone, q.Email, 5)
+		items, err := api.suggestPlayers(r.Context(), org, q.Name, q.Phone, q.Email, venueID, 5)
 		if err != nil {
 			writeErr(w, http.StatusInternalServerError, "server_error", "")
 			return

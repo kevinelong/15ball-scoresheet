@@ -85,6 +85,20 @@
     if (item.matchReason === 'email') return 'same email';
     return 'similar name';
   }
+  // linkByDefault decides whether a candidate should be the LINK default (vs. a
+  // NEW/review default): exact phone/email, OR a name match where the candidate
+  // has played THIS tournament's venue before ("same venue"). This is only the
+  // default — the per-row control and single-add panel still let the director
+  // override; linking is never silent or irreversible.
+  function linkByDefault(item) {
+    if (!item) return false;
+    if (item.matchReason === 'phone' || item.matchReason === 'email') return true;
+    return (item.score || 0) >= 0.72 && !!item.sameVenue;
+  }
+  // Small "same venue" chip for candidates the player has played this venue before.
+  function venueChip(item) {
+    return (item && item.sameVenue) ? '<span class="pill venue">same venue</span>' : '';
+  }
   // Mask a phone to just the last 4 digits, e.g. "•••‑0123".
   function maskPhone(p) {
     var d = String(p || '').replace(/\D/g, '');
@@ -393,14 +407,17 @@
       if (f.email) warn.push('duplicate email');
       var chosen = (pv.choice && pv.choice[i]) || '';
       var cands = (pv.matches && pv.matches[i]) || [];
-      var isReview = !chosen && cands.length && tierOf(cands[0]) === 'possible';
+      // A row defaults to "review" when it has a name-only candidate that is NOT
+      // the link-default (i.e. a different/unknown venue) and nothing was chosen.
+      var isReview = !chosen && cands.length && !linkByDefault(cands[0]);
       if (chosen) linked++; else if (isReview) review++; else newc++;
       return '<div class="prow' + (warn.length ? ' dupe' : '') + (isReview ? ' review' : '') + '">' +
         '<b>' + esc(p.name) + (warn.length ? ' <span class="pill warn">' + esc(warn.join(' · ')) + '</span>' : '') + '</b>' +
         '<span class="note">' + (p.fargo != null ? 'Fargo ' + esc(p.fargo) : '') + '</span>' +
         '<span class="note">' + (p.phone ? esc(Roster.e164(p.phone)) : '') + '</span>' +
         '<span class="note">' + (p.email ? esc(p.email) : '') + '</span>' +
-        '<span class="mcell">' + matchControl(pv, i) + '</span>' +
+        '<span class="mcell">' + matchControl(pv, i) +
+        (cands.length ? venueChip(cands[0]) : '') + '</span>' +
         '</div>';
     }).join('');
     var n = pv.list.length;
@@ -428,20 +445,21 @@
   // "New person" stays primary and the panel is labelled a possible match.
   function pendingAddMarkup(pa) {
     var cands = sortCandidates(pa.candidates);
-    var topStrong = cands.length && tierOf(cands[0]) === 'strong';
+    var topLink = cands.length && linkByDefault(cands[0]);
     var rows = cands.map(function (c) {
-      var strong = tierOf(c) === 'strong';
+      var link = linkByDefault(c);
       return '<li><span class="vs"><b>' + esc(c.displayName) + '</b> ' +
-        '<span class="pill' + (strong ? '' : ' warn') + '">' + esc(reasonChip(c)) + '</span>' +
+        '<span class="pill' + (link ? '' : ' warn') + '">' + esc(reasonChip(c)) + '</span> ' +
+        venueChip(c) +
         '<div class="note">' + esc(ctxLine(c)) + '</div></span>' +
-        '<button class="' + (strong ? 'pri' : 'ghost') + '" data-action="add-link" data-pid="' + esc(c.playerId) + '">Same person</button></li>';
+        '<button class="' + (link ? 'pri' : 'ghost') + '" data-action="add-link" data-pid="' + esc(c.playerId) + '">Same person</button></li>';
     }).join('');
-    return '<div class="confirm"><h3>' + (topStrong ? 'Likely the same person' : 'Possible match') + '</h3>' +
+    return '<div class="confirm"><h3>' + (topLink ? 'Likely the same person' : 'Possible match') + '</h3>' +
       '<p class="note">Adding <b>' + esc(pa.body.displayName) + '</b>. We found ' + cands.length +
       ' player' + (cands.length === 1 ? '' : 's') + ' who may be the same person.</p>' +
       '<ul class="list">' + rows + '</ul>' +
       '<div class="spacer"></div>' +
-      '<div class="row"><button class="' + (topStrong ? 'ghost' : 'pri') + '" data-action="add-new">New person</button>' +
+      '<div class="row"><button class="' + (topLink ? 'ghost' : 'pri') + '" data-action="add-new">New person</button>' +
       '<button class="ghost" data-action="add-cancel">Cancel</button></div></div>';
   }
 
@@ -465,7 +483,8 @@
       var n = c.pastEntries || 0;
       var moveNote = '≈' + n + ' past entr' + (n === 1 ? 'y' : 'ies') + ' will move onto this player.';
       return '<li><div class="vs" style="flex:1">' +
-        '<b>' + esc(c.displayName) + '</b> <span class="pill' + (tierOf(c) === 'strong' ? '' : ' warn') + '">' + esc(reasonChip(c)) + '</span>' +
+        '<b>' + esc(c.displayName) + '</b> <span class="pill' + (linkByDefault(c) ? '' : ' warn') + '">' + esc(reasonChip(c)) + '</span> ' +
+        venueChip(c) +
         '<div class="cmp">' +
         '<div class="cmprow cmphead"><span class="cmplbl"></span><span class="cmpv">This entrant</span><span class="cmpv">Duplicate</span></div>' +
         cmpRow('Name', self.displayName, c.displayName) +
@@ -949,8 +968,9 @@
         list.forEach(function (p, i) {
           var cands = sortCandidates(results[String(i)] || []);
           matches[i] = cands;
-          // Default the per-row decision: link to a strong top candidate, else new.
-          if (cands.length && tierOf(cands[0]) === 'strong') choice[i] = cands[0].playerId;
+          // Default the per-row decision: link when the top candidate is a
+          // link-default (phone/email OR name-match at the same venue), else new.
+          if (cands.length && linkByDefault(cands[0])) choice[i] = cands[0].playerId;
           else choice[i] = null;
         });
       } catch (e) { /* batch is best-effort — proceed with no matches */ }
