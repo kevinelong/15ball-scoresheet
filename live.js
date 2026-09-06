@@ -11,6 +11,25 @@
 
   var state = { view: 'boot', me: null, tournaments: [], t: null, roster: [], names: {}, matches: [], es: null, err: '' };
 
+  // Canonical disciplines (id -> display name); mirrors the backend validGames set.
+  var GAMES = [
+    ['15ball_rotation', '15-Ball Rotation'],
+    ['8ball', '8-Ball'],
+    ['9ball', '9-Ball'],
+    ['10ball', '10-Ball'],
+    ['straight_14_1', 'Straight Pool (14.1)'],
+    ['bank_pool', 'Bank Pool'],
+    ['one_pocket', 'One Pocket']
+  ];
+  var GAME_LABELS = {};
+  GAMES.forEach(function (g) { GAME_LABELS[g[0]] = g[1]; });
+  function gameLabel(id) { return id ? (GAME_LABELS[id] || id) : ''; }
+  function gameOptions(sel) {
+    return GAMES.map(function (g) {
+      return '<option value="' + esc(g[0]) + '"' + (g[0] === sel ? ' selected' : '') + '>' + esc(g[1]) + '</option>';
+    }).join('');
+  }
+
   var appEl = document.getElementById('app');
   var whoEl = document.getElementById('who');
   var toastEl = document.getElementById('toast');
@@ -57,6 +76,7 @@
     var html = '<div class="card"><h2>Tournaments</h2>';
     if (isDirector()) {
       html += '<div class="row"><input id="tname" placeholder="New tournament name" />' +
+        '<select id="tgame">' + gameOptions('15ball_rotation') + '</select>' +
         '<button class="pri" data-action="create-tournament" style="flex:0 0 auto">Create</button></div><div class="spacer"></div>';
     }
     if (!state.tournaments.length) {
@@ -64,6 +84,7 @@
     } else {
       html += '<ul class="list">' + state.tournaments.map(function (t) {
         return '<li><span class="vs"><b>' + esc(t.name) + '</b></span>' +
+          '<span class="pill">' + esc(gameLabel(t.game)) + '</span>' +
           '<span class="pill">' + esc(t.state) + '</span>' +
           '<button data-action="open-t" data-id="' + esc(t.id) + '">Open</button></li>';
       }).join('') + '</ul>';
@@ -89,6 +110,7 @@
   function renderTournament() {
     var t = state.t, dir = isDirector();
     var h = '<div class="card"><div class="row"><h2 style="flex:1">' + esc(t.name) + '</h2>' +
+      '<span class="pill">' + esc(gameLabel(t.game)) + '</span>' +
       '<span class="pill">' + esc(t.state) + '</span></div>' +
       '<button class="ghost" data-action="home">‹ All tournaments</button></div>';
 
@@ -205,7 +227,7 @@
     if (act === 'open-t') return guard(function () { return openTournament(id); });
     if (act === 'create-tournament') return guard(async function () {
       var name = val('tname'); if (!name) return toast('Enter a name');
-      var r = await api.createTournament({ name: name }); await openTournament(r.tournament.id);
+      var r = await api.createTournament({ name: name, game: val('tgame') || '15ball_rotation' }); await openTournament(r.tournament.id);
     });
     if (act === 'add-entrant') return guard(async function () {
       var name = val('en'); if (!name) return toast('Enter a name');

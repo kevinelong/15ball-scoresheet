@@ -27,6 +27,17 @@ type Tournament struct {
 
 const tournamentCols = `id, slug, name, game, state, visibility, archived_at, created_by, created_at, updated_at, version`
 
+// validGames is the canonical set of supported disciplines (id -> display name).
+var validGames = map[string]string{
+	"15ball_rotation": "15-Ball Rotation",
+	"8ball":           "8-Ball",
+	"9ball":           "9-Ball",
+	"10ball":          "10-Ball",
+	"straight_14_1":   "Straight Pool (14.1)",
+	"bank_pool":       "Bank Pool",
+	"one_pocket":      "One Pocket",
+}
+
 func scanTournament(row interface{ Scan(...any) error }) (*Tournament, error) {
 	var t Tournament
 	err := row.Scan(&t.ID, &t.Slug, &t.Name, &t.Game, &t.State, &t.Visibility, &t.ArchivedAt, &t.CreatedBy, &t.CreatedAt, &t.UpdatedAt, &t.Version)
@@ -52,6 +63,7 @@ func tournamentTransitionSupported(from, to string) bool {
 func (api *API) CreateTournament(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Name       string `json:"name"`
+		Game       string `json:"game"`
 		Visibility string `json:"visibility"`
 	}
 	if !decodeBody(w, r, &body) {
@@ -59,6 +71,14 @@ func (api *API) CreateTournament(w http.ResponseWriter, r *http.Request) {
 	}
 	if len(body.Name) == 0 || len(body.Name) > 200 {
 		writeErr(w, http.StatusBadRequest, "invalid_name", "name is required (1-200 chars)")
+		return
+	}
+	game := body.Game
+	if game == "" {
+		game = "15ball_rotation"
+	}
+	if _, ok := validGames[game]; !ok {
+		writeErr(w, http.StatusBadRequest, "invalid_game", "unknown discipline")
 		return
 	}
 	vis := "private"
@@ -83,7 +103,7 @@ func (api *API) CreateTournament(w http.ResponseWriter, r *http.Request) {
 		_, err = tx.ExecContext(r.Context(),
 			`INSERT INTO tournaments (id, slug, name, game, state, visibility, created_by, created_at, updated_at, version)
 			 VALUES (?,?,?,?,?,?,?,?,?,1)`,
-			id, slug, body.Name, "15ball_rotation", "draft", vis, actor(r.Context()), now, now)
+			id, slug, body.Name, game, "draft", vis, actor(r.Context()), now, now)
 		if err != nil {
 			_ = tx.Rollback()
 			if attempt < 4 { // slug collision → retry with suffix
@@ -96,7 +116,7 @@ func (api *API) CreateTournament(w http.ResponseWriter, r *http.Request) {
 		_ = audit.Write(r.Context(), tx, audit.Entry{
 			EntityType: "tournament", EntityID: id, Action: "created",
 			ActorUserID: actor(r.Context()), RequestID: reqID(r.Context()),
-			After: map[string]string{"name": body.Name, "slug": slug, "state": "draft"},
+			After: map[string]string{"name": body.Name, "slug": slug, "game": game, "state": "draft"},
 		})
 		if err = tx.Commit(); err != nil {
 			writeErr(w, http.StatusInternalServerError, "server_error", "")
