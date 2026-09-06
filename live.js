@@ -9,7 +9,7 @@
   var api = FB.createClient();
   var DIRECTOR = ['tournament_director', 'club_admin', 'system_admin'];
 
-  var state = { view: 'boot', me: null, public: false, tournaments: [], t: null, roster: [], names: {}, matches: [], es: null, err: '', preview: null, editEntrant: null };
+  var state = { view: 'boot', me: null, public: false, tournaments: [], t: null, roster: [], names: {}, matches: [], es: null, err: '', preview: null, editEntrant: null, pendingAdd: null, dupes: null };
 
   // Canonical disciplines (id -> display name); mirrors the backend validGames set.
   var GAMES = [
@@ -227,6 +227,52 @@
       '<button class="ghost" data-action="bulk-cancel">Back</button></div>';
   }
 
+  // One candidate row: "Jane Doe · N past events · phone/email" + action button(s).
+  function candidateContact(c) {
+    var bits = [];
+    if (c.phone) bits.push(esc(c.phone));
+    if (c.email) bits.push(esc(c.email));
+    return bits.join(' · ');
+  }
+  function candidateMeta(c) {
+    var n = c.pastEntries || 0;
+    var meta = n + ' past event' + (n === 1 ? '' : 's');
+    if (c.fargo != null) meta += ' · Fargo ' + esc(c.fargo);
+    return meta;
+  }
+
+  // Feature A: "Is this the same person?" confirm panel shown before a single add.
+  function pendingAddMarkup(pa) {
+    var rows = pa.candidates.map(function (c) {
+      var contact = candidateContact(c);
+      return '<li><span class="vs"><b>' + esc(c.displayName) + '</b>' +
+        '<div class="note">' + candidateMeta(c) + (contact ? ' · ' + contact : '') + '</div></span>' +
+        '<button class="pri" data-action="add-link" data-pid="' + esc(c.playerId) + '">Same person</button></li>';
+    }).join('');
+    return '<div class="confirm"><h3>Is this the same person?</h3>' +
+      '<p class="note">Adding <b>' + esc(pa.body.displayName) + '</b>. We found ' + pa.candidates.length +
+      ' player' + (pa.candidates.length === 1 ? '' : 's') + ' who may be the same person.</p>' +
+      '<ul class="list">' + rows + '</ul>' +
+      '<div class="spacer"></div>' +
+      '<div class="row"><button class="pri" data-action="add-new">New person</button>' +
+      '<button class="ghost" data-action="add-cancel">Cancel</button></div></div>';
+  }
+
+  // Feature B: duplicate-player candidates for the entrant being edited.
+  function dupesMarkup(d) {
+    if (!d.candidates.length) return '<div class="note warn">No duplicates found.</div>';
+    var rows = d.candidates.map(function (c) {
+      var contact = candidateContact(c);
+      return '<li><span class="vs"><b>' + esc(c.displayName) + '</b>' +
+        '<div class="note">' + candidateMeta(c) + (contact ? ' · ' + contact : '') + '</div></span>' +
+        '<button class="pri" data-action="entrant-merge" data-src="' + esc(c.playerId) +
+        '" data-into="' + esc(d.intoId) + '">Merge into this player</button></li>';
+    }).join('');
+    return '<div class="confirm"><h4>Possible duplicates</h4>' +
+      '<p class="note">Merging keeps this entrant\'s player and absorbs the duplicate.</p>' +
+      '<ul class="list">' + rows + '</ul></div>';
+  }
+
   // Inline edit form for one roster entrant (Feature B).
   function editEntrantMarkup(e) {
     return '<li class="editrow"><div class="vs" style="flex:1">' +
@@ -238,12 +284,18 @@
       '<label><input id="ed-opt" type="checkbox"' + (e.notifyOptIn ? ' checked' : '') + ' />Send match-ready SMS (player consented)</label>' +
       '<div class="spacer"></div>' +
       '<div class="row"><button class="pri" data-action="entrant-save" data-id="' + esc(e.id) + '">Save</button>' +
-      '<button class="ghost" data-action="entrant-cancel">Cancel</button></div>' +
+      '<button class="ghost" data-action="entrant-cancel">Cancel</button>' +
+      '<button class="ghost" data-action="entrant-dupes" data-id="' + esc(e.id) + '">Find duplicates</button></div>' +
+      (state.dupes && state.dupes.entrantId === e.id ? dupesMarkup(state.dupes) : '') +
       '</div></li>';
   }
 
   function renderEntrants(dir) {
     var h = '<div class="card"><h2>Entrants</h2>';
+    if (dir && state.pendingAdd) {
+      h += pendingAddMarkup(state.pendingAdd);
+      return h + '</div>';
+    }
     if (dir && state.preview) {
       h += previewMarkup(state.preview);
       return h + '</div>';
@@ -514,8 +566,39 @@
       var name = val('en'); if (!name) return toast('Enter a name');
       var body = { displayName: name };
       var ph = val('ephone'); if (ph) { body.phone = Roster.e164(ph); body.notifyOptIn = checked('eopt'); }
+      var cands = [];
+      try {
+        var r = await api.playerSuggestions(state.t.id, { name: name, phone: body.phone || '', email: '' });
+        cands = (r && r.items) || [];
+      } catch (e) { /* suggestion lookup is best-effort — fall through to a plain add */ }
+      if (cands.length) {
+        state.pendingAdd = { body: body, candidates: cands };
+        renderTournament();
+        return;
+      }
       await addEntrantChecked(body);
       await openTournament(state.t.id);
+    });
+    // Feature A confirm: link this add to an existing player.
+    if (act === 'add-link') return guard(async function () {
+      var pa = state.pendingAdd; if (!pa) return;
+      var pid = b.getAttribute('data-pid');
+      var body = Object.assign({}, pa.body, { playerId: pid });
+      state.pendingAdd = null;
+      await addEntrantChecked(body);
+      await openTournament(state.t.id);
+    });
+    // Feature A confirm: add as a brand-new player (no link).
+    if (act === 'add-new') return guard(async function () {
+      var pa = state.pendingAdd; if (!pa) return;
+      var body = pa.body;
+      state.pendingAdd = null;
+      await addEntrantChecked(body);
+      await openTournament(state.t.id);
+    });
+    if (act === 'add-cancel') return guard(async function () {
+      state.pendingAdd = null;
+      renderTournament();
     });
     if (act === 'bulk-preview') return guard(async function () {
       var raw = val('ebulk');
@@ -549,11 +632,33 @@
     });
     if (act === 'entrant-edit') return guard(async function () {
       state.editEntrant = id;
+      state.dupes = null;
       renderTournament();
     });
     if (act === 'entrant-cancel') return guard(async function () {
       state.editEntrant = null;
+      state.dupes = null;
       renderTournament();
+    });
+    // Feature B: find duplicate players for the entrant being edited.
+    if (act === 'entrant-dupes') return guard(async function () {
+      var ent = state.roster.filter(function (e) { return e.id === id; })[0];
+      if (!ent) return;
+      if (!ent.playerId) { state.dupes = { entrantId: id, intoId: '', candidates: [] }; renderTournament(); return; }
+      var r = await api.playerSuggestions(state.t.id, { name: ent.displayName, phone: ent.phone || '', email: ent.email || '' });
+      var cands = ((r && r.items) || []).filter(function (c) { return c.playerId !== ent.playerId; });
+      state.dupes = { entrantId: id, intoId: ent.playerId, candidates: cands };
+      renderTournament();
+    });
+    // Feature B: absorb the duplicate player INTO this entrant's player.
+    if (act === 'entrant-merge') return guard(async function () {
+      var src = b.getAttribute('data-src'), into = b.getAttribute('data-into');
+      if (!src || !into) return;
+      await api.mergePlayers(src, into);
+      toast('Merged');
+      state.dupes = null;
+      state.editEntrant = null;
+      await openTournament(state.t.id);
     });
     if (act === 'entrant-save') return guard(async function () {
       var name = val('ed-name'); if (!name) return toast('Enter a name');

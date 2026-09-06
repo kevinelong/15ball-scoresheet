@@ -128,10 +128,18 @@
 
       // ---- entrants ----
       listEntrants: (id, params) => get(T(id) + '/entrants', params),
-      createEntrant: (id, body) => post(T(id) + '/entrants', body),   // {displayName, phone?, notifyOptIn?, divisionId?}
+      createEntrant: (id, body) => post(T(id) + '/entrants', body),   // {displayName, phone?, notifyOptIn?, divisionId?, playerId?}
       patchEntrant: (id, eid, body) => patch(T(id) + '/entrants/' + encodeURIComponent(eid), body),
       checkInEntrant: (id, eid) => post(T(id) + '/entrants/' + encodeURIComponent(eid) + '/check-in'),
       archiveEntrant: (id, eid, reason) => post(T(id) + '/entrants/' + encodeURIComponent(eid) + '/archive', { reason }),
+
+      // ---- cross-event player dedup ----
+      // Suggest existing players matching a name/phone/email (session required):
+      // { items:[{playerId, displayName, phone, email, fargo, score, pastEntries}] }.
+      playerSuggestions: (id, params) => get(T(id) + '/player-suggestions', params), // {name?, phone?, email?}
+      // Absorb one player INTO another (director+, CSRF): repoints entrants, backfills
+      // contact, deletes the source. Returns { player: <intoId row> }.
+      mergePlayers: (playerId, intoId) => post('/v1/players/' + encodeURIComponent(playerId) + '/merge', { intoId }),
 
       // ---- matches ----
       listMatches: (id, params) => get(T(id) + '/matches', params),
