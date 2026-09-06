@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -27,11 +28,14 @@ type Match struct {
 	TableRef     *string `json:"tableRef"`
 	Bracket      *string `json:"bracket"`    // 'W'|'L'|'GF' (double-elim); null = single-elim
 	MatchLabel   *string `json:"matchLabel"` // e.g. 'W2M1','L1M2','GF1','GF2'
-	Version      int64   `json:"version"`
-	StartedAt    *int64  `json:"startedAt"`
-	CompletedAt  *int64  `json:"completedAt"`
-	CreatedAt    int64   `json:"createdAt"`
-	UpdatedAt    int64   `json:"updatedAt"`
+	// WinnerEntrantID is the current (non-superseded) result winner, or nil when the
+	// match has no recorded result. Populated by ListMatches; not part of matchCols/scanMatch.
+	WinnerEntrantID *string `json:"winnerEntrantId"`
+	Version         int64   `json:"version"`
+	StartedAt       *int64  `json:"startedAt"`
+	CompletedAt     *int64  `json:"completedAt"`
+	CreatedAt       int64   `json:"createdAt"`
+	UpdatedAt       int64   `json:"updatedAt"`
 }
 
 const matchCols = `id, tournament_id, division_id, bracket_round, slot, entrant_a_id, entrant_b_id, state, assigned_scorekeeper_user_id, table_ref, version, started_at, completed_at, created_at, updated_at, bracket, match_label`
@@ -113,6 +117,39 @@ func (api *API) ListMatches(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		items = append(items, m)
+	}
+	// Attach the current winner per match in one query. A match_results row is
+	// "current" when superseded_by IS NULL; there is exactly one such row per
+	// completed match. Unfinished matches keep a nil winnerEntrantId.
+	if len(items) > 0 {
+		placeholders := make([]string, len(items))
+		wargs := make([]any, 0, len(items))
+		byID := make(map[string]*Match, len(items))
+		for i, m := range items {
+			placeholders[i] = "?"
+			wargs = append(wargs, m.ID)
+			byID[m.ID] = m
+		}
+		wq := `SELECT match_id, winner_entrant_id FROM match_results WHERE superseded_by IS NULL AND match_id IN (` +
+			strings.Join(placeholders, ",") + `)`
+		wrows, werr := api.DB.QueryContext(r.Context(), wq, wargs...)
+		if werr != nil {
+			writeErr(w, http.StatusInternalServerError, "server_error", "")
+			return
+		}
+		defer wrows.Close()
+		for wrows.Next() {
+			var mid string
+			var win sql.NullString
+			if err := wrows.Scan(&mid, &win); err != nil {
+				writeErr(w, http.StatusInternalServerError, "server_error", "")
+				return
+			}
+			if m := byID[mid]; m != nil && win.Valid {
+				v := win.String
+				m.WinnerEntrantID = &v
+			}
+		}
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{"items": items})
 }

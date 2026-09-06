@@ -69,6 +69,85 @@
   .pill.seed{background:rgba(29,78,216,.18);color:#93b4ff;border-color:#28407a}
   .note.warn{color:#f2c08a}
   .editrow{display:block}
+
+  /* ---- connected-tree bracket (namespaced under .bracket; ported from bracket-mockup.html) ---- */
+  .bracket{--gold:#e0b34a;
+    --card-w:200px;    /* match card width */
+    --gap-x:46px;      /* space for the connector column between rounds */
+    --pair-gap:26px;   /* vertical gap between the two cards of a feeding pair */
+  }
+  .bracket .scroller{overflow-x:auto;overflow-y:hidden;padding:.4rem .2rem 1.4rem;position:relative}
+  .bracket .scroller::-webkit-scrollbar{height:10px}
+  .bracket .scroller::-webkit-scrollbar-thumb{background:var(--line);border-radius:6px}
+  .bracket .canvas{display:inline-flex;flex-direction:column;gap:2.2rem;min-width:min-content}
+
+  .bracket .region{position:relative}
+  .bracket .region-title{display:inline-flex;align-items:center;gap:.5rem;font-size:.72rem;font-weight:700;
+    text-transform:uppercase;letter-spacing:.09em;color:var(--mut);margin:0 0 .55rem 2px}
+  .bracket .region-title .dot{width:.7rem;height:.7rem;border-radius:3px}
+  .bracket .region.win  .region-title .dot{background:var(--chipW)}
+  .bracket .region.los  .region-title .dot{background:var(--chipL)}
+  .bracket .region.gf   .region-title .dot{background:var(--chipGF)}
+
+  .bracket .rounds{display:flex;align-items:stretch}
+  .bracket .round{display:flex;flex-direction:column;justify-content:space-around;
+    width:var(--card-w);margin-right:var(--gap-x);flex:0 0 auto}
+  .bracket .round:last-child{margin-right:0}
+  .bracket .round-head{position:sticky;top:0;z-index:5;font-size:.66rem;font-weight:700;letter-spacing:.06em;
+    text-transform:uppercase;color:var(--mut);text-align:center;margin-bottom:.5rem;
+    padding:.15rem 0;background:linear-gradient(var(--panel),var(--panel) 70%,transparent)}
+
+  .bracket .match{position:relative;display:block;background:var(--panel);border:1px solid var(--line);border-radius:10px;
+    margin:calc(var(--pair-gap)/2) 0;box-shadow:0 1px 0 rgba(0,0,0,.3)}
+  .bracket .slot{display:flex;align-items:center;gap:.5rem;padding:.42rem .55rem;width:100%;text-align:left;
+    background:transparent;border:0;color:var(--fg);font:inherit;min-height:0;border-radius:0}
+  .bracket button.slot{cursor:pointer}
+  .bracket button.slot:active{background:rgba(59,130,246,.14)}
+  .bracket .slot + .slot{border-top:1px solid var(--line)}
+  .bracket .seed{font-size:.64rem;font-weight:700;color:var(--mut);min-width:1.35rem;text-align:center;
+    border:1px solid var(--line);border-radius:5px;padding:.05rem .1rem;font-variant-numeric:tabular-nums;flex:0 0 auto}
+  .bracket .name{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:.86rem}
+  .bracket .score{font-variant-numeric:tabular-nums;font-weight:700;color:var(--mut);min-width:1.1rem;text-align:right;flex:0 0 auto}
+  .bracket .slot.win{background:rgba(22,163,74,.10)}
+  .bracket .slot.win .name{font-weight:700;color:var(--fg)}
+  .bracket .slot.win .score{color:#7ee2a6}
+  .bracket .slot.win::before{content:"";position:absolute;left:0;width:3px;top:0;height:50%;background:var(--ok);border-radius:3px 0 0 3px}
+  .bracket .match.bottomwin .slot.win::before{top:50%}
+  .bracket .slot.lose .name{color:var(--mut)}
+  .bracket .slot.tbd .name{color:var(--mut);font-style:italic}
+  .bracket .slot.bye .name{color:var(--mut)}
+  .bracket .origin{font-size:.6rem;color:var(--mut);border:1px dashed var(--line);border-radius:4px;padding:0 .25rem}
+
+  .bracket .mlabel{position:absolute;top:-.62rem;left:.5rem;font-size:.58rem;font-weight:700;letter-spacing:.04em;
+    color:var(--mut);background:var(--panel);padding:0 .3rem;border-radius:4px;z-index:2}
+
+  .bracket .match.is-live{border-color:var(--pri);box-shadow:0 0 0 2px rgba(59,130,246,.35),0 0 18px rgba(59,130,246,.25)}
+  .bracket .match.is-live .mlabel{color:#bcd2ff}
+  .bracket .live-pill{position:absolute;top:-.62rem;right:.5rem;font-size:.55rem;font-weight:800;letter-spacing:.08em;
+    color:#fff;background:var(--pri);padding:.05rem .4rem;border-radius:999px;z-index:2;animation:bracketPulse 1.6s ease-in-out infinite}
+  @keyframes bracketPulse{0%,100%{box-shadow:0 0 0 0 rgba(59,130,246,.5)}50%{box-shadow:0 0 0 5px rgba(59,130,246,0)}}
+
+  .bracket .round:not(:last-child) .match::after{content:"";position:absolute;right:calc(-1 * var(--gap-x));top:50%;
+    width:calc(var(--gap-x)/2);height:2px;background:var(--line)}
+  .bracket .round:not(:last-child) .match.pair-top::before{content:"";position:absolute;
+    right:calc(-1 * var(--gap-x)/2);top:50%;width:2px;background:var(--line);
+    height:calc(100% + var(--pair-gap));z-index:0}
+  .bracket .lead::before{content:"";position:absolute;left:calc(-1 * var(--gap-x)/2);top:50%;
+    width:calc(var(--gap-x)/2);height:2px;background:var(--line)}
+
+  .bracket .gf .rounds{align-items:center}
+  .bracket .champ{width:var(--card-w);display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:.3rem;background:var(--panel);border:1px solid var(--chipGF);border-radius:12px;padding:1rem .6rem;
+    box-shadow:0 0 22px rgba(124,58,237,.22)}
+  .bracket .champ .trophy{font-size:1.6rem}
+  .bracket .champ .who2{font-weight:800;font-size:1.05rem}
+  .bracket .champ .cap{font-size:.62rem;text-transform:uppercase;letter-spacing:.09em;color:var(--gold);font-weight:700}
+  .bracket .cond{font-size:.62rem;color:var(--mut);text-align:center;margin-top:.35rem}
+
+  @media (max-width:640px){
+    .bracket{--card-w:158px;--gap-x:32px;--pair-gap:18px}
+    .bracket .name{font-size:.8rem}
+  }
 </style>
 </head>
 <body>

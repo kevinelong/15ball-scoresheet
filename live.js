@@ -152,7 +152,7 @@
     } else if (t.state === 'in_progress') {
       h += renderMatches(dir);
     } else if (t.state === 'completed') {
-      h += '<div class="card"><h2>Final bracket</h2>' + matchesMarkup(false) + '</div>';
+      h += '<div class="card"><h2>Final bracket</h2>' + renderBracket(false) + '</div>';
     }
     appEl.innerHTML = h;
   }
@@ -313,6 +313,158 @@
   }
   function shortName(id) { var s = nm(id); return s.length > 10 ? s.slice(0, 9) + '…' : s; }
 
+  // ---- connected-tree bracket ----
+  // Seed label for an entrant id (roster 'seed' if set, else '—').
+  var seedById = null;
+  function seedOf(id) {
+    if (!seedById) { seedById = {}; state.roster.forEach(function (e) { if (e.seed != null) seedById[e.id] = e.seed; }); }
+    return (id && seedById[id] != null) ? String(seedById[id]) : '—';
+  }
+  function isBye(id) { return id && state.names[id] === '— BYE —'; }
+  // Parse the round number out of a match label (W2M1 -> 2, L3M1 -> 3); falls back to bracketRound.
+  function roundOf(m) {
+    var lbl = m.matchLabel || '';
+    var mo = lbl.match(/^[WL](\d+)M/);
+    return mo ? parseInt(mo[1], 10) : (m.bracketRound || 1);
+  }
+
+  // One entrant slot inside a bracket card. When tappable, renders a <button> that
+  // reuses the existing "win" action (assign→start→submitResult) — do not change it.
+  function bracketSlot(m, id, otherId, opts) {
+    opts = opts || {};
+    var cls = ['slot'];
+    var nameHtml;
+    if (!id) { cls.push('tbd'); nameHtml = 'TBD'; }
+    else if (isBye(id)) { cls.push('bye'); nameHtml = esc(state.names[id]); }
+    else nameHtml = esc(nm(id));
+    if (opts.win) cls.push('win');
+    else if (opts.lose) cls.push('lose');
+    if (opts.origin) nameHtml += ' <span class="origin">' + esc(opts.origin) + '</span>';
+    var seed = '<span class="seed">' + esc(id ? seedOf(id) : '—') + '</span>';
+    var score = '<span class="score">' + (opts.win ? '✓' : '') + '</span>';
+    var inner = seed + '<span class="name">' + nameHtml + '</span>' + score;
+    if (opts.tappable) {
+      return '<button type="button" class="' + cls.join(' ') + '" data-action="win" data-m="' + esc(m.id) +
+        '" data-w="' + esc(id) + '" data-l="' + esc(otherId) + '">' + inner + '</button>';
+    }
+    return '<div class="' + cls.join(' ') + '">' + inner + '</div>';
+  }
+
+  // Render a single match card. connectors = {pairTop, lead} to draw tree lines;
+  // origins = {a, b} optional "‹ from" tags.
+  function bracketCard(m, interactive, connectors, origins) {
+    connectors = connectors || {}; origins = origins || {};
+    var a = m.entrantAId, b = m.entrantBId;
+    var win = m.winnerEntrantId || null;
+    var aWin = !!(win && a && win === a), bWin = !!(win && b && win === b);
+    var live = (m.state === 'in_progress' || m.state === 'reopened');
+    var ready = a && b && !isBye(a) && !isBye(b) &&
+      (m.state === 'scheduled' || m.state === 'assigned' || m.state === 'reopened');
+    var tappable = interactive && ready;
+
+    var cls = ['match'];
+    if (bWin) cls.push('bottomwin');
+    if (live) cls.push('is-live');
+    if (connectors.pairTop) cls.push('pair-top');
+    if (connectors.lead) cls.push('lead');
+
+    var h = '<div class="' + cls.join(' ') + '">';
+    h += '<span class="mlabel">' + esc(m.matchLabel || ('R' + m.bracketRound + '·' + (m.slot + 1))) + '</span>';
+    if (live) h += '<span class="live-pill">LIVE</span>';
+    h += bracketSlot(m, a, b, { win: aWin, lose: !!win && !aWin, tappable: tappable, origin: origins.a });
+    h += bracketSlot(m, b, a, { win: bWin, lose: !!win && !bWin, tappable: tappable, origin: origins.b });
+    return h + '</div>';
+  }
+
+  // Build a round column from a list of matches (already the same round).
+  function bracketColumn(head, matches, interactive, opts) {
+    opts = opts || {};
+    matches = matches.slice().sort(function (x, y) { return x.slot - y.slot; });
+    var cells = matches.map(function (m, i) {
+      var connectors = {};
+      if (opts.tree) {
+        // clean binary tree: upper match of each feeding pair gets pair-top; all
+        // non-first columns get a lead stub.
+        if (i % 2 === 0) connectors.pairTop = true;
+        if (!opts.first) connectors.lead = true;
+      } else if (opts.leadOnly && !opts.first) {
+        connectors.lead = true;
+      }
+      var origins = opts.origins ? opts.origins(m) : {};
+      return bracketCard(m, interactive, connectors, origins);
+    }).join('');
+    return '<div class="round"><div class="round-head">' + esc(head) + '</div>' + cells + '</div>';
+  }
+
+  // Group a bracket's matches into round columns keyed by round number.
+  function roundsOf(list) {
+    var byRound = {};
+    list.forEach(function (m) { var r = roundOf(m); (byRound[r] = byRound[r] || []).push(m); });
+    return Object.keys(byRound).map(Number).sort(function (x, y) { return x - y; })
+      .map(function (r) { return { round: r, matches: byRound[r] }; });
+  }
+
+  // The connected-tree double-elim bracket. Falls back to the flat list for
+  // single-elim / 2-player (all matches have bracket === null).
+  function renderBracket(interactive) {
+    if (!state.matches.length) return '<p class="muted">No matches.</p>';
+    var groups = { W: [], L: [], GF: [] }, anyBracketed = false;
+    state.matches.forEach(function (m) {
+      if (m.bracket && groups[m.bracket]) { groups[m.bracket].push(m); anyBracketed = true; }
+    });
+    if (!anyBracketed) return matchesMarkup(interactive); // single-elim / flat fallback
+    seedById = null; // recompute per render (roster may have changed)
+
+    var canvas = '';
+
+    // ----- Winners -----
+    if (groups.W.length) {
+      var wr = roundsOf(groups.W), wLast = wr.length;
+      var wCols = wr.map(function (rc, i) {
+        var head = (i === wLast - 1) ? 'Winners final' : 'Winners R' + rc.round;
+        return bracketColumn(head, rc.matches, interactive, { tree: true, first: i === 0 });
+      }).join('');
+      canvas += '<section class="region win"><div class="region-title"><span class="dot"></span>Winners bracket</div>' +
+        '<div class="rounds">' + wCols + '</div></section>';
+    }
+
+    // ----- Losers ----- (spatial layout + origin tags rather than exact cross lines)
+    if (groups.L.length) {
+      var lr = roundsOf(groups.L), lLast = lr.length;
+      var lCols = lr.map(function (rc, i) {
+        var head = (i === lLast - 1) ? 'Losers final' : 'Losers R' + rc.round;
+        return bracketColumn(head, rc.matches, interactive, { leadOnly: true, first: i === 0 });
+      }).join('');
+      canvas += '<section class="region los"><div class="region-title"><span class="dot"></span>Losers bracket</div>' +
+        '<div class="rounds">' + lCols + '</div></section>';
+    }
+
+    // ----- Grand Final + Champion -----
+    if (groups.GF.length) {
+      var gf = groups.GF.slice().sort(function (x, y) {
+        return (x.matchLabel || '').localeCompare(y.matchLabel || '');
+      });
+      var cards = gf.map(function (m, i) {
+        return bracketCard(m, interactive, {}, {});
+      }).join('');
+      var cond = '<div class="cond">GF2 played only if the losers champ wins GF1 (bracket reset).</div>';
+      // Champion: from the last GF match if it is completed; else TBD.
+      var finalGF = gf[gf.length - 1];
+      var champId = (finalGF && finalGF.winnerEntrantId) || null;
+      var tourneyDone = state.t && state.t.state === 'completed';
+      var champName = (champId && (tourneyDone || (finalGF && finalGF.state === 'completed'))) ? esc(nm(champId)) : 'TBD';
+      canvas += '<section class="region gf"><div class="region-title"><span class="dot"></span>Grand final</div>' +
+        '<div class="rounds">' +
+        '<div class="round"><div class="round-head">Grand final</div>' + cards + cond + '</div>' +
+        '<div class="round"><div class="round-head">Champion</div>' +
+        '<div class="champ"><div class="trophy">🏆</div><div class="cap">Champion</div>' +
+        '<div class="who2">' + champName + '</div></div></div>' +
+        '</div></section>';
+    }
+
+    return '<div class="bracket"><div class="scroller"><div class="canvas">' + canvas + '</div></div></div>';
+  }
+
   function renderMatches(dir) {
     var h = '';
     if (dir) {
@@ -325,7 +477,7 @@
     if (dir) h += '<button data-action="complete" class="ghost" style="flex:0 0 auto">Complete</button>';
     h += '</div>';
     h += '<p class="note">Tap a player to record them as the winner.' + (canScore() ? '' : ' (Sign in to score.)') + '</p>';
-    h += matchesMarkup(canScore());
+    h += renderBracket(canScore());
     return h + '</div>';
   }
 
