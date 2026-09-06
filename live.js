@@ -24,6 +24,7 @@
   var GAME_LABELS = {};
   GAMES.forEach(function (g) { GAME_LABELS[g[0]] = g[1]; });
   function gameLabel(id) { return id ? (GAME_LABELS[id] || id) : ''; }
+  function venueClub(t) { var p = []; if (t.club) p.push(t.club); if (t.venue) p.push(t.venue); return p.join(' · '); }
   function gameOptions(sel) {
     return GAMES.map(function (g) {
       return '<option value="' + esc(g[0]) + '"' + (g[0] === sel ? ' selected' : '') + '>' + esc(g[1]) + '</option>';
@@ -76,15 +77,18 @@
     state.view = 'home';
     var html = '<div class="card"><h2>Tournaments</h2>';
     if (isDirector()) {
-      html += '<div class="row"><input id="tname" placeholder="New tournament name" />' +
-        '<select id="tgame">' + gameOptions('15ball_rotation') + '</select>' +
-        '<button class="pri" data-action="create-tournament" style="flex:0 0 auto">Create</button></div><div class="spacer"></div>';
+      html += '<input id="tname" placeholder="New tournament name" />' +
+        '<div class="spacer"></div>' +
+        '<div class="row"><select id="tgame">' + gameOptions('15ball_rotation') + '</select></div>' +
+        '<div class="row"><input id="tvenue" placeholder="Venue (optional)" /><input id="tclub" placeholder="Club (optional)" /></div>' +
+        '<div class="spacer"></div><button class="pri" data-action="create-tournament">Create</button><div class="spacer"></div>';
     }
     if (!state.tournaments.length) {
       html += '<p class="muted">No tournaments yet.</p>';
     } else {
       html += '<ul class="list">' + state.tournaments.map(function (t) {
-        return '<li><span class="vs"><b>' + esc(t.name) + '</b></span>' +
+        return '<li><span class="vs"><b>' + esc(t.name) + '</b>' +
+          (venueClub(t) ? '<div class="note">' + esc(venueClub(t)) + '</div>' : '') + '</span>' +
           '<span class="pill">' + esc(gameLabel(t.game)) + '</span>' +
           '<span class="pill">' + esc(t.state) + '</span>' +
           '<button data-action="open-t" data-id="' + esc(t.id) + '">Open</button></li>';
@@ -127,6 +131,7 @@
     var h = '<div class="card"><div class="row"><h2 style="flex:1">' + esc(t.name) + '</h2>' +
       '<span class="pill">' + esc(gameLabel(t.game)) + '</span>' +
       '<span class="pill">' + esc(t.state) + '</span></div>' +
+      (venueClub(t) ? '<div class="note">' + esc(venueClub(t)) + '</div>' : '') +
       (state.public ? '' : '<button class="ghost" data-action="home">‹ All tournaments</button>') + '</div>';
     if (state.public) h += '<div class="card note">Open scoring — anyone with this link can record match results.</div>';
 
@@ -254,7 +259,7 @@
     if (act === 'open-t') return guard(function () { return openTournament(id); });
     if (act === 'create-tournament') return guard(async function () {
       var name = val('tname'); if (!name) return toast('Enter a name');
-      var r = await api.createTournament({ name: name, game: val('tgame') || '15ball_rotation' }); await openTournament(r.tournament.id);
+      var r = await api.createTournament({ name: name, game: val('tgame') || '15ball_rotation', venue: val('tvenue'), club: val('tclub') }); await openTournament(r.tournament.id);
     });
     if (act === 'add-entrant') return guard(async function () {
       var name = val('en'); if (!name) return toast('Enter a name');

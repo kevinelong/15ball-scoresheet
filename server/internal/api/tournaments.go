@@ -12,20 +12,22 @@ import (
 )
 
 type Tournament struct {
-	ID         string `json:"id"`
-	Slug       string `json:"slug"`
-	Name       string `json:"name"`
-	Game       string `json:"game"`
-	State      string `json:"state"`
-	Visibility string `json:"visibility"`
-	ArchivedAt *int64 `json:"archivedAt"`
-	CreatedBy  string `json:"createdBy"`
-	CreatedAt  int64  `json:"createdAt"`
-	UpdatedAt  int64  `json:"updatedAt"`
-	Version    int64  `json:"version"`
+	ID         string  `json:"id"`
+	Slug       string  `json:"slug"`
+	Name       string  `json:"name"`
+	Game       string  `json:"game"`
+	Venue      *string `json:"venue"` // optional free-form venue label
+	Club       *string `json:"club"`  // optional free-form club label
+	State      string  `json:"state"`
+	Visibility string  `json:"visibility"`
+	ArchivedAt *int64  `json:"archivedAt"`
+	CreatedBy  string  `json:"createdBy"`
+	CreatedAt  int64   `json:"createdAt"`
+	UpdatedAt  int64   `json:"updatedAt"`
+	Version    int64   `json:"version"`
 }
 
-const tournamentCols = `id, slug, name, game, state, visibility, archived_at, created_by, created_at, updated_at, version`
+const tournamentCols = `id, slug, name, game, state, visibility, archived_at, created_by, created_at, updated_at, version, venue, club`
 
 // validGames is the canonical set of supported disciplines (id -> display name).
 var validGames = map[string]string{
@@ -40,7 +42,7 @@ var validGames = map[string]string{
 
 func scanTournament(row interface{ Scan(...any) error }) (*Tournament, error) {
 	var t Tournament
-	err := row.Scan(&t.ID, &t.Slug, &t.Name, &t.Game, &t.State, &t.Visibility, &t.ArchivedAt, &t.CreatedBy, &t.CreatedAt, &t.UpdatedAt, &t.Version)
+	err := row.Scan(&t.ID, &t.Slug, &t.Name, &t.Game, &t.State, &t.Visibility, &t.ArchivedAt, &t.CreatedBy, &t.CreatedAt, &t.UpdatedAt, &t.Version, &t.Venue, &t.Club)
 	return &t, err
 }
 
@@ -65,12 +67,18 @@ func (api *API) CreateTournament(w http.ResponseWriter, r *http.Request) {
 		Name       string `json:"name"`
 		Game       string `json:"game"`
 		Visibility string `json:"visibility"`
+		Venue      string `json:"venue"`
+		Club       string `json:"club"`
 	}
 	if !decodeBody(w, r, &body) {
 		return
 	}
 	if len(body.Name) == 0 || len(body.Name) > 200 {
 		writeErr(w, http.StatusBadRequest, "invalid_name", "name is required (1-200 chars)")
+		return
+	}
+	if len(body.Venue) > 200 || len(body.Club) > 200 {
+		writeErr(w, http.StatusBadRequest, "invalid_label", "venue/club must be 200 chars or fewer")
 		return
 	}
 	game := body.Game
@@ -101,9 +109,9 @@ func (api *API) CreateTournament(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		_, err = tx.ExecContext(r.Context(),
-			`INSERT INTO tournaments (id, slug, name, game, state, visibility, created_by, created_at, updated_at, version)
-			 VALUES (?,?,?,?,?,?,?,?,?,1)`,
-			id, slug, body.Name, game, "draft", vis, actor(r.Context()), now, now)
+			`INSERT INTO tournaments (id, slug, name, game, venue, club, state, visibility, created_by, created_at, updated_at, version)
+			 VALUES (?,?,?,?,?,?,?,?,?,?,?,1)`,
+			id, slug, body.Name, game, nullIfEmpty(body.Venue), nullIfEmpty(body.Club), "draft", vis, actor(r.Context()), now, now)
 		if err != nil {
 			_ = tx.Rollback()
 			if attempt < 4 { // slug collision → retry with suffix
