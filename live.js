@@ -9,7 +9,7 @@
   var api = FB.createClient();
   var DIRECTOR = ['tournament_director', 'club_admin', 'system_admin'];
 
-  var state = { view: 'boot', me: null, public: false, tournaments: [], t: null, roster: [], names: {}, matches: [], es: null, err: '' };
+  var state = { view: 'boot', me: null, public: false, tournaments: [], t: null, roster: [], names: {}, matches: [], es: null, err: '', preview: null, editEntrant: null };
 
   // Canonical disciplines (id -> display name); mirrors the backend validGames set.
   var GAMES = [
@@ -167,8 +167,48 @@
     return h;
   }
 
+  // Preview table for parsed bulk rows (Feature A).
+  function previewMarkup(pv) {
+    var rows = pv.list.map(function (p) {
+      return '<div class="prow">' +
+        '<b>' + esc(p.name) + '</b>' +
+        '<span class="note">' + (p.fargo != null ? 'Fargo ' + esc(p.fargo) : '') + '</span>' +
+        '<span class="note">' + (p.phone ? esc(Roster.e164(p.phone)) : '') + '</span>' +
+        '<span class="note">' + (p.email ? esc(p.email) : '') + '</span>' +
+        '<span class="note">' + (p.externalId ? 'Id ' + esc(p.externalId) : '') + '</span>' +
+        '</div>';
+    }).join('');
+    var n = pv.list.length;
+    var skipped = pv.rawLines - n; if (skipped < 0) skipped = 0;
+    return '<div class="preview">' +
+      '<div class="prow phead"><b>Name</b><span>Fargo</span><span>Phone</span><span>Email</span><span>Id</span></div>' +
+      rows + '</div>' +
+      '<p class="note">' + n + ' player' + (n === 1 ? '' : 's') + ' ready · ' + skipped + ' line' + (skipped === 1 ? '' : 's') + ' skipped</p>' +
+      '<div class="spacer"></div>' +
+      '<div class="row"><button class="pri" data-action="bulk-confirm">Confirm — add ' + n + ' &amp; check in</button>' +
+      '<button class="ghost" data-action="bulk-cancel">Back</button></div>';
+  }
+
+  // Inline edit form for one roster entrant (Feature B).
+  function editEntrantMarkup(e) {
+    return '<li class="editrow"><div class="vs" style="flex:1">' +
+      '<label>Name</label><input id="ed-name" value="' + esc(e.displayName) + '" />' +
+      '<div class="row"><div style="flex:1"><label>Fargo</label><input id="ed-fargo" type="number" inputmode="numeric" value="' + (e.fargo != null ? esc(e.fargo) : '') + '" /></div>' +
+      '<div style="flex:1"><label>Mobile</label><input id="ed-phone" type="tel" inputmode="tel" value="' + esc(e.phone || '') + '" /></div></div>' +
+      '<label>Email</label><input id="ed-email" type="email" inputmode="email" value="' + esc(e.email || '') + '" />' +
+      '<label><input id="ed-opt" type="checkbox"' + (e.notifyOptIn ? ' checked' : '') + ' />Send match-ready SMS (player consented)</label>' +
+      '<div class="spacer"></div>' +
+      '<div class="row"><button class="pri" data-action="entrant-save" data-id="' + esc(e.id) + '">Save</button>' +
+      '<button class="ghost" data-action="entrant-cancel">Cancel</button></div>' +
+      '</div></li>';
+  }
+
   function renderEntrants(dir) {
     var h = '<div class="card"><h2>Entrants</h2>';
+    if (dir && state.preview) {
+      h += previewMarkup(state.preview);
+      return h + '</div>';
+    }
     if (dir) {
       h += '<label>Name</label><input id="en" placeholder="Player name" />' +
         '<div class="row"><div><label>Mobile (optional)</label><input id="ephone" type="tel" inputmode="tel" placeholder="+1503…" /></div></div>' +
@@ -179,14 +219,17 @@
         '<div class="note">Commas, tabs (paste from a spreadsheet), or semicolons all work. Detects email, phone (7/10/11 digits), a 3-digit Fargo (seeds the bracket), and other numbers as an id. Blank lines, bullets/numbering, and a header row are skipped.</div>' +
         '<label><input id="ebulklf" type="checkbox" />Names are &ldquo;Last, First&rdquo;</label>' +
         '<label><input id="ebulkopt" type="checkbox" />These players consented to match-ready SMS</label>' +
-        '<div class="spacer"></div><button class="pri" data-action="add-bulk">Add all &amp; check in</button><div class="spacer"></div>';
+        '<div class="spacer"></div><button class="pri" data-action="bulk-preview">Preview</button><div class="spacer"></div>';
     }
     if (!state.roster.length) h += '<p class="muted">No entrants yet.</p>';
     else h += '<ul class="list">' + state.roster.map(function (e) {
+      if (dir && state.editEntrant === e.id) return editEntrantMarkup(e);
       return '<li><span class="vs"><b>' + esc(e.displayName) + '</b>' +
         (e.fargo != null ? ' <span class="note">Fargo ' + esc(e.fargo) + '</span>' : '') +
         (e.phone ? ' <span class="note">' + esc(e.phone) + (e.notifyOptIn ? ' ✓sms' : '') + '</span>' : '') +
-        '</span><span class="pill">' + esc(e.state) + '</span></li>';
+        '</span><span class="pill">' + esc(e.state) + '</span>' +
+        (dir ? '<button data-action="entrant-edit" data-id="' + esc(e.id) + '">Edit</button>' : '') +
+        '</li>';
     }).join('') + '</ul>';
     return h + '</div>';
   }
@@ -282,13 +325,24 @@
       await addEntrantChecked(body);
       await openTournament(state.t.id);
     });
-    if (act === 'add-bulk') return guard(async function () {
-      var list = Roster.parse(val('ebulk'), { lastFirst: checked('ebulklf') });
+    if (act === 'bulk-preview') return guard(async function () {
+      var raw = val('ebulk');
+      var list = Roster.parse(raw, { lastFirst: checked('ebulklf') });
       if (!list.length) return toast('Nothing to add');
-      var consent = checked('ebulkopt');
+      var rawLines = raw.split(/\r?\n/).filter(function (ln) { return ln.trim(); }).length;
+      state.preview = { list: list, consent: checked('ebulkopt'), rawLines: rawLines };
+      renderTournament();
+    });
+    if (act === 'bulk-cancel') return guard(async function () {
+      state.preview = null;
+      renderTournament();
+    });
+    if (act === 'bulk-confirm') return guard(async function () {
+      var pv = state.preview; if (!pv) return;
+      var consent = pv.consent;
       var added = 0, dupes = 0;
-      for (var i = 0; i < list.length; i++) {
-        var p = list[i];
+      for (var i = 0; i < pv.list.length; i++) {
+        var p = pv.list[i];
         var body = { displayName: p.name };
         if (p.phone) { body.phone = Roster.e164(p.phone); body.notifyOptIn = consent; }
         if (p.email) body.email = p.email;
@@ -298,6 +352,35 @@
         catch (e) { if (e.code === 'duplicate_display_name') dupes++; else throw e; }
       }
       toast('Added ' + added + (dupes ? ' · ' + dupes + ' duplicate' + (dupes > 1 ? 's' : '') + ' skipped' : ''));
+      state.preview = null;
+      await openTournament(state.t.id);
+    });
+    if (act === 'entrant-edit') return guard(async function () {
+      state.editEntrant = id;
+      renderTournament();
+    });
+    if (act === 'entrant-cancel') return guard(async function () {
+      state.editEntrant = null;
+      renderTournament();
+    });
+    if (act === 'entrant-save') return guard(async function () {
+      var name = val('ed-name'); if (!name) return toast('Enter a name');
+      var phone = val('ed-phone');
+      var fargoStr = val('ed-fargo');
+      var body = {
+        displayName: name,
+        phone: phone ? Roster.e164(phone) : '',
+        notifyOptIn: checked('ed-opt'),
+        email: val('ed-email'),
+        fargo: fargoStr ? parseInt(fargoStr, 10) : null
+      };
+      try {
+        await api.patchEntrant(state.t.id, id, body);
+      } catch (e) {
+        if (e.code === 'duplicate_display_name') return toast('That name is already taken');
+        throw e;
+      }
+      state.editEntrant = null;
       await openTournament(state.t.id);
     });
     if (act === 'open-reg') return guard(async function () {

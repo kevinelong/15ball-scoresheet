@@ -221,6 +221,9 @@ func (api *API) PatchEntrant(w http.ResponseWriter, r *http.Request) {
 		Reason      string  `json:"reason"`
 		Phone       *string `json:"phone"`
 		NotifyOptIn *bool   `json:"notifyOptIn"`
+		Email       *string `json:"email"`
+		Fargo       *int64  `json:"fargo"`
+		ExternalID  *string `json:"externalId"`
 	}
 	if !decodeBody(w, r, &body) {
 		return
@@ -260,6 +263,21 @@ func (api *API) PatchEntrant(w http.ResponseWriter, r *http.Request) {
 		sets = append(sets, "notify_opt_in=?")
 		args = append(args, v)
 		after["notifyOptIn"] = *body.NotifyOptIn
+	}
+	if body.Email != nil {
+		sets = append(sets, "email=?")
+		args = append(args, *body.Email)
+		after["email"] = *body.Email
+	}
+	if body.Fargo != nil {
+		sets = append(sets, "fargo=?")
+		args = append(args, *body.Fargo)
+		after["fargo"] = *body.Fargo
+	}
+	if body.ExternalID != nil {
+		sets = append(sets, "external_id=?")
+		args = append(args, *body.ExternalID)
+		after["externalId"] = *body.ExternalID
 	}
 	if len(sets) == 0 {
 		writeJSON(w, http.StatusOK, map[string]interface{}{"entrant": cur})
