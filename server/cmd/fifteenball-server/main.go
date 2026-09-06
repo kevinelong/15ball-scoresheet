@@ -184,34 +184,40 @@ func main() {
 func makeSMSResolver(cfg *config.Config) func() notify.Sender {
 	var mu sync.Mutex
 	var sender notify.Sender
+	var lastKey string
 	return func() notify.Sender {
 		mu.Lock()
 		defer mu.Unlock()
-		if sender != nil {
-			return sender
-		}
+		// The env file is the live source of truth (start_pre sources it at boot):
+		// prefer file values so a corrected/added cred hot-loads, falling back to the
+		// values captured at boot if the file can't be read.
 		sid, token, from, apiBase := cfg.TwilioAccountSID, cfg.TwilioAuthToken, cfg.TwilioFromNumber, cfg.TwilioAPIBase
-		if sid == "" || token == "" || from == "" {
-			if m, err := config.ParseEnvFile(cfg.EnvFilePath); err == nil {
-				if sid == "" {
-					sid = m["TWILIO_ACCOUNT_SID"]
-				}
-				if token == "" {
-					token = m["TWILIO_AUTH_TOKEN"]
-				}
-				if from == "" {
-					from = m["TWILIO_FROM_NUMBER"]
-				}
-				if apiBase == "" {
-					apiBase = m["TWILIO_API_BASE"]
-				}
+		if m, err := config.ParseEnvFile(cfg.EnvFilePath); err == nil {
+			if v := m["TWILIO_ACCOUNT_SID"]; v != "" {
+				sid = v
+			}
+			if v := m["TWILIO_AUTH_TOKEN"]; v != "" {
+				token = v
+			}
+			if v := m["TWILIO_FROM_NUMBER"]; v != "" {
+				from = v
+			}
+			if v := m["TWILIO_API_BASE"]; v != "" {
+				apiBase = v
 			}
 		}
 		if sid == "" || token == "" || from == "" {
 			return nil // not configured yet
 		}
+		// Rebuild the sender only when the creds actually change (so a corrected
+		// token is picked up without a restart, but we don't rebuild every tick).
+		key := sid + "\x00" + token + "\x00" + from + "\x00" + apiBase
+		if sender != nil && key == lastKey {
+			return sender
+		}
 		sender = notify.NewTwilio(sid, token, from, apiBase)
-		log.Printf("notify: Twilio SMS enabled (from %s)", from)
+		lastKey = key
+		log.Printf("notify: Twilio SMS sender (re)configured (from %s)", from)
 		return sender
 	}
 }
