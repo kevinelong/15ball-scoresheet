@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Bracket mockup — 8-player double elimination</title>
+<style>
+  :root{
+    --bg:#0f1216; --panel:#171b21; --panel2:#1e232b; --line:#2a313b;
+    --fg:#e8ecf1; --mut:#9aa6b2; --pri:#3b82f6; --pri2:#2563eb;
+    --ok:#16a34a; --warn:#d97706; --bad:#dc2626;
+    --chipW:#1d4ed8; --chipL:#b45309; --chipGF:#7c3aed; --gold:#e0b34a;
+    color-scheme: dark;
+
+    --card-w: 200px;      /* match card width */
+    --gap-x: 46px;        /* space for the connector column between rounds */
+    --pair-gap: 26px;     /* vertical gap between the two cards of a feeding pair */
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);
+    font:15px/1.45 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+    padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+  header.top{position:sticky;top:0;z-index:30;background:var(--panel);border-bottom:1px solid var(--line);
+    display:flex;align-items:center;gap:.6rem;padding:.7rem .9rem}
+  header.top h1{font-size:1rem;margin:0;font-weight:700;letter-spacing:.2px}
+  header.top .who{margin-left:auto;font-size:.78rem;color:var(--mut)}
+
+  /* ---- scroll canvas ---- */
+  .scroller{overflow-x:auto;overflow-y:hidden;padding:1rem 1rem 2rem;position:relative}
+  .scroller::-webkit-scrollbar{height:10px}
+  .scroller::-webkit-scrollbar-thumb{background:var(--line);border-radius:6px}
+  .canvas{display:inline-flex;flex-direction:column;gap:2.2rem;min-width:min-content}
+
+  /* ---- a bracket region (Winners / Losers) ---- */
+  .region{position:relative}
+  .region-title{display:inline-flex;align-items:center;gap:.5rem;font-size:.72rem;font-weight:700;
+    text-transform:uppercase;letter-spacing:.09em;color:var(--mut);margin:0 0 .55rem 2px}
+  .region-title .dot{width:.7rem;height:.7rem;border-radius:3px}
+  .region.win  .region-title .dot{background:var(--chipW)}
+  .region.los  .region-title .dot{background:var(--chipL)}
+  .region.gf   .region-title .dot{background:var(--chipGF)}
+
+  .rounds{display:flex;align-items:stretch}
+  .round{display:flex;flex-direction:column;justify-content:space-around;
+    width:var(--card-w);margin-right:var(--gap-x);flex:0 0 auto}
+  .round:last-child{margin-right:0}
+  .round-head{position:sticky;top:0;z-index:10;font-size:.66rem;font-weight:700;letter-spacing:.06em;
+    text-transform:uppercase;color:var(--mut);text-align:center;margin-bottom:.5rem;
+    padding:.15rem 0;background:linear-gradient(var(--bg),var(--bg) 70%,transparent)}
+
+  /* ---- match card ---- */
+  .match{position:relative;background:var(--panel);border:1px solid var(--line);border-radius:10px;
+    margin:calc(var(--pair-gap)/2) 0;box-shadow:0 1px 0 rgba(0,0,0,.3)}
+  .slot{display:flex;align-items:center;gap:.5rem;padding:.42rem .55rem}
+  .slot + .slot{border-top:1px solid var(--line)}
+  .seed{font-size:.64rem;font-weight:700;color:var(--mut);min-width:1.35rem;text-align:center;
+    border:1px solid var(--line);border-radius:5px;padding:.05rem .1rem;font-variant-numeric:tabular-nums}
+  .name{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:.86rem}
+  .score{font-variant-numeric:tabular-nums;font-weight:700;color:var(--mut);min-width:1.1rem;text-align:right}
+  .slot.win{background:rgba(22,163,74,.10)}
+  .slot.win .name{font-weight:700;color:var(--fg)}
+  .slot.win .score{color:#7ee2a6}
+  .slot.win::before{content:"";position:absolute;left:0;width:3px;top:0;height:50%;background:var(--ok);border-radius:3px 0 0 3px}
+  .match.bottomwin .slot.win::before{top:50%}
+  .slot.lose .name{color:var(--mut)}
+  .slot.tbd .name{color:var(--mut);font-style:italic}
+  .slot.bye .name{color:var(--mut)}
+  .origin{font-size:.6rem;color:var(--mut);border:1px dashed var(--line);border-radius:4px;padding:0 .25rem}
+
+  .mlabel{position:absolute;top:-.62rem;left:.5rem;font-size:.58rem;font-weight:700;letter-spacing:.04em;
+    color:var(--mut);background:var(--bg);padding:0 .3rem;border-radius:4px}
+
+  /* live match highlight */
+  .match.is-live{border-color:var(--pri);box-shadow:0 0 0 2px rgba(59,130,246,.35),0 0 18px rgba(59,130,246,.25)}
+  .match.is-live .mlabel{color:#bcd2ff}
+  .live-pill{position:absolute;top:-.62rem;right:.5rem;font-size:.55rem;font-weight:800;letter-spacing:.08em;
+    color:#fff;background:var(--pri);padding:.05rem .4rem;border-radius:999px;animation:pulse 1.6s ease-in-out infinite}
+  @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(59,130,246,.5)}50%{box-shadow:0 0 0 5px rgba(59,130,246,0)}}
+
+  /* ---- connectors ---- */
+  .round:not(:last-child) .match::after{content:"";position:absolute;right:calc(-1 * var(--gap-x));top:50%;
+    width:calc(var(--gap-x)/2);height:2px;background:var(--line)}
+  .round:not(:last-child) .match.pair-top::before{content:"";position:absolute;
+    right:calc(-1 * var(--gap-x)/2);top:50%;width:2px;background:var(--line);
+    height:calc(100% + var(--pair-gap));z-index:0}
+  .lead::before{content:"";position:absolute;left:calc(-1 * var(--gap-x)/2);top:50%;
+    width:calc(var(--gap-x)/2);height:2px;background:var(--line)}
+
+  /* ---- Grand Final region ---- */
+  .gf .rounds{align-items:center}
+  .champ{width:var(--card-w);display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:.3rem;background:var(--panel);border:1px solid var(--chipGF);border-radius:12px;padding:1rem .6rem;
+    box-shadow:0 0 22px rgba(124,58,237,.22)}
+  .champ .trophy{font-size:1.6rem}
+  .champ .who2{font-weight:800;font-size:1.05rem}
+  .champ .cap{font-size:.62rem;text-transform:uppercase;letter-spacing:.09em;color:var(--gold);font-weight:700}
+  .cond{font-size:.62rem;color:var(--mut);text-align:center;margin-top:.35rem}
+
+  /* right-edge scroll hint */
+  .scroller::after{content:"";position:sticky;right:0;top:0;float:right;width:26px;height:1px;
+    box-shadow:22px 0 26px 20px var(--bg)}
+
+  @media (max-width:640px){
+    :root{--card-w:158px;--gap-x:32px;--pair-gap:18px}
+    .name{font-size:.8rem}
+  }
+</style>
+</head>
+<body>
+  <header class="top">
+    <h1>Cue Club · Bracket</h1>
+    <div class="who">8-player · double elimination · mockup</div>
+  </header>
+
+  <div class="scroller">
+   <div class="canvas">
+
+    <!-- ================= WINNERS ================= -->
+    <section class="region win">
+      <div class="region-title"><span class="dot"></span>Winners bracket</div>
+      <div class="rounds">
+
+        <!-- W Round 1 : 4 matches -->
+        <div class="round">
+          <div class="round-head">Winners R1</div>
+          <div class="match pair-top"><span class="mlabel">W1M1</span>
+            <div class="slot win"><span class="seed">1</span><span class="name">Ann Reyes</span><span class="score">4</span></div>
+            <div class="slot lose"><span class="seed">8</span><span class="name">Ben Ortiz</span><span class="score">2</span></div>
+          </div>
+          <div class="match"><span class="mlabel">W1M2</span>
+            <div class="slot win"><span class="seed">4</span><span class="name">Cara Nils</span><span class="score">4</span></div>
+            <div class="slot lose"><span class="seed">5</span><span class="name">Dev Shah</span><span class="score">3</span></div>
+          </div>
+          <div class="match pair-top"><span class="mlabel">W1M3</span>
+            <div class="slot win"><span class="seed">3</span><span class="name">Eli Wong</span><span class="score">4</span></div>
+            <div class="slot lose"><span class="seed">6</span><span class="name">Fay Cole</span><span class="score">1</span></div>
+          </div>
+          <!-- BYE example: seed 2 auto-advances -->
+          <div class="match"><span class="mlabel">W1M4</span>
+            <div class="slot win"><span class="seed">2</span><span class="name">Gus Park</span><span class="score">—</span></div>
+            <div class="slot lose bye"><span class="seed">7</span><span class="name">— BYE —</span><span class="score"></span></div>
+          </div>
+        </div>
+
+        <!-- W Round 2 : 2 matches -->
+        <div class="round">
+          <div class="round-head">Winners R2</div>
+          <div class="match pair-top lead"><span class="mlabel">W2M1</span>
+            <div class="slot win"><span class="seed">1</span><span class="name">Ann Reyes</span><span class="score">4</span></div>
+            <div class="slot lose"><span class="seed">4</span><span class="name">Cara Nils</span><span class="score">2</span></div>
+          </div>
+          <div class="match lead"><span class="mlabel">W2M2</span>
+            <div class="slot tbd"><span class="seed">3</span><span class="name">Eli Wong</span><span class="score"></span></div>
+            <div class="slot tbd"><span class="seed">2</span><span class="name">Gus Park</span><span class="score"></span></div>
+          </div>
+        </div>
+
+        <!-- W Round 3 : Winners final -->
+        <div class="round">
+          <div class="round-head">Winners final</div>
+          <div class="match lead"><span class="mlabel">W3M1</span>
+            <div class="slot tbd"><span class="seed">1</span><span class="name">Ann Reyes</span><span class="score"></span></div>
+            <div class="slot tbd"><span class="seed">—</span><span class="name">TBD</span><span class="score"></span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= LOSERS ================= -->
+    <section class="region los">
+      <div class="region-title"><span class="dot"></span>Losers bracket</div>
+      <div class="rounds">
+
+        <!-- L1 : 2 matches (W1 losers, cross-paired) -->
+        <div class="round">
+          <div class="round-head">Losers R1</div>
+          <div class="match is-live pair-top"><span class="mlabel">L1M1</span><span class="live-pill">LIVE</span>
+            <div class="slot"><span class="seed">8</span><span class="name">Ben Ortiz</span><span class="score">3</span></div>
+            <div class="slot"><span class="seed">5</span><span class="name">Dev Shah</span><span class="score">3</span></div>
+          </div>
+          <div class="match"><span class="mlabel">L1M2</span>
+            <div class="slot win"><span class="seed">6</span><span class="name">Fay Cole</span><span class="score">4</span></div>
+            <div class="slot lose bye"><span class="seed">7</span><span class="name">— BYE —</span><span class="score"></span></div>
+          </div>
+        </div>
+
+        <!-- L2 : 2 matches (L1 winners + W2 losers drop in) -->
+        <div class="round">
+          <div class="round-head">Losers R2 · W2 drop-in</div>
+          <div class="match pair-top lead"><span class="mlabel">L2M1</span>
+            <div class="slot tbd"><span class="seed">—</span><span class="name">Winner L1M1</span><span class="score"></span></div>
+            <div class="slot"><span class="seed">4</span><span class="name">Cara Nils <span class="origin">‹ W2</span></span><span class="score"></span></div>
+          </div>
+          <div class="match lead"><span class="mlabel">L2M2</span>
+            <div class="slot win"><span class="seed">6</span><span class="name">Fay Cole</span><span class="score">4</span></div>
+            <div class="slot lose"><span class="seed">—</span><span class="name">L-W2 <span class="origin">‹ W2</span></span><span class="score">1</span></div>
+          </div>
+        </div>
+
+        <!-- L3 : 1 match (consolidate L2 winners) -->
+        <div class="round">
+          <div class="round-head">Losers R3</div>
+          <div class="match lead"><span class="mlabel">L3M1</span>
+            <div class="slot tbd"><span class="seed">—</span><span class="name">Winner L2M1</span><span class="score"></span></div>
+            <div class="slot"><span class="seed">6</span><span class="name">Fay Cole</span><span class="score"></span></div>
+          </div>
+        </div>
+
+        <!-- L4 : Losers final (L3 winner + W3 loser drop-in) -->
+        <div class="round">
+          <div class="round-head">Losers final · W3 drop-in</div>
+          <div class="match lead"><span class="mlabel">L4M1</span>
+            <div class="slot tbd"><span class="seed">—</span><span class="name">Winner L3M1</span><span class="score"></span></div>
+            <div class="slot tbd"><span class="seed">—</span><span class="name">Loser W3M1 <span class="origin">‹ W3</span></span><span class="score"></span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= GRAND FINAL ================= -->
+    <section class="region gf">
+      <div class="region-title"><span class="dot"></span>Grand final</div>
+      <div class="rounds">
+        <div class="round">
+          <div class="round-head">GF1</div>
+          <div class="match"><span class="mlabel">GF1</span>
+            <div class="slot tbd"><span class="seed">—</span><span class="name">Winners champ <span class="origin">‹ W3</span></span><span class="score"></span></div>
+            <div class="slot tbd"><span class="seed">—</span><span class="name">Losers champ <span class="origin">‹ L4</span></span><span class="score"></span></div>
+          </div>
+          <div class="match" style="margin-top:1.1rem"><span class="mlabel">GF2</span>
+            <div class="slot tbd"><span class="seed">—</span><span class="name">Winners champ</span><span class="score"></span></div>
+            <div class="slot tbd"><span class="seed">—</span><span class="name">Losers champ</span><span class="score"></span></div>
+          </div>
+          <div class="cond">GF2 played only if the losers champ wins GF1 (bracket reset).</div>
+        </div>
+
+        <div class="round">
+          <div class="round-head">Champion</div>
+          <div class="champ">
+            <div class="trophy">🏆</div>
+            <div class="cap">Champion</div>
+            <div class="who2">TBD</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+   </div>
+  </div>
+</body>
+</html>
