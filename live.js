@@ -278,7 +278,7 @@
     if (act === 'add-entrant') return guard(async function () {
       var name = val('en'); if (!name) return toast('Enter a name');
       var body = { displayName: name };
-      var ph = val('ephone'); if (ph) { body.phone = ph; body.notifyOptIn = checked('eopt'); }
+      var ph = val('ephone'); if (ph) { body.phone = Roster.e164(ph); body.notifyOptIn = checked('eopt'); }
       await addEntrantChecked(body);
       await openTournament(state.t.id);
     });
@@ -290,7 +290,7 @@
       for (var i = 0; i < list.length; i++) {
         var p = list[i];
         var body = { displayName: p.name };
-        if (p.phone) { body.phone = p.phone; body.notifyOptIn = consent; }
+        if (p.phone) { body.phone = Roster.e164(p.phone); body.notifyOptIn = consent; }
         if (p.email) body.email = p.email;
         if (p.fargo != null) body.fargo = p.fargo;
         if (p.externalId) body.externalId = p.externalId;

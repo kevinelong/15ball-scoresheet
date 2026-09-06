@@ -77,6 +77,17 @@
     return rec;
   }
 
+  // Normalize a US-style phone to E.164 (+1XXXXXXXXXX) so it's SMS-ready. Leaves
+  // already-international (+…) and un-normalizable (e.g. 7-digit) numbers as given.
+  function e164(s) {
+    if (!s) return s;
+    if (s.charAt(0) === '+') return s.replace(/[^\d+]/g, '');
+    var d = s.replace(/\D/g, '');
+    if (d.length === 10) return '+1' + d;
+    if (d.length === 11 && d.charAt(0) === '1') return '+' + d;
+    return s;
+  }
+
   function parse(text, opts) {
     var out = [], seenContent = false;
     String(text == null ? '' : text).split(/\r?\n/).forEach(function (line) {
@@ -89,5 +100,5 @@
     return out;
   }
 
-  return { parse: parse, parseLine: parseLine };
+  return { parse: parse, parseLine: parseLine, e164: e164 };
 });

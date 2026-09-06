@@ -70,5 +70,11 @@ eq(R.parse('1. Ann\n2) Bob\n- Cal\n• Dee').map(r => r.name), ['Ann', 'Bob', 'C
 // a real first-line name that is not a header word is kept
 eq(R.parse('Ray Charles\nAnn').map(r => r.name), ['Ray Charles', 'Ann'], 'non-header first line kept');
 
+// E.164 normalization
+eq(R.e164('503-369-9277'), '+15033699277', 'e164 10-digit');
+eq(R.e164('1 (503) 369-9277'), '+15033699277', 'e164 11-digit leading 1');
+eq(R.e164('+44 20 7946 0958'), '+442079460958', 'e164 keeps international');
+eq(R.e164('369-9277'), '369-9277', 'e164 leaves 7-digit as-is');
+
 console.log(pass + ' passed, ' + fail + ' failed');
 if (fail) process.exit(1);
