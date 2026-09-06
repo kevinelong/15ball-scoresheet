@@ -12,17 +12,17 @@ import (
 )
 
 type Tournament struct {
-	ID         string  `json:"id"`
-	Slug       string  `json:"slug"`
-	Name       string  `json:"name"`
-	Game       string  `json:"game"`
-	State      string  `json:"state"`
-	Visibility string  `json:"visibility"`
-	ArchivedAt *int64  `json:"archivedAt"`
-	CreatedBy  string  `json:"createdBy"`
-	CreatedAt  int64   `json:"createdAt"`
-	UpdatedAt  int64   `json:"updatedAt"`
-	Version    int64   `json:"version"`
+	ID         string `json:"id"`
+	Slug       string `json:"slug"`
+	Name       string `json:"name"`
+	Game       string `json:"game"`
+	State      string `json:"state"`
+	Visibility string `json:"visibility"`
+	ArchivedAt *int64 `json:"archivedAt"`
+	CreatedBy  string `json:"createdBy"`
+	CreatedAt  int64  `json:"createdAt"`
+	UpdatedAt  int64  `json:"updatedAt"`
+	Version    int64  `json:"version"`
 }
 
 const tournamentCols = `id, slug, name, game, state, visibility, archived_at, created_by, created_at, updated_at, version`
@@ -42,7 +42,7 @@ func tournamentTransitionSupported(from, to string) bool {
 		"registration_closed->registration_open",
 		"registration_closed->in_progress", // Slice D: generates the bracket
 		"in_progress->completed",           // guard: all matches terminal
-		"completed->in_progress":            // reopen (reason required)
+		"completed->in_progress":           // reopen (reason required)
 		return true
 	}
 	return false
@@ -259,9 +259,17 @@ func (api *API) PatchTournament(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "server_error", "")
 		return
 	}
-	// side effect: generate the round-1 bracket when starting the tournament.
+	// side effect: generate the bracket when starting. Format comes from the
+	// primary division (default double_elimination).
 	if body.State != nil && cur.State == "registration_closed" && *body.State == "in_progress" {
-		if _, err := api.generateBracket(r.Context(), tx, id); err != nil {
+		divID, format := api.primaryDivision(r.Context(), tx, id)
+		var gerr error
+		if format == "double_elimination" {
+			_, gerr = api.generateDoubleElim(r.Context(), tx, id, divID)
+		} else {
+			_, gerr = api.generateBracket(r.Context(), tx, id)
+		}
+		if gerr != nil {
 			writeErr(w, http.StatusInternalServerError, "server_error", "")
 			return
 		}

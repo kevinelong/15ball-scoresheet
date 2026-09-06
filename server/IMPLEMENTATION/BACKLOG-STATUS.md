@@ -67,3 +67,13 @@ Legend: [ ] todo · [~] in progress · [x] done+deployed.
       `notifications` outbox + Twilio sender (+ fake) + retry/backoff worker; enqueued
       on assign-to-table (idempotent per match+entrant), gated on `SMSConfigured()`.
       Deployed (migration 0009); dormant until `TWILIO_*` env set (see ops runbook).
+      Live: API-key auth + hot-load from env file (DECISIONS/020); delivery pending
+      Twilio toll-free verification.
+- [x] Slice L — double-elimination bracket, **now the default** (scope B). Feeder-graph
+      generator ported from FE `bracket.js` (winners/losers/grand-final + GF2 reset +
+      byes); migration 0010 adds `bracket`/`match_label`/feeds_* columns. Format from
+      the primary division (`double_elimination` default; `single_elimination` still
+      supported — 2-player fields fall back to a single decisive match). Advancement
+      routes W-losers to the losers bracket and eliminates only on losers/GF losses.
+      Tests: structure (4/8-player), full playthrough, GF2 reset, byes (3-player).
+      Deployed (migration 0010). Remaining scope-B: additional disciplines (game types).

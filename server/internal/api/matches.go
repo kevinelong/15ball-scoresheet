@@ -25,6 +25,8 @@ type Match struct {
 	State        string  `json:"state"`
 	Scorekeeper  *string `json:"assignedScorekeeperUserId"`
 	TableRef     *string `json:"tableRef"`
+	Bracket      *string `json:"bracket"`    // 'W'|'L'|'GF' (double-elim); null = single-elim
+	MatchLabel   *string `json:"matchLabel"` // e.g. 'W2M1','L1M2','GF1','GF2'
 	Version      int64   `json:"version"`
 	StartedAt    *int64  `json:"startedAt"`
 	CompletedAt  *int64  `json:"completedAt"`
@@ -32,12 +34,13 @@ type Match struct {
 	UpdatedAt    int64   `json:"updatedAt"`
 }
 
-const matchCols = `id, tournament_id, division_id, bracket_round, slot, entrant_a_id, entrant_b_id, state, assigned_scorekeeper_user_id, table_ref, version, started_at, completed_at, created_at, updated_at`
+const matchCols = `id, tournament_id, division_id, bracket_round, slot, entrant_a_id, entrant_b_id, state, assigned_scorekeeper_user_id, table_ref, version, started_at, completed_at, created_at, updated_at, bracket, match_label`
 
 func scanMatch(row interface{ Scan(...any) error }) (*Match, error) {
 	var m Match
 	err := row.Scan(&m.ID, &m.TournamentID, &m.DivisionID, &m.BracketRound, &m.Slot, &m.EntrantAID, &m.EntrantBID,
-		&m.State, &m.Scorekeeper, &m.TableRef, &m.Version, &m.StartedAt, &m.CompletedAt, &m.CreatedAt, &m.UpdatedAt)
+		&m.State, &m.Scorekeeper, &m.TableRef, &m.Version, &m.StartedAt, &m.CompletedAt, &m.CreatedAt, &m.UpdatedAt,
+		&m.Bracket, &m.MatchLabel)
 	return &m, err
 }
 

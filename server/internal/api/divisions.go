@@ -85,7 +85,7 @@ func (api *API) CreateDivision(w http.ResponseWriter, r *http.Request) {
 	}
 	format := body.Format
 	if format == "" {
-		format = "single_elimination"
+		format = "double_elimination" // default (Slice L); pass "single_elimination" to opt out
 	}
 	id := newID("div_")
 	now := time.Now().Unix()

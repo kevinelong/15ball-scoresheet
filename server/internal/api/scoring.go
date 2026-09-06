@@ -99,12 +99,19 @@ func (api *API) SubmitResult(w http.ResponseWriter, r *http.Request) {
 			`UPDATE matches SET state='completed', completed_at=?, updated_at=?, version=version+1 WHERE id=?`, now, now, mid); err != nil {
 			return http.StatusInternalServerError, errBody("server_error", "")
 		}
-		// mark the loser eliminated (system-driven)
-		_, _ = tx.ExecContext(r.Context(),
-			`UPDATE entrants SET state='eliminated', updated_at=? WHERE id=? AND state='checked_in'`, now, body.LoserEntrantID)
-		// advance the winner into the next round
-		if err := api.advanceBracket(r.Context(), tx, m, body.WinnerEntrantID); err != nil {
-			return http.StatusInternalServerError, errBody("server_error", "")
+		// Advance the winner. Double-elim (m.Bracket set) routes winners/losers
+		// through the feeder graph and eliminates only on losers-bracket/GF losses;
+		// single-elim eliminates every loser and advances by round/slot.
+		if m.Bracket != nil && *m.Bracket != "" {
+			if err := api.advanceDouble(r.Context(), tx, m, body.WinnerEntrantID, body.LoserEntrantID); err != nil {
+				return http.StatusInternalServerError, errBody("server_error", "")
+			}
+		} else {
+			_, _ = tx.ExecContext(r.Context(),
+				`UPDATE entrants SET state='eliminated', updated_at=? WHERE id=? AND state='checked_in'`, now, body.LoserEntrantID)
+			if err := api.advanceBracket(r.Context(), tx, m, body.WinnerEntrantID); err != nil {
+				return http.StatusInternalServerError, errBody("server_error", "")
+			}
 		}
 		_ = audit.Write(r.Context(), tx, audit.Entry{
 			EntityType: "match", EntityID: mid, Action: "result_submitted",
