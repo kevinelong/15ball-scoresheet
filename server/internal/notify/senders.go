@@ -31,8 +31,11 @@ type TwilioSender struct {
 	AuthUser   string // Basic-auth username: Account SID or API Key SID
 	AuthPass   string // Basic-auth password: Auth Token or API Key Secret
 	From       string
-	APIBase    string // e.g. https://api.twilio.com
-	HTTP       *http.Client
+	// MessagingServiceSID (MG…), when set, is sent instead of From — the A2P 10DLC
+	// path (Twilio picks the number from the service's pool / campaign).
+	MessagingServiceSID string
+	APIBase             string // e.g. https://api.twilio.com
+	HTTP                *http.Client
 }
 
 func newTwilioSender(accountSID, user, pass, from, apiBase string) *TwilioSender {
@@ -60,7 +63,11 @@ func NewTwilioAPIKey(accountSID, keySID, keySecret, from, apiBase string) *Twili
 func (s *TwilioSender) Send(ctx context.Context, to, body string) (string, error) {
 	form := url.Values{}
 	form.Set("To", to)
-	form.Set("From", s.From)
+	if s.MessagingServiceSID != "" {
+		form.Set("MessagingServiceSid", s.MessagingServiceSID)
+	} else {
+		form.Set("From", s.From)
+	}
 	form.Set("Body", body)
 	endpoint := fmt.Sprintf("%s/2010-04-01/Accounts/%s/Messages.json", s.APIBase, s.AccountSID)
 	req, err := http.NewRequestWithContext(ctx, "POST", endpoint, strings.NewReader(form.Encode()))
@@ -75,9 +82,9 @@ func (s *TwilioSender) Send(ctx context.Context, to, body string) (string, error
 	}
 	defer resp.Body.Close()
 	var out struct {
-		SID          string `json:"sid"`
-		Message      string `json:"message"`
-		Code         int    `json:"code"`
+		SID     string `json:"sid"`
+		Message string `json:"message"`
+		Code    int    `json:"code"`
 	}
 	_ = json.NewDecoder(resp.Body).Decode(&out)
 	switch {

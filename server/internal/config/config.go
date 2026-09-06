@@ -1,6 +1,7 @@
 // Package config loads server configuration from the environment. The only
-// secret source in production is /etc/fifteenball/fifteenball.env (root:root, 0600), loaded
-// by the OpenRC init before dropping privileges (reconciliation #12).
+// secret source in production is /etc/fifteenball/fifteenball.env (0640
+// root:fifteenball so the service can hot-read it; see DECISIONS/020), loaded by
+// the OpenRC init before dropping privileges (reconciliation #12).
 package config
 
 import (
@@ -45,7 +46,11 @@ type Config struct {
 	TwilioAPIKeySID    string
 	TwilioAPIKeySecret string
 	TwilioFromNumber   string
-	TwilioAPIBase      string // override for tests; defaults to the live API
+	// TwilioMessagingServiceSID (MG…) sends via a Messaging Service instead of a
+	// bare From number — the reliable path for A2P 10DLC. When set it takes
+	// precedence over the From number.
+	TwilioMessagingServiceSID string
+	TwilioAPIBase             string // override for tests; defaults to the live API
 
 	// EnvFilePath is the on-disk env file the service is booted from. The SMS
 	// worker re-reads it at runtime so Twilio creds added to the file take effect
@@ -53,10 +58,14 @@ type Config struct {
 	EnvFilePath string
 }
 
-// SMSConfigured reports whether Twilio SMS sending is enabled: Account SID + From
-// plus either an Auth Token or an API Key SID+Secret.
+// SMSConfigured reports whether Twilio SMS sending is enabled: Account SID, a
+// sender (From number or Messaging Service SID), and a credential (Auth Token or
+// API Key SID+Secret).
 func (c *Config) SMSConfigured() bool {
-	if c.TwilioAccountSID == "" || c.TwilioFromNumber == "" {
+	if c.TwilioAccountSID == "" {
+		return false
+	}
+	if c.TwilioFromNumber == "" && c.TwilioMessagingServiceSID == "" {
 		return false
 	}
 	return c.TwilioAuthToken != "" || (c.TwilioAPIKeySID != "" && c.TwilioAPIKeySecret != "")
@@ -93,33 +102,34 @@ func Load() *Config {
 	// Bootstrap admins default to the ALLOWED_EMAILS set for continuity if unset.
 	admins := parseList(getenv("BOOTSTRAP_ADMINS", getenv("ALLOWED_EMAILS", "")))
 	return &Config{
-		BootstrapAdmins:    admins,
-		ListenAddr:         getenv("LISTEN_ADDR", "127.0.0.1:8093"),
-		DatabasePath:       getenv("DATABASE_PATH", "/var/lib/fifteenball/data.db"),
-		BaseURL:            strings.TrimRight(getenv("BASE_URL", "https://codeonline.io/15ball"), "/"),
-		MagicLinkTTL:       time.Duration(atoi("MAGIC_LINK_TTL_MINUTES", 15)) * time.Minute,
-		SessionTTL:         time.Duration(atoi("SESSION_TTL_DAYS", 30)) * 24 * time.Hour,
-		AllowedEmails:      emails,
-		EmailTransport:     getenv("EMAIL_TRANSPORT", "smtp"),
-		SMTPHost:           getenv("SMTP_HOST", ""),
-		SMTPPort:           atoi("SMTP_PORT", 587),
-		SMTPUsername:       getenv("SMTP_USERNAME", ""),
-		SMTPPassword:       getenv("SMTP_PASSWORD", ""),
-		EmailFrom:          getenv("SMTP_FROM", getenv("EMAIL_FROM", "")),
-		PostmarkToken:      getenv("POSTMARK_TOKEN", ""),
-		ChallongeClientID:     getenv("CHALLONGE_CLIENT_ID", ""),
-		ChallongeClientSecret: getenv("CHALLONGE_CLIENT_SECRET", ""),
-		ChallongeTokenURL:     getenv("CHALLONGE_TOKEN_URL", "https://api.challonge.com/oauth/token"),
-		ChallongeAPIBase:      strings.TrimRight(getenv("CHALLONGE_API_BASE", "https://api.challonge.com/v2"), "/"),
-		ChallongeScope:        getenv("CHALLONGE_SCOPE", "me application:manage tournaments:read tournaments:write matches:read matches:write participants:read participants:write"),
-		ChallongeSubdomain:    getenv("CHALLONGE_SUBDOMAIN", ""),
-		TwilioAccountSID:   getenv("TWILIO_ACCOUNT_SID", ""),
-		TwilioAuthToken:    getenv("TWILIO_AUTH_TOKEN", ""),
-		TwilioAPIKeySID:    getenv("TWILIO_API_KEY_SID", ""),
-		TwilioAPIKeySecret: getenv("TWILIO_API_KEY_SECRET", ""),
-		TwilioFromNumber:   getenv("TWILIO_FROM_NUMBER", ""),
-		TwilioAPIBase:      strings.TrimRight(getenv("TWILIO_API_BASE", "https://api.twilio.com"), "/"),
-		EnvFilePath:        getenv("FIFTEENBALL_ENV_FILE", "/etc/fifteenball/fifteenball.env"),
+		BootstrapAdmins:           admins,
+		ListenAddr:                getenv("LISTEN_ADDR", "127.0.0.1:8093"),
+		DatabasePath:              getenv("DATABASE_PATH", "/var/lib/fifteenball/data.db"),
+		BaseURL:                   strings.TrimRight(getenv("BASE_URL", "https://codeonline.io/15ball"), "/"),
+		MagicLinkTTL:              time.Duration(atoi("MAGIC_LINK_TTL_MINUTES", 15)) * time.Minute,
+		SessionTTL:                time.Duration(atoi("SESSION_TTL_DAYS", 30)) * 24 * time.Hour,
+		AllowedEmails:             emails,
+		EmailTransport:            getenv("EMAIL_TRANSPORT", "smtp"),
+		SMTPHost:                  getenv("SMTP_HOST", ""),
+		SMTPPort:                  atoi("SMTP_PORT", 587),
+		SMTPUsername:              getenv("SMTP_USERNAME", ""),
+		SMTPPassword:              getenv("SMTP_PASSWORD", ""),
+		EmailFrom:                 getenv("SMTP_FROM", getenv("EMAIL_FROM", "")),
+		PostmarkToken:             getenv("POSTMARK_TOKEN", ""),
+		ChallongeClientID:         getenv("CHALLONGE_CLIENT_ID", ""),
+		ChallongeClientSecret:     getenv("CHALLONGE_CLIENT_SECRET", ""),
+		ChallongeTokenURL:         getenv("CHALLONGE_TOKEN_URL", "https://api.challonge.com/oauth/token"),
+		ChallongeAPIBase:          strings.TrimRight(getenv("CHALLONGE_API_BASE", "https://api.challonge.com/v2"), "/"),
+		ChallongeScope:            getenv("CHALLONGE_SCOPE", "me application:manage tournaments:read tournaments:write matches:read matches:write participants:read participants:write"),
+		ChallongeSubdomain:        getenv("CHALLONGE_SUBDOMAIN", ""),
+		TwilioAccountSID:          getenv("TWILIO_ACCOUNT_SID", ""),
+		TwilioAuthToken:           getenv("TWILIO_AUTH_TOKEN", ""),
+		TwilioAPIKeySID:           getenv("TWILIO_API_KEY_SID", ""),
+		TwilioAPIKeySecret:        getenv("TWILIO_API_KEY_SECRET", ""),
+		TwilioFromNumber:          getenv("TWILIO_FROM_NUMBER", ""),
+		TwilioMessagingServiceSID: getenv("TWILIO_MESSAGING_SERVICE_SID", ""),
+		TwilioAPIBase:             strings.TrimRight(getenv("TWILIO_API_BASE", "https://api.twilio.com"), "/"),
+		EnvFilePath:               getenv("FIFTEENBALL_ENV_FILE", "/etc/fifteenball/fifteenball.env"),
 	}
 }
 

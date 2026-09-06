@@ -193,7 +193,7 @@ func makeSMSResolver(cfg *config.Config) func() notify.Sender {
 		// values captured at boot if the file can't be read.
 		sid, token := cfg.TwilioAccountSID, cfg.TwilioAuthToken
 		keySID, keySecret := cfg.TwilioAPIKeySID, cfg.TwilioAPIKeySecret
-		from, apiBase := cfg.TwilioFromNumber, cfg.TwilioAPIBase
+		from, msgSvc, apiBase := cfg.TwilioFromNumber, cfg.TwilioMessagingServiceSID, cfg.TwilioAPIBase
 		if m, err := config.ParseEnvFile(cfg.EnvFilePath); err == nil {
 			if v := m["TWILIO_ACCOUNT_SID"]; v != "" {
 				sid = v
@@ -210,35 +210,43 @@ func makeSMSResolver(cfg *config.Config) func() notify.Sender {
 			if v := m["TWILIO_FROM_NUMBER"]; v != "" {
 				from = v
 			}
+			if v := m["TWILIO_MESSAGING_SERVICE_SID"]; v != "" {
+				msgSvc = v
+			}
 			if v := m["TWILIO_API_BASE"]; v != "" {
 				apiBase = v
 			}
 		}
-		if sid == "" || from == "" {
+		if sid == "" || (from == "" && msgSvc == "") {
 			return nil // not configured yet
 		}
 		// Prefer API-key auth (revocable) when a key SID+secret is present; else the
 		// Account Auth Token.
-		var newSender notify.Sender
+		var ts *notify.TwilioSender
 		var authKind, key string
 		switch {
 		case keySID != "" && keySecret != "":
-			newSender = notify.NewTwilioAPIKey(sid, keySID, keySecret, from, apiBase)
-			authKind, key = "api_key", sid+"\x00K\x00"+keySID+"\x00"+keySecret+"\x00"+from+"\x00"+apiBase
+			ts = notify.NewTwilioAPIKey(sid, keySID, keySecret, from, apiBase)
+			authKind, key = "api_key", sid+"\x00K\x00"+keySID+"\x00"+keySecret+"\x00"+from+"\x00"+msgSvc+"\x00"+apiBase
 		case token != "":
-			newSender = notify.NewTwilio(sid, token, from, apiBase)
-			authKind, key = "auth_token", sid+"\x00T\x00"+token+"\x00"+from+"\x00"+apiBase
+			ts = notify.NewTwilio(sid, token, from, apiBase)
+			authKind, key = "auth_token", sid+"\x00T\x00"+token+"\x00"+from+"\x00"+msgSvc+"\x00"+apiBase
 		default:
 			return nil // no usable credential yet
 		}
+		ts.MessagingServiceSID = msgSvc
 		// Rebuild only when creds actually change (picks up corrections without a
 		// restart; avoids rebuilding every tick).
 		if sender != nil && key == lastKey {
 			return sender
 		}
-		sender = newSender
+		sender = ts
 		lastKey = key
-		log.Printf("notify: Twilio SMS sender (re)configured (from %s, auth=%s)", from, authKind)
+		route := "from=" + from
+		if msgSvc != "" {
+			route = "messaging_service=" + msgSvc
+		}
+		log.Printf("notify: Twilio SMS sender (re)configured (%s, auth=%s)", route, authKind)
 		return sender
 	}
 }

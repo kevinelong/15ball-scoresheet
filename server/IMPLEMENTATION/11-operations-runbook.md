@@ -35,6 +35,18 @@ API-key auth (SID+secret) is preferred when present; the request URL is always
 scoped to the Account SID. Note: the Auth Token is 32 hex chars; an API Key SID
 starts with `SK` — don't put the `SK…` value in `TWILIO_AUTH_TOKEN`.
 
+**Sender: From number OR Messaging Service (A2P 10DLC).** Set one of:
+
+```
+TWILIO_FROM_NUMBER=+1XXXXXXXXXX              # bare number (toll-free / basic)
+TWILIO_MESSAGING_SERVICE_SID=MGxxxxxxxxxxxx  # preferred for A2P 10DLC campaigns
+```
+
+If `TWILIO_MESSAGING_SERVICE_SID` is set it takes precedence (Twilio picks the
+number from the service pool / registered campaign). All Twilio values hot-load
+from the env file — no restart. The startup/reconfigure log shows the active
+route, e.g. `sender (re)configured (messaging_service=MG…, auth=api_key)`.
+
 The SMS worker is **always running** and resolves creds lazily: it reads the
 process env, then re-reads the env file. So you can add `TWILIO_*` to the file and
 SMS activates **without a restart** — the log prints `notify: Twilio SMS enabled
