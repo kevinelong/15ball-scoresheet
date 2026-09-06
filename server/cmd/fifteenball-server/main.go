@@ -94,28 +94,39 @@ func main() {
 	dapi := api.New(st.DB, a)
 	sess := r.With(a.RequireSession)
 	dir := r.With(a.RequireCSRF, a.RequireSession, a.RequireRoles(auth.DirectorOrAbove...))
+	// Open match editing (OPEN_MATCH_EDITING): the match board reads + score actions
+	// are reachable without a session so anyone with the link can record results.
+	// Setup (create/patch tournament, entrants) stays director-gated.
+	dapi.OpenMatchEditing = cfg.OpenMatchEditing
+	matchRead := sess                      // GET tournament/matches/entrants
+	matchAssign := dir                     // assign/reopen (director+ normally)
+	matchScore := sess.With(a.RequireCSRF) // start/result (any session normally)
+	if cfg.OpenMatchEditing {
+		open := r.With(a.RequireCSRF)
+		matchRead, matchAssign, matchScore = r, open, open
+	}
 	// tournaments + divisions (Slice B)
 	sess.Get("/api/v1/tournaments", dapi.ListTournaments)
 	dir.Post("/api/v1/tournaments", dapi.CreateTournament)
-	sess.Get("/api/v1/tournaments/{id}", dapi.GetTournament)
+	matchRead.Get("/api/v1/tournaments/{id}", dapi.GetTournament)
 	dir.Patch("/api/v1/tournaments/{id}", dapi.PatchTournament)
 	dir.Post("/api/v1/tournaments/{id}/archive", dapi.ArchiveTournament)
 	sess.Get("/api/v1/tournaments/{id}/divisions", dapi.ListDivisions)
 	dir.Post("/api/v1/tournaments/{id}/divisions", dapi.CreateDivision)
 	// entrants + check-in (Slice C)
-	sess.Get("/api/v1/tournaments/{id}/entrants", dapi.ListEntrants)
+	matchRead.Get("/api/v1/tournaments/{id}/entrants", dapi.ListEntrants)
 	dir.Post("/api/v1/tournaments/{id}/entrants", dapi.CreateEntrant)
 	dir.Patch("/api/v1/tournaments/{id}/entrants/{entrantId}", dapi.PatchEntrant)
 	dir.Post("/api/v1/tournaments/{id}/entrants/{entrantId}/check-in", dapi.CheckInEntrant)
 	dir.Post("/api/v1/tournaments/{id}/entrants/{entrantId}/archive", dapi.ArchiveEntrant)
 	// matches (Slice D)
-	sess.Get("/api/v1/tournaments/{id}/matches", dapi.ListMatches)
-	dir.Post("/api/v1/tournaments/{id}/matches/{matchId}/assign", dapi.AssignMatch)
-	sess.With(a.RequireCSRF).Post("/api/v1/tournaments/{id}/matches/{matchId}/start", dapi.StartMatch)
+	matchRead.Get("/api/v1/tournaments/{id}/matches", dapi.ListMatches)
+	matchAssign.Post("/api/v1/tournaments/{id}/matches/{matchId}/assign", dapi.AssignMatch)
+	matchScore.Post("/api/v1/tournaments/{id}/matches/{matchId}/start", dapi.StartMatch)
 	sess.Get("/api/v1/tournaments/{id}/matches/{matchId}/history", dapi.MatchHistory)
 	// scoring (Slice E)
-	sess.With(a.RequireCSRF).Post("/api/v1/tournaments/{id}/matches/{matchId}/result", dapi.SubmitResult)
-	dir.Post("/api/v1/tournaments/{id}/matches/{matchId}/reopen", dapi.ReopenMatch)
+	matchScore.Post("/api/v1/tournaments/{id}/matches/{matchId}/result", dapi.SubmitResult)
+	matchAssign.Post("/api/v1/tournaments/{id}/matches/{matchId}/reopen", dapi.ReopenMatch)
 	// snapshot + public/overlay (Slice F, read side) + audit (Slice H1)
 	dirRead := r.With(a.RequireSession, a.RequireRoles(auth.DirectorOrAbove...))
 	sess.Get("/api/v1/tournaments/{id}/snapshot", dapi.Snapshot)

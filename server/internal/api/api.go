@@ -25,6 +25,10 @@ type API struct {
 	// Twilio creds added to the env file after boot take effect without a restart.
 	// Nil means SMS is off.
 	SMSReady func() bool
+	// OpenMatchEditing mirrors config.OpenMatchEditing: when true, match scoring is
+	// open (routes are un-gated in main; canScoreMatch and the scorekeeper check
+	// are bypassed here). Setup endpoints remain director-gated.
+	OpenMatchEditing bool
 }
 
 func New(db *sql.DB, a *auth.Auth) *API { return &API{DB: db, Auth: a} }

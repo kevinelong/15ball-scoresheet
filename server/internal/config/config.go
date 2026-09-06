@@ -56,6 +56,12 @@ type Config struct {
 	// worker re-reads it at runtime so Twilio creds added to the file take effect
 	// without a restart (requires the file be readable by the service user).
 	EnvFilePath string
+
+	// OpenMatchEditing (OPEN_MATCH_EDITING): when true, the match board reads and
+	// the score actions (assign/start/result/reopen) are reachable WITHOUT a
+	// session — anyone with the tournament link can record results. Tournament and
+	// entrant setup stays director-gated. Trusted-room convenience; off by default.
+	OpenMatchEditing bool
 }
 
 // SMSConfigured reports whether Twilio SMS sending is enabled: Account SID, a
@@ -76,6 +82,14 @@ func getenv(key, def string) string {
 		return v
 	}
 	return def
+}
+
+func truthy(v string) bool {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "1", "true", "yes", "on":
+		return true
+	}
+	return false
 }
 
 func atoi(key string, def int) int {
@@ -130,6 +144,7 @@ func Load() *Config {
 		TwilioMessagingServiceSID: getenv("TWILIO_MESSAGING_SERVICE_SID", ""),
 		TwilioAPIBase:             strings.TrimRight(getenv("TWILIO_API_BASE", "https://api.twilio.com"), "/"),
 		EnvFilePath:               getenv("FIFTEENBALL_ENV_FILE", "/etc/fifteenball/fifteenball.env"),
+		OpenMatchEditing:          truthy(getenv("OPEN_MATCH_EDITING", "")),
 	}
 }
 

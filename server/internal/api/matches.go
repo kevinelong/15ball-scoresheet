@@ -139,11 +139,18 @@ func (api *API) AssignMatch(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusConflict, "invalid_transition", "match cannot be assigned from state "+m.State)
 		return
 	}
-	// verify the scorekeeper user holds the scorekeeper role (or director+)
-	ok, _ := api.Auth.HasAnyRole(r.Context(), body.ScorekeeperUserID, append([]string{auth.RoleScorekeeper}, auth.DirectorOrAbove...)...)
-	if body.ScorekeeperUserID == "" || !ok {
-		writeErr(w, http.StatusBadRequest, "invalid_scorekeeper", "scorekeeperUserId must be a user with the scorekeeper role")
-		return
+	// verify the scorekeeper user holds the scorekeeper role (or director+).
+	// Skipped in open match editing, where a scorekeeper user is optional.
+	if !api.OpenMatchEditing {
+		ok, _ := api.Auth.HasAnyRole(r.Context(), body.ScorekeeperUserID, append([]string{auth.RoleScorekeeper}, auth.DirectorOrAbove...)...)
+		if body.ScorekeeperUserID == "" || !ok {
+			writeErr(w, http.StatusBadRequest, "invalid_scorekeeper", "scorekeeperUserId must be a user with the scorekeeper role")
+			return
+		}
+	}
+	var scorekeeper interface{} // NULL when unset (FK-safe in open mode)
+	if body.ScorekeeperUserID != "" {
+		scorekeeper = body.ScorekeeperUserID
 	}
 	now := time.Now().Unix()
 	tx, _ := api.DB.BeginTx(r.Context(), nil)
@@ -151,7 +158,7 @@ func (api *API) AssignMatch(w http.ResponseWriter, r *http.Request) {
 	// tableRef is optional; COALESCE keeps any existing assignment when omitted.
 	if _, err := tx.ExecContext(r.Context(),
 		`UPDATE matches SET state='assigned', assigned_scorekeeper_user_id=?, table_ref=COALESCE(?, table_ref), updated_at=?, version=version+1 WHERE id=?`,
-		body.ScorekeeperUserID, body.TableRef, now, mid); err != nil {
+		scorekeeper, body.TableRef, now, mid); err != nil {
 		writeErr(w, http.StatusInternalServerError, "server_error", "")
 		return
 	}
@@ -270,8 +277,12 @@ func (api *API) StartMatch(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]interface{}{"match": nm})
 }
 
-// canScoreMatch: the assigned scorekeeper, or any director+.
+// canScoreMatch: the assigned scorekeeper, or any director+ (or anyone, when
+// open match editing is enabled).
 func (api *API) canScoreMatch(ctx context.Context, m *Match) bool {
+	if api.OpenMatchEditing {
+		return true
+	}
 	uid := actor(ctx)
 	if m.Scorekeeper != nil && *m.Scorekeeper == uid {
 		return true

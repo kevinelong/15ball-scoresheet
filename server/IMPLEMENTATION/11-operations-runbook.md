@@ -61,6 +61,18 @@ so the service user can read it (see DECISIONS/020). Behaviour:
   (bad number, unsubscribed, insufficient funds) dead-letters. Alert on
   `SELECT COUNT(*) FROM notifications WHERE status='dead_lettered'` > 0.
 
+## Open match editing (OPEN_MATCH_EDITING)
+
+Set `OPEN_MATCH_EDITING=1` in the env file to let **anyone with a tournament link
+score matches without signing in** — trusted-room convenience. When on, the match
+board reads (`GET tournament/matches/entrants`) and score actions
+(`assign/start/result/reopen`) are un-gated; tournament/entrant **setup stays
+director-gated**. Read at boot (routing), so toggling needs a restart. The live
+console exposes a shareable board at `live.html?t=<tournamentId>` (and a "Copy
+scoring link" button for directors). Tradeoff: no actor on those results
+(`match_results.submitted_by` is NULL; audit shows no actor), and anyone with the
+link can change any match. Turn off by removing the line + restart.
+
 ## Backups and recovery
 
 - Keep scheduled SQLite `.backup` snapshots (per existing backend ops policy).

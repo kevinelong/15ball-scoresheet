@@ -89,10 +89,14 @@ func (api *API) SubmitResult(w http.ResponseWriter, r *http.Request) {
 		if payload == "" {
 			payload = "{}"
 		}
+		var submitter interface{} // NULL when there is no session (open match editing)
+		if uid := actor(r.Context()); uid != "" {
+			submitter = uid
+		}
 		if _, err := tx.ExecContext(r.Context(),
 			`INSERT INTO match_results (id, match_id, result_version, winner_entrant_id, loser_entrant_id, payload_json, submitted_by, submitted_at)
 			 VALUES (?,?,?,?,?,?,?,?)`,
-			newID("res_"), mid, rv, body.WinnerEntrantID, body.LoserEntrantID, payload, actor(r.Context()), now); err != nil {
+			newID("res_"), mid, rv, body.WinnerEntrantID, body.LoserEntrantID, payload, submitter, now); err != nil {
 			return http.StatusInternalServerError, errBody("server_error", "")
 		}
 		if _, err := tx.ExecContext(r.Context(),

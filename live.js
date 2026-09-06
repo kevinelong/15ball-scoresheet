@@ -9,7 +9,7 @@
   var api = FB.createClient();
   var DIRECTOR = ['tournament_director', 'club_admin', 'system_admin'];
 
-  var state = { view: 'boot', me: null, tournaments: [], t: null, roster: [], names: {}, matches: [], es: null, err: '' };
+  var state = { view: 'boot', me: null, public: false, tournaments: [], t: null, roster: [], names: {}, matches: [], es: null, err: '' };
 
   // Canonical disciplines (id -> display name); mirrors the backend validGames set.
   var GAMES = [
@@ -37,6 +37,7 @@
   // ---- helpers ----
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function isDirector() { return !!(state.me && state.me.roles && state.me.roles.some(function (r) { return DIRECTOR.indexOf(r) >= 0; })); }
+  function canScore() { return state.public || isDirector(); } // open link OR signed-in director
   var toastT;
   function toast(msg) { toastEl.textContent = msg; toastEl.hidden = false; clearTimeout(toastT); toastT = setTimeout(function () { toastEl.hidden = true; }, 2600); }
   function val(id) { var e = document.getElementById(id); return e ? e.value.trim() : ''; }
@@ -112,8 +113,13 @@
     var h = '<div class="card"><div class="row"><h2 style="flex:1">' + esc(t.name) + '</h2>' +
       '<span class="pill">' + esc(gameLabel(t.game)) + '</span>' +
       '<span class="pill">' + esc(t.state) + '</span></div>' +
-      '<button class="ghost" data-action="home">‹ All tournaments</button></div>';
+      (state.public ? '' : '<button class="ghost" data-action="home">‹ All tournaments</button>') + '</div>';
+    if (state.public) h += '<div class="card note">Open scoring — anyone with this link can record match results.</div>';
 
+    if (state.public && t.state !== 'in_progress' && t.state !== 'completed') {
+      appEl.innerHTML = h + '<div class="card"><p class="muted">This tournament hasn\'t started yet.</p></div>';
+      return;
+    }
     if (t.state === 'draft' || t.state === 'registration_open' || t.state === 'registration_closed') {
       h += renderEntrants(dir);
       if (dir) h += renderStageControls(t.state);
@@ -193,10 +199,11 @@
 
   function renderMatches(dir) {
     var h = '<div class="card"><div class="row"><h2 style="flex:1">Matches</h2>';
+    if (dir) h += '<button data-action="copy-link" class="ghost" style="flex:0 0 auto">Copy scoring link</button>';
     if (dir) h += '<button data-action="complete" class="ghost" style="flex:0 0 auto">Complete</button>';
     h += '</div>';
-    h += '<p class="note">Tap a player to record them as the winner.' + (dir ? '' : ' (Director/scorekeeper only.)') + '</p>';
-    h += matchesMarkup(dir);
+    h += '<p class="note">Tap a player to record them as the winner.' + (canScore() ? '' : ' (Sign in to score.)') + '</p>';
+    h += matchesMarkup(canScore());
     return h + '</div>';
   }
 
@@ -254,12 +261,19 @@
     if (act === 'complete') return guard(async function () {
       await api.patchTournament(state.t.id, { state: 'completed' }); await openTournament(state.t.id);
     });
+    if (act === 'copy-link') return guard(async function () {
+      var link = location.origin + location.pathname + '?t=' + state.t.id;
+      try { await navigator.clipboard.writeText(link); toast('Scoring link copied'); }
+      catch (e) { toast(link); }
+    });
     if (act === 'win') return guard(async function () {
       var mid = b.getAttribute('data-m'), w = b.getAttribute('data-w'), l = b.getAttribute('data-l');
-      // director scores directly: assign self → start → submit result. Assign/start
-      // are best-effort so an already-assigned or in-progress match still scores.
+      // assign → start → submit result. Assign/start are best-effort so an already-
+      // assigned/in-progress match still scores. Scorekeeper is set only when signed in
+      // (open scoring links have no user; the backend allows an empty scorekeeper).
+      var opts = state.me ? { scorekeeperUserId: state.me.userId } : {};
       var ignore409 = function (e) { if (e.status !== 409) throw e; };
-      try { await api.assignMatch(state.t.id, mid, { scorekeeperUserId: state.me.userId }); } catch (e) { ignore409(e); }
+      try { await api.assignMatch(state.t.id, mid, opts); } catch (e) { ignore409(e); }
       try { await api.startMatch(state.t.id, mid); } catch (e) { ignore409(e); }
       await api.submitResult(state.t.id, mid, { winnerEntrantId: w, loserEntrantId: l });
       toast('Recorded');
@@ -267,5 +281,11 @@
     });
   });
 
-  boot();
+  // A ?t=<id> link opens a public scoring board (no sign-in); otherwise normal boot.
+  function init() {
+    var pt = new URLSearchParams(location.search).get('t');
+    if (pt) { state.public = true; whoEl.textContent = 'Open scoring'; return guard(function () { return openTournament(pt); }); }
+    boot();
+  }
+  init();
 })();
