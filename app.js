@@ -445,6 +445,20 @@
     }
     $$(".ball", container).forEach((el) => {
       el.addEventListener("click", () => {
+        // A ball is pocketed once per rack — if the other player already marked
+        // this number made in this rack, block the double-count and flash theirs.
+        if (!el.classList.contains("on")) {
+          const other = el.dataset.side === "A" ? "B" : "A";
+          const rackEl = el.closest(".rack");
+          const otherBall = rackEl && rackEl.querySelector(
+            `.ball[data-side="${other}"][data-num="${el.dataset.num}"]`);
+          if (otherBall && otherBall.classList.contains("on")) {
+            otherBall.style.outline = "2px solid var(--bad, #dc2626)";
+            otherBall.style.outlineOffset = "1px";
+            setTimeout(() => { otherBall.style.outline = ""; otherBall.style.outlineOffset = ""; }, 600);
+            return; // already made by the other player
+          }
+        }
         el.classList.toggle("on");
         el.setAttribute("aria-pressed", el.classList.contains("on"));
         recomputeSheet();
