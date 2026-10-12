@@ -1,0 +1,4 @@
+# Keep generated PDFs byte-exact. With core.autocrlf=true (the default on this Windows
+# checkout), a text-classified PDF gets LF -> CRLF on checkout and its xref offsets
+# break, so the file opens as garbage after a fresh clone.
+*.pdf binary
