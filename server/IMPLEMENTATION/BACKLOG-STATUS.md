@@ -89,4 +89,29 @@ Legend: [ ] todo · [~] in progress · [x] done+deployed.
       `single` (single final) and `double`, exposed as a third option in the create
       form. Tests: `bracket_single_test.go` (structure, n=3/5/7 no-drop playthrough),
       `bracket.test.js` (spec, scale pinning, recordWinner refusals).
-      Implemented + tested locally; **not deployed** from this branch.
+      Implemented + tested locally; **not deployed** — applies on the next `git pull` +
+      service restart (Kevin's).
+- [x] Slice N — review flag for a correction that reaches a played match (option 3 of the
+      reopen collision). A corrected upstream result still lands in the downstream slot
+      (otherwise the corrected pairing could not be replayed), but the played result is
+      never rewritten: the match keeps its state, its result rows and its winner, and gets
+      `needs_review` + a `match: review_required` audit row + a `match.review_required`
+      event in the same transaction. All propagation shares one guarded write path
+      (`advanceSlot`), so the winner advance, the losers-bracket drop, the single-elim
+      advance and `resolveByes` behave the same. Cleared only by
+      `POST …/matches/{matchId}/clear-review` (director+, audited, `match.review_cleared`);
+      the repair path is reopen → re-enter the result → clear. `superseded_by` and any
+      cascade invalidation were deliberately left alone. Migration
+      **`0017_match_review_flag.sql`** (`matches.needs_review`, additive `DEFAULT 0`) —
+      it applies automatically on the next service start, so this slice is **not live until
+      Kevin deploys** (`cd /home/kevin/15ball-scoresheet && git pull` + restart).
+      Docs: 03, 04, 05, 06, 09 §I, 12 §10, OPEN-QUESTIONS (resolved).
+- [x] Slice O — test hardening for the above (no behaviour change). Every propagation path
+      and every edge of the flag is covered, plus the console/overlay/client-library work
+      from Slice M/N, with falsification evidence for each guard (remove the guard → red →
+      restore): `bracket_review_paths_test.go`, `server/internal/store/store_test.go`
+      (migration 0017 is additive against a populated database), `live-console.test.js`,
+      `review-flags.test.js`, `api-client.test.js`, `app-render.test.js`. Scenarios 37–48.
+      Two assertions were deleted because they could not fail (a second-granularity
+      `updated_at` check, and a score that an empty slot never renders).
+

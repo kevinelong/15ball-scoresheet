@@ -16,9 +16,10 @@ Closed/superseded decisions now codified in `server/IMPLEMENTATION/`:
 
 ### Which result version is "the current winner" after a reopen and re-submit?
 
-**Status:** open — found while testing the review-flag repair path; code left as
-shipped (writing `match_results.superseded_by` is option 2's machinery and was
-explicitly kept out of that change).
+**Status:** open (raised 2026-10-14; still open as of the last turn) — found while testing
+the review-flag repair path; code left as shipped (writing
+`match_results.superseded_by` is option 2's machinery and was explicitly kept out of that
+change).
 
 **Evidence.** `SubmitResult` (`server/internal/api/scoring.go:53-133`) appends a new
 `match_results` row on every submission and never marks the previous one superseded,
@@ -49,6 +50,9 @@ away.
 
 ## Resolved 2026-10-14 — reopen collision (option 3: record, don't cascade)
 
+**Chosen 2026-10-14:** option 3 — allow the reopen, keep the played result, and record the
+inconsistency.
+
 - **Reopening an upstream match whose winner already played downstream** →
   **allow the reopen, keep the played result, record the inconsistency**: bracket
   propagation writes the corrected winner into the slot (otherwise the corrected
@@ -60,9 +64,12 @@ away.
   (`POST …/matches/{matchId}/clear-review`, audited + `match.review_cleared`).
   Codified in `03-state-machines.md` ("Match review flag"),
   `05-schema-contract.md` (migration 0017), `04-api-contracts.md`,
-  `06-realtime-contract.md` and `09-acceptance-tests.md` §I.
+  `06-realtime-contract.md`, `12-frontend-integration-guide.md` §10 and
+  `09-acceptance-tests.md` §I/§J (scenarios 35–48).
   Neither of the other options was taken: the reopen is not blocked, and nothing is
   invalidated or replayed automatically (`match_results.superseded_by` is untouched).
+  **Deployment:** `matches.needs_review` needs migration `0017_match_review_flag.sql`
+  applied on the next service start; the deploy itself is Kevin's.
 
 ## Resolved 2026-09-05 (see DECISIONS/019)
 

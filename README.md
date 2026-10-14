@@ -64,6 +64,48 @@ Because it's a static site, drop it on GitHub Pages, Netlify, Cloudflare Pages, 
 
 Or point a custom subdomain (like `score.columbiacueclub.com`) at Pages via a `CNAME` file.
 
+## Testing
+
+Every suite is a plain Node script — no test runner to install. Run the ones next to the
+code they cover:
+
+```bash
+node bracket.test.js        # bracket engine: single-elim spec, scale pinning, refusals
+node roster.test.js         # roster parsing
+node tables.test.js         # table naming/parsing (25 tests)
+node migration.test.js      # storage-key + legacy-state migration
+node app-render.test.js     # console render: format labels, grand-final card, sheet replay
+node live-console.test.js   # cloud console render + the SSE-driven review marker
+node review-flags.test.js   # OBS overlay review flag vs overlay.reviewRequired
+node api-client.test.js     # backend client requests (fetch stubbed)
+```
+
+The server side runs under Go (`cd server && go test ./...`, Go 1.22+; `go vet ./...` stays
+clean). The review-flag and single-elimination work is covered by scenarios 31–48 of
+`server/IMPLEMENTATION/09-acceptance-tests.md`.
+
+## Server (live cloud edition) — state & deployment
+
+- **Bracket shape.** Double elimination is the backend default
+  (`divisions.format = double_elimination`); real single elimination
+  (`single_elimination`) sizes a non-power-of-two field up to the next power of two with
+  BYEs, so a checked-in entrant is never dropped. The static console's own vocabulary is
+  `single_elim` (single elimination), `single` (double elimination settled by one decisive
+  grand final) and `double` (with the GF2 reset) — see the two vocabularies in
+  `server/IMPLEMENTATION/12-frontend-integration-guide.md` §7.
+- **Corrections.** Reopening a match whose winner already played downstream keeps the played
+  result and flags the downstream match for review (`matches.needs_review`) with an audit row
+  and an SSE event; a director replays it and clears the flag. Contract:
+  `server/IMPLEMENTATION/03-state-machines.md` ("Match review flag").
+- **Deployment is manual and belongs to the maintainer.** The live service is updated by
+  pulling this repo on the server (`cd /home/kevin/15ball-scoresheet && git pull`) and
+  restarting it — **a pushed commit is not a deployed one**. Migration
+  `0017_match_review_flag.sql` (the review flag) applies automatically on the next service
+  start: additive column, `DEFAULT 0`, no backfill.
+- **Next.** The one open decision is in `server/OPEN-QUESTIONS.md` (which result version
+  counts as the current winner after a reopen and re-submit); beyond that, disciplines other
+  than 15-ball, and a console control for clearing a review flag.
+
 ## Bracket engine (`bracket.js`)
 
 Pure-function module, standalone testable. Exposes `BracketEngine.build(participants, { format })` and `BracketEngine.recordWinner(state, matchId, slotIdx, { score })`. `bracket.test.js` runs a small suite under Node: `node bracket.test.js`.
@@ -97,8 +139,19 @@ bracket.js         # pure bracket engine (SE + DE builds, advancement)
 bracket.test.js    # bracket engine tests
 tables.js          # table roster parser + factory (see below)
 tables.test.js     # table roster tests
+roster.js          # roster parsing
+roster.test.js     # roster tests
+migration.test.js  # storage-key + legacy-state migration tests
+app-render.test.js     # console render tests (formats, grand final, sheet replay)
+live-console.test.js   # cloud console render + SSE tests
+review-flags.test.js   # OBS overlay review-flag tests
+api-client.test.js     # backend client request tests
+api-client.js      # drop-in backend client (see server/IMPLEMENTATION/12-…)
+live.html / live.js          # cloud console (multi-user, server-backed)
+overlay-live.html / overlay-live.js  # OBS overlay for streaming
+server/            # Go backend + SQLite (see server/AGENTS.md)
 docs/              # printable PDF guides + generators
-LICENSE            # MIT
+LICENSE            # licence text (see LICENSE — the README's Licence section predates it)
 README.md          # you're reading it
 ```
 

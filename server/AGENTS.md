@@ -38,3 +38,60 @@ When behavior changes, update in the same PR:
 2. affected scenario coverage in `server/IMPLEMENTATION/09-acceptance-tests.md`.
 
 PRs that change behavior without docs/tests updates are incomplete.
+
+## Where the work stands (handoff, 2026-10-14)
+
+Last shipped (branch `test-coverage-hardening`, tip `1d6e753`, on `main`):
+
+- **Review flag — option 3 of the reopen collision.** A corrected upstream result still
+  reaches the downstream slot (otherwise the corrected pairing could never be replayed),
+  but a played result is never rewritten: the match keeps its state, its result rows and
+  its winner, and is flagged (`matches.needs_review`, migration 0017) with a
+  `match: review_required` audit row and a `match.review_required` event in the same
+  transaction. All propagation goes through one guarded write path (`advanceSlot`):
+  `advanceDouble`'s winner advance, its losers-bracket drop, `advanceBracket` and
+  `resolveByes`. Cleared only by `POST /api/v1/tournaments/{id}/matches/{matchId}/clear-review`
+  (director+, audited, `match.review_cleared`); the repair path is reopen → re-enter the
+  result → clear. Nothing cascades and `match_results.superseded_by` is untouched.
+  Semantics: `IMPLEMENTATION/03-state-machines.md` ("Match review flag").
+- **Real single elimination.** Server field sizing (nextPow2 + archived BYE placeholder at
+  the `seedOrder` position, every round created up front with `feeds_winner_*` edges) and
+  the console's third format `single_elim`; the shipped `single` (single *final*) and
+  `double` are untouched.
+- **Coverage with falsification.** Scenarios 31–48 of `IMPLEMENTATION/09-acceptance-tests.md`
+  are covered by tests, each new guard shown biting (guard removed → red → restored). Four
+  new Node suites live beside the files they cover (see `README.md` → Testing).
+
+Next up (decisions, not gaps):
+
+- `OPEN-QUESTIONS.md`: **which result version is "the current winner" after a reopen and
+  re-submit** (two `match_results` rows end up with `superseded_by IS NULL`). Until it is
+  decided, read a corrected result from `matchHistory().versions`, not
+  `listMatches().winnerEntrantId` (see `IMPLEMENTATION/12-frontend-integration-guide.md` §9).
+- Scope B remainder: disciplines beyond 15-ball.
+- The console has no "clear review" control yet — the endpoint and the client method exist
+  and are tested; the button (placement, confirmation, wording) is a UI decision.
+
+## Deployment (Kevin's, not the implementing agent's)
+
+**A pushed commit is not a deployed one.** The live service picks changes up when Kevin
+pulls and restarts it: `cd /home/kevin/15ball-scoresheet && git pull` + service restart.
+
+- Pending on the next service start: migration **`0017_match_review_flag.sql`** (adds
+  `matches.needs_review`; additive, `DEFAULT 0`, no backfill — existing rows read back as
+  clear). The review flag is inert until that migration has run.
+- No other deploy step changed this round; no tag, release or deploy is performed from this
+  branch.
+
+## Turn discipline
+
+- Create the branch **before** the first commit of a turn; never commit a turn's work
+  straight onto `main`. (Cost us a correction on 2026-10-14 — the branch was created at the
+  tip after the fact.)
+- One turn, one change, one commit, one push — never batch a turn into the next turn's push.
+- End every turn by updating `README.md`, this handoff and `IMPLEMENTATION/BACKLOG-STATUS.md`
+  with what changed and what is next, and leave `OPEN-QUESTIONS.md` current: a resolved
+  decision reads as resolved, with the date and what was chosen.
+- Say explicitly when a turn changes what a running deployment must pick up (see above).
+- `per-discipline-sheets` stays untouched (3 unpublished commits — Kevin's call).
+
