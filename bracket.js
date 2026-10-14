@@ -12,8 +12,12 @@
    "GF1" and "GF2".
 
    Format:
-     "single"  \u2014 GF1 is decisive.
-     "double"  \u2014 If L-champ wins GF1, GF2 is played (must beat twice).
+     "single"       \u2014 single *final*: double-elim bracket, GF1 is decisive.
+                      (Shipped semantics \u2014 do not redefine.)
+     "double"       \u2014 If L-champ wins GF1, GF2 is played (must beat twice).
+     "single_elim"  \u2014 real single elimination: winners rounds only (no losers
+                      bracket, no grand final). Byes auto-resolve; the last
+                      winners-bracket match is the decisive final.
 
    API:
      BracketEngine.build(participants, options)  \u2192 tournament state
@@ -52,7 +56,9 @@
 
   function build(participants, options) {
     options = options || {};
-    const format = options.format === "double" ? "double" : "single";
+    const format = options.format === "double" ? "double"
+      : options.format === "single_elim" ? "single_elim"
+        : "single";
     // Copy so we don't mutate the caller's array.
     const players = participants.slice();
     if (players.length < 2) {
@@ -127,10 +133,32 @@
       }
       prevRoundMatchIds = roundIds;
     }
-    // The winner of the last W-bracket match will feed into GF1.
+    // The winner of the last W-bracket match either is the champion
+    // (single_elim: it is the decisive final) or feeds GF1 (single/double).
     const wFinalId = prevRoundMatchIds[0];
 
-    // Loser bracket
+    const state = {
+      format,
+      participants: seeded,
+      bracketSize,
+      byes,
+      wRounds,
+      lRounds: 0,
+      matches,
+      wFinalId,
+      lFinalId: null,
+      champion: null
+    };
+
+    // Real single elimination stops here: winners rounds only. Byes were
+    // auto-resolved below by autoResolveByes, and propagate() crowns the winner
+    // of wFinalId (the last W round) as the champion.
+    if (format === "single_elim") {
+      autoResolveByes(state);
+      return state;
+    }
+
+    // Loser bracket — double-elimination only; single_elim returned above.
     // Standard double-elim L-bracket has 2*(wRounds-1) rounds.
     // Round pattern for size N=8 (wRounds=3, lRounds=4):
     //   L1: 2 matches, both fed by W1 losers.
@@ -225,18 +253,8 @@
       };
     }
 
-    const state = {
-      format,
-      participants: seeded,
-      bracketSize,
-      byes,
-      wRounds,
-      lRounds,
-      matches,
-      wFinalId,
-      lFinalId,
-      champion: null
-    };
+    state.lRounds = lRounds;
+    state.lFinalId = lFinalId;
 
     // Auto-advance any BYE matches so real players face real opponents.
     autoResolveByes(state);
@@ -349,6 +367,9 @@
         if (state.matches["GF2"]) state.matches["GF2"].slots = [null, null];
       }
     } else if (match.id === "GF2") {
+      state.champion = winner;
+    } else if (state.format === "single_elim" && match.bracket === "W" && !match.feedsWinnerTo) {
+      // Single elimination: the top W match is the decisive final.
       state.champion = winner;
     }
   }
