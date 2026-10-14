@@ -133,21 +133,39 @@ function loadApp(label, buildTournament) {
       handlers.forEach((fn) => fn());
     },
     // action fires the delegated body-click handler with a data-action element.
-    action(name) {
+    action(name) { this.delegatedClick({ action: name }); },
+    // delegatedClick fires the body's delegated click listeners with the data-* attributes
+    // of one control, answering closest(sel) only for the attribute the test is firing, so
+    // the handler's own if-chain runs exactly as it does in the browser.
+    delegatedClick(attrs) {
       const handlers = getEl("body")._listeners.click || [];
       assert.ok(handlers.length > 0, "the module should delegate actions on the body");
-      handlers.forEach((fn) => fn({ target: { closest: () => ({ dataset: { action: name } }) } }));
-    }
+      handlers.forEach((fn) => fn({ target: { closest: (sel) => controlFor(sel, attrs) } }));
+    },
+    // raceInc / raceDec press the tally's own step buttons; raceJump presses a quick-add
+    // control (the markup for one is what the sheet is not supposed to have any more).
+    raceInc(side) { this.delegatedClick({ raceInc: side }); },
+    raceDec(side) { this.delegatedClick({ raceDec: side }); },
+    raceJump(side, delta) { this.delegatedClick({ raceJump: side, delta: String(delta) }); }
   };
 }
 
+// controlFor answers one closest(sel) call from a delegated handler: the attribute the test
+// fired is present, anything else is null - as it is in the browser.
+function controlFor(sel, attrs) {
+  const m = /^\[(data-[a-z-]+)\]$/.exec(sel);
+  if (!m) return null;
+  const key = m[1].slice("data-".length).replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+  return Object.prototype.hasOwnProperty.call(attrs, key) ? { dataset: attrs } : null;
+}
+
 const players = [{ name: "P1" }, { name: "P2" }, { name: "P3" }, { name: "P4" }];
-function tourney(id, format, bracket, sheets) {
-  return {
+function tourney(id, format, bracket, sheets, opts) {
+  return Object.assign({
     id, name: "T " + id, date: "2026-01-01", startTime: "14:00", game: "fifteenBall",
     format, raceTo: 25, createdAt: 1, updatedAt: 1,
     participants: bracket.participants, bracket, sheets: sheets || {}, tables: []
-  };
+  }, opts || {});
 }
 
 // ---------- format labels ----------
@@ -219,6 +237,49 @@ test("clearing a sheet rebuilds without replaying it onto a match that is not pl
     `the skipped sheet must not show a score on the final: ${finalCard}`);
   assert.ok(app.getEl("#champBanner").hidden === true,
     `the rebuilt bracket has no champion until the final is played: ${app.getEl("#champBanner").textContent}`);
+});
+
+// ---------- no quick-add controls, in any dialog, for any discipline ----------
+// The +5 / +10 / -5 jumps are gone as data, not just as markup: every discipline declares
+// which controls it gets (Sheets.spec(g).quickAdd) and every one of them declares none, so
+// no dialog can render one and no handler can act on one.
+test("no dialog offers a +5 / +10 / -5 quick add, for any discipline", () => {
+  const S = require("./sheets.js");
+  for (const game of S.ids) {
+    const spec = S.spec(game);
+    assert.ok(Array.isArray(spec.quickAdd), `${game} must declare its jump controls`);
+    assert.strictEqual(spec.quickAdd.length, 0, `${game} must declare no quick add: ${JSON.stringify(spec.quickAdd)}`);
+  }
+
+  const html = fs.readFileSync(path.join(__dirname, "index.html"), "utf8");
+  assert.ok(html.indexOf("data-race-jump") === -1 && html.indexOf("data-counter-jump") === -1,
+    "no quick-add control may survive in the markup");
+  assert.ok(!/data-race-jumps|data-counter-jumps/.test(html), "nor its wrapper");
+  assert.ok(!/>\+5</.test(html) && !/>\+10</.test(html) && !/&minus;5</.test(html),
+    "nor a +5 / +10 / -5 label");
+});
+
+test("a win-measured race cannot exceed its target by a step, and a stray jump scores nothing", () => {
+  // 9-ball: a games-won discipline, race to 7.
+  const app = loadApp("race", (B) => tourney("t_race", "single_elim", B.build(players, { format: "single_elim" }),
+    null, { game: "9ball", raceTo: 7 }));
+  app.clickCard("W1M1");
+  assert.strictEqual(app.getEl("#raceAScore").textContent, "0", "fixture: the tally opens at 0");
+
+  app.raceJump("A", 5);
+  assert.strictEqual(app.getEl("#raceAScore").textContent, "0",
+    "a quick add is not a control this discipline offers, so it must not move the tally");
+
+  for (let i = 0; i < 9; i++) app.raceInc("A");
+  assert.strictEqual(app.getEl("#raceAScore").textContent, "7",
+    "a race to 7 is won at 7: a step must not carry the tally past the target");
+  assert.strictEqual(app.getEl('#sheet input[name="winner"][value="A"]').checked, true,
+    "hitting the target still auto-selects the winner");
+
+  app.raceDec("A");
+  assert.strictEqual(app.getEl("#raceAScore").textContent, "6", "and a step back still works");
+  app.raceInc("A");
+  assert.strictEqual(app.getEl("#raceAScore").textContent, "7", "back up to the target, not past it");
 });
 
 console.log(`\n${passed} passed, ${failed} failed.`);

@@ -47,13 +47,27 @@ ok("goals come back as a copy", (() => {
   const a = S.goals("14_1"); a.push(999); return S.goals("14_1").length === 2;
 })());
 
-// -------- race sheets --------
+// -------- race sheets ----------
 console.log("\n[race sheets]");
-ok("9-ball is a race", S.spec("9ball").kind === S.RACE && !S.isRack("9ball"));
+ok("9-ball is a race", S.kind("9ball") === S.RACE && !S.isRack("9ball"));
 ok("every games-won discipline is a race",
    ["8ball", "9ball", "10ball", "one_pocket", "bank_pool"].every((g) => !S.isRack(g)));
 ok("exactly two disciplines mark balls",
    S.ids.filter(S.isRack).length === 2);
+
+// -------- how a discipline is measured, and the controls that follow --------
+console.log("\n[measure + controls]");
+ok("the rack sheets are measured in balls",
+   S.measure("fifteenBall") === S.BALLS && S.measure("straight_14_1") === S.BALLS);
+ok("the games-won disciplines are measured in wins",
+   ["8ball", "9ball", "10ball", "one_pocket", "bank_pool"].every((g) => S.measure(g) === S.WINS));
+ok("an unknown game measures as rotation's balls", S.measure("snooker") === S.BALLS);
+ok("measure and the rendered body agree for every discipline",
+   S.ids.every((g) => S.isRack(g) === (S.measure(g) === S.BALLS)));
+ok("every discipline declares its jump controls, and none offers one",
+   S.ids.every((g) => Array.isArray(S.spec(g).quickAdd) && S.spec(g).quickAdd.length === 0));
+ok("the wins disciplines - the ones with a tally - offer none either",
+   S.ids.filter((g) => S.measure(g) === S.WINS).every((g) => S.spec(g).quickAdd.length === 0));
 
 console.log("\n" + (fail ? fail + " FAILED" : "all " + pass + " passed"));
 process.exit(fail ? 1 : 0);
