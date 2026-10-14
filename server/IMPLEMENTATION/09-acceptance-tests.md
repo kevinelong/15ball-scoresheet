@@ -107,9 +107,11 @@ The generator is chosen from the primary division's `format` on the
     (defence in depth). Each path flags a played target exactly once, leaves its state,
     result and winner alone, and puts the corrected entrant in its slot so it can be
     replayed. (`bracket_review_paths_test.go: TestReviewFlagPropagationPaths`)
-38. **Repeating a correction is inert**: an identical re-correction, and re-submitting a
+38. **One flag, no matter how many writes**: an identical re-correction, and re-submitting a
     winner that is already in the target slot, both change nothing — same flag, same row
-    version, no second audit row, no second event.
+    version, no second audit row, no second event. A second *different* write while the flag
+    is already set (flipping the correction back, which does move the slot) still records one
+    `review_required` audit row and one event for the match, and does not bump its version.
     (`bracket_review_paths_test.go: TestReviewFlagIdempotentAndInert`)
 39. **The flag is a note, not a lock**: a flagged match still reopens, replays and
     completes, and the tournament still completes while it is flagged.

@@ -246,6 +246,35 @@ func TestReviewFlagIdempotentAndInert(t *testing.T) {
 		}
 	})
 
+	t.Run("one audit row and event per flag, not per write", func(t *testing.T) {
+		e := newTestEnv(t)
+		cb := e.singleElimWithCorrectedUpstream(t)
+		version := e.matchVersion(t, cb.tid, cb.finalID)
+		upID := byLabel(t, e.matches(t, cb.tid))["W1M1"]["id"].(string)
+
+		// Flip the correction back: the flagged match's slot changes *again* while the
+		// flag is already set, so the guard cannot short-circuit on "already there".
+		e.reopenMatch(t, cb.tid, upID, "flip-open", "flip the correction back")
+		e.scoreMatch(t, cb.tid, upID, cb.staleWinner, cb.corrected, "flip-res")
+
+		final := byLabel(t, e.matches(t, cb.tid))["W2M1"]
+		if got := str(final["entrantAId"]); got != cb.staleWinner {
+			t.Fatalf("the slot should have flipped back to %q, got %q", cb.staleWinner, got)
+		}
+		if final["needsReview"] != true {
+			t.Errorf("the flag should still be set: %v", final)
+		}
+		if got := e.matchVersion(t, cb.tid, cb.finalID); got != version {
+			t.Errorf("a second write re-flagged the match (version %d -> %d)", version, got)
+		}
+		if n := e.auditActionCount(t, cb.tid, cb.finalID, "review_required"); n != 1 {
+			t.Errorf("review_required audit rows: want 1 (one per flag), got %d", n)
+		}
+		if n := e.sseEventCount(t, cb.tid, "match.review_required"); n != 1 {
+			t.Errorf("match.review_required events: want 1 (one per flag), got %d", n)
+		}
+	})
+
 	t.Run("an entrant already in the slot is inert", func(t *testing.T) {
 		e := newTestEnv(t)
 		tid, _ := e.startSingleElim(t, 4)
