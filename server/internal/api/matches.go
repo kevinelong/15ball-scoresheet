@@ -37,20 +37,25 @@ type Match struct {
 	// WinnerEntrantID is the current (non-superseded) result winner, or nil when the
 	// match has no recorded result. Populated by ListMatches; not part of matchCols/scanMatch.
 	WinnerEntrantID *string `json:"winnerEntrantId"`
-	Version         int64   `json:"version"`
-	StartedAt       *int64  `json:"startedAt"`
-	CompletedAt     *int64  `json:"completedAt"`
-	CreatedAt       int64   `json:"createdAt"`
-	UpdatedAt       int64   `json:"updatedAt"`
+	// NeedsReview marks a match whose participants changed after it was played: the
+	// recorded result is kept as-is and the match waits for a director to replay it
+	// (migration 0017, 03-state-machines "Match review flag").
+	NeedsReview bool  `json:"needsReview"`
+	Version     int64 `json:"version"`
+	StartedAt   *int64 `json:"startedAt"`
+	CompletedAt *int64 `json:"completedAt"`
+	CreatedAt   int64  `json:"createdAt"`
+	UpdatedAt   int64  `json:"updatedAt"`
 }
 
-const matchCols = `id, tournament_id, division_id, bracket_round, slot, entrant_a_id, entrant_b_id, state, assigned_scorekeeper_user_id, table_ref, version, started_at, completed_at, created_at, updated_at, bracket, match_label, feeds_winner_match, feeds_winner_slot, feeds_loser_match, feeds_loser_slot`
+const matchCols = `id, tournament_id, division_id, bracket_round, slot, entrant_a_id, entrant_b_id, state, assigned_scorekeeper_user_id, table_ref, version, started_at, completed_at, created_at, updated_at, bracket, match_label, feeds_winner_match, feeds_winner_slot, feeds_loser_match, feeds_loser_slot, needs_review`
 
 func scanMatch(row interface{ Scan(...any) error }) (*Match, error) {
 	var m Match
 	err := row.Scan(&m.ID, &m.TournamentID, &m.DivisionID, &m.BracketRound, &m.Slot, &m.EntrantAID, &m.EntrantBID,
 		&m.State, &m.Scorekeeper, &m.TableRef, &m.Version, &m.StartedAt, &m.CompletedAt, &m.CreatedAt, &m.UpdatedAt,
-		&m.Bracket, &m.MatchLabel, &m.FeedsWinnerMatch, &m.FeedsWinnerSlot, &m.FeedsLoserMatch, &m.FeedsLoserSlot)
+		&m.Bracket, &m.MatchLabel, &m.FeedsWinnerMatch, &m.FeedsWinnerSlot, &m.FeedsLoserMatch, &m.FeedsLoserSlot,
+		&m.NeedsReview)
 	return &m, err
 }
 

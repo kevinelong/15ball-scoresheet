@@ -10,6 +10,7 @@ See also: [03-state-machines.md](./03-state-machines.md), [04-api-contracts.md](
 4. `divisions` (id, tournament_id FK, name, format, state, archived_at nullable, unique(tournament_id,name)).
 5. `entrants` (id, tournament_id FK, division_id FK nullable, display_name, state, check_in_at nullable, archived_at nullable, created_at, updated_at, version).
 6. `matches` (id, tournament_id FK, division_id FK nullable, bracket_round, side, state, assigned_scorekeeper_user_id nullable, reopened_from_result_id nullable, version, scheduled_at, started_at, completed_at).
+   - `matches.needs_review` (migration 0017): 0/1, default 0. Set when a corrected upstream result reached this match after it was played — the recorded result is kept and the match waits for a director to replay it and clear the flag. Set only by bracket propagation; cleared only by `POST …/matches/{matchId}/clear-review` (04-api-contracts). Semantics in 03-state-machines ("Match review flag").
 7. `match_results` (id, match_id FK, result_version int, winner_entrant_id, loser_entrant_id, payload_json, submitted_by, submitted_at, superseded_by nullable).
 8. `audit_log` (id, entity_type, entity_id, action, actor_user_id nullable, reason nullable, before_json, after_json, request_id, created_at).
 9. `outbox_jobs` (id, kind, aggregate_type, aggregate_id, payload_json, status, attempts, next_attempt_at, last_error, idempotency_key, created_at, updated_at).
