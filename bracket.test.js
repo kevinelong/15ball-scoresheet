@@ -47,6 +47,43 @@ function assert(cond, msg) {
   assert(!s.matches["GF2"], "single format has no GF2");
 }
 
+// --- N=6 single_elim: winners-only bracket, decisive final, no losers side ---
+// Vocabulary: "single" = single *final* (double-elim with a decisive GF1) and is
+// untouched here. "single_elim" = real single elimination: W rounds only, byes
+// auto-resolve, the top W match is the final. Field of 6 -> size 8, 2 byes ->
+// 7 W match nodes, of which n-1 = 5 are actually played (Python
+// TournamentBracket: bracket_size = 2**ceil(log2(n)), round r has
+// bracket_size/2**r matches, first-round byes auto-advance).
+{
+  const players = [1, 2, 3, 4, 5, 6].map(n => ({ name: "P" + n }));
+  const s = B.build(players, { format: "single_elim" });
+  assert(s.format === "single_elim", "single_elim keeps its own format tag");
+  assert(s.bracketSize === 8 && s.byes === 2, "N=6 single_elim -> bracketSize 8, 2 byes");
+  assert(s.wRounds === 3 && s.lRounds === 0, "N=6 single_elim -> 3 W rounds, 0 L rounds");
+  assert(Object.values(s.matches).filter(m => m.bracket === "L").length === 0, "single_elim builds no match with bracket === \"L\"");
+  assert(!s.matches["GF1"] && !s.matches["GF2"], "single_elim has no GF1/GF2");
+  const wm = Object.values(s.matches).filter(m => m.bracket === "W");
+  assert(wm.length === s.bracketSize - 1, "N=6 single_elim -> 7 W match nodes (bracketSize-1)");
+  const autoByes = wm.filter(m => m.resolvedAutoBye);
+  assert(autoByes.length === s.byes, "each bye auto-resolves exactly one W1 match");
+  assert(wm.filter(m => !m.resolvedAutoBye).length === players.length - 1, "exactly n-1 W matches are actually played");
+  assert(autoByes.every(m => m.round === 1), "byes only ever sit in W round 1");
+  assert(wm.every(m => m.winner === null || !m.slots[m.winner].isBye), "a BYE never wins a match");
+  // Play every ready winners-bracket match (re-scanning after each pass, since
+  // resolving a round populates the next one).
+  for (let pass = 0; pass < 20; pass++) {
+    const ready = B.matchesInOrder(s).filter(m => m.bracket === "W" && !m.winner && B.isMatchReady(m));
+    if (!ready.length) break;
+    ready.forEach(m => B.recordWinner(s, m.id, 0));
+  }
+  const undecided = B.matchesInOrder(s).filter(m => m.winner === null);
+  assert(undecided.length === 0, "every W match is decided after playing the bracket out");
+  const final = s.matches[s.wFinalId];
+  assert(s.champion && !s.champion.isBye && s.champion.name === final.slots[final.winner].name,
+    "exactly one champion: the decisive final's winner");
+  assert(s.wFinalId === "W3M1", "the decisive final is the last W round");
+}
+
 // --- N=6 double: run through, prove GF2 gets seeded when L-champ wins GF1 ---
 {
   const players = [1, 2, 3, 4, 5, 6, 7, 8].map(n => ({ name: "P" + n }));
