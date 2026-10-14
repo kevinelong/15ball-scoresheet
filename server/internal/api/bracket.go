@@ -53,36 +53,34 @@ type mrec struct {
 	flSlot         int    // -1 = none
 }
 
-// generateDoubleElim builds and persists the full double-elimination graph for a
-// tournament's checked-in entrants (registration order = seeding). Fields of 2
-// fall back to a single decisive match (single-elim). Returns the match count.
-func (api *API) generateDoubleElim(ctx context.Context, tx *sql.Tx, tid, divisionID string) (int, error) {
-	var ent []string
+// checkedInEntrantIDs returns the checked-in entrants of a tournament in seeding
+// order (explicit seed first, then Fargo, then registration order).
+func (api *API) checkedInEntrantIDs(ctx context.Context, tx *sql.Tx, tid string) ([]string, error) {
 	rows, err := tx.QueryContext(ctx,
 		`SELECT id FROM entrants WHERE tournament_id=? AND state='checked_in' AND archived_at IS NULL
 		 ORDER BY (seed IS NULL), seed ASC, (fargo IS NULL), fargo DESC, created_at, id`, tid)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
+	defer rows.Close()
+	var ent []string
 	for rows.Next() {
 		var id string
 		if err := rows.Scan(&id); err != nil {
-			rows.Close()
-			return 0, err
+			return nil, err
 		}
 		ent = append(ent, id)
 	}
-	rows.Close()
-	n := len(ent)
-	if n < 3 {
-		return api.generateBracket(ctx, tx, tid) // 2 players: one game decides it
-	}
-	size := nextPow2(n)
-	wRounds := int(math.Log2(float64(size)))
-	order := seedOrder(size)
-	now := time.Now().Unix()
+	return ent, rows.Err()
+}
 
-	// Placeholder BYE entrant (FK-safe) for non-power-of-two fields.
+// seedField sizes a checked-in field to the next power of two. Non-power-of-two
+// fields get an FK-safe BYE placeholder entrant; the returned slice is the round-1
+// slot list in seedOrder position order (the BYE id where a seed is missing), so
+// every checked-in entrant is in the bracket and none is ever dropped.
+func (api *API) seedField(ctx context.Context, tx *sql.Tx, tid, divisionID string, ent []string, now int64) ([]string, error) {
+	n := len(ent)
+	size := nextPow2(n)
 	byeID := ""
 	if size > n {
 		byeID = newID("ent_")
@@ -90,16 +88,67 @@ func (api *API) generateDoubleElim(ctx context.Context, tx *sql.Tx, tid, divisio
 			`INSERT INTO entrants (id, tournament_id, division_id, display_name, state, archived_at, created_at, updated_at, version)
 			 VALUES (?,?,?,?, 'withdrawn', ?, ?, ?, 1)`,
 			byeID, tid, nullIfEmpty(divisionID), byeName, now, now, now); err != nil {
-			return 0, err
+			return nil, err
 		}
 	}
+	order := seedOrder(size)
 	slots := make([]string, size)
-	for i := 0; i < size; i++ {
+	for i := range size {
 		if order[i] <= n {
 			slots[i] = ent[order[i]-1]
 		} else {
 			slots[i] = byeID
 		}
+	}
+	return slots, nil
+}
+
+// buildWinnersRounds records the winners rounds for a field of `size` (a power of
+// two) whose round-1 slots are `slots` (already seed-ordered, BYE placeholders
+// included), wiring each match's winner edge into the next round. The last W match
+// has no winner edge: it is the final, and the caller decides whether it feeds GF1
+// (double elimination) or crowns the champion (single elimination). Both generators
+// share it so the two shapes cannot drift.
+func buildWinnersRounds(add func(*mrec) *mrec, idFor func(string) string, byLabel map[string]*mrec, size int, slots []string) {
+	wRounds := int(math.Log2(float64(size)))
+	for round := 1; round <= wRounds; round++ {
+		cnt := size / (1 << round)
+		for m := 1; m <= cnt; m++ {
+			r := add(&mrec{label: fmt.Sprintf("W%dM%d", round, m), bracket: "W", round: round, slot: m - 1})
+			if round == 1 {
+				r.a = slots[(m-1)*2]
+				r.b = slots[(m-1)*2+1]
+			}
+		}
+	}
+	for round := 1; round < wRounds; round++ {
+		cnt := size / (1 << round)
+		for m := 1; m <= cnt; m++ {
+			p := byLabel[fmt.Sprintf("W%dM%d", round, m)]
+			p.fwMatch, p.fwSlot = idFor(fmt.Sprintf("W%dM%d", round+1, (m+1)/2)), boolToSlot(m%2 == 0)
+		}
+	}
+}
+
+// generateDoubleElim builds and persists the full double-elimination graph for a
+// tournament's checked-in entrants (registration order = seeding). Fields of 2
+// fall back to a single decisive match (single-elim). Returns the match count.
+func (api *API) generateDoubleElim(ctx context.Context, tx *sql.Tx, tid, divisionID string) (int, error) {
+	ent, err := api.checkedInEntrantIDs(ctx, tx, tid)
+	if err != nil {
+		return 0, err
+	}
+	n := len(ent)
+	if n < 3 {
+		return api.generateBracket(ctx, tx, tid) // 2 players: one game decides it
+	}
+	size := nextPow2(n)
+	wRounds := int(math.Log2(float64(size)))
+	now := time.Now().Unix()
+
+	slots, err := api.seedField(ctx, tx, tid, divisionID, ent, now)
+	if err != nil {
+		return 0, err
 	}
 
 	ids := map[string]string{} // label -> match id
@@ -119,24 +168,8 @@ func (api *API) generateDoubleElim(ctx context.Context, tx *sql.Tx, tid, divisio
 		return r
 	}
 
-	// ---- Winners bracket ----
-	for round := 1; round <= wRounds; round++ {
-		cnt := size / (1 << round)
-		for m := 1; m <= cnt; m++ {
-			r := add(&mrec{label: fmt.Sprintf("W%dM%d", round, m), bracket: "W", round: round, slot: m - 1})
-			if round == 1 {
-				r.a = slots[(m-1)*2]
-				r.b = slots[(m-1)*2+1]
-			}
-		}
-	}
-	for round := 1; round < wRounds; round++ {
-		cnt := size / (1 << round)
-		for m := 1; m <= cnt; m++ {
-			p := byLabel[fmt.Sprintf("W%dM%d", round, m)]
-			p.fwMatch, p.fwSlot = idFor(fmt.Sprintf("W%dM%d", round+1, (m+1)/2)), boolToSlot(m%2 == 0)
-		}
-	}
+	// ---- Winners bracket ---- (same builder as the single-elim generator)
+	buildWinnersRounds(add, idFor, byLabel, size, slots)
 	// Grand final (GF2 created lazily only if the losers champ wins GF1).
 	add(&mrec{label: "GF1", bracket: "GF", round: wRounds + 1, slot: 0})
 	byLabel[fmt.Sprintf("W%dM1", wRounds)].fwMatch = idFor("GF1")
@@ -212,9 +245,11 @@ func (api *API) generateDoubleElim(ctx context.Context, tx *sql.Tx, tid, divisio
 	return len(recs), nil
 }
 
-// resolveByes auto-completes any W/L match sitting on a BYE (both slots filled,
-// one is the bye entrant), advancing the real player and propagating through the
-// graph. Loops until stable so cascades (a dropped loser meeting a bye) resolve.
+// resolveByes auto-completes any match sitting on a BYE (both slots filled, one is
+// the bye entrant), advancing the real player and propagating through the graph.
+// It covers the double-elim winners/losers brackets ('W'/'L') and the
+// single-elimination bracket, whose matches carry a NULL bracket. Loops until
+// stable so cascades (a dropped loser meeting a bye) resolve.
 func (api *API) resolveByes(ctx context.Context, tx *sql.Tx, tid string) error {
 	byeID := api.byeEntrantID(ctx, tx, tid)
 	if byeID == "" {
@@ -226,7 +261,8 @@ func (api *API) resolveByes(ctx context.Context, tx *sql.Tx, tid string) error {
 		var fwS, flS sql.NullInt64
 		err := tx.QueryRowContext(ctx,
 			`SELECT id, entrant_a_id, entrant_b_id, feeds_winner_match, feeds_winner_slot, feeds_loser_match, feeds_loser_slot
-			 FROM matches WHERE tournament_id=? AND state='scheduled' AND bracket IN ('W','L')
+			 FROM matches WHERE tournament_id=? AND state='scheduled'
+			   AND (bracket IS NULL OR bracket IN ('W','L'))
 			   AND entrant_a_id IS NOT NULL AND entrant_b_id IS NOT NULL
 			   AND (entrant_a_id=? OR entrant_b_id=?) LIMIT 1`, tid, byeID, byeID).
 			Scan(&mid, &a, &b, &fwM, &fwS, &flM, &flS)

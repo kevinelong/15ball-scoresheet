@@ -52,3 +52,28 @@ See also: [03-state-machines.md](./03-state-machines.md), [04-api-contracts.md](
 28. Retryable provider errors back off and eventually recover.
 29. Permanent provider errors mark job failed and emit audit + SSE notification.
 30. Tests verify no live external mutations (fake provider only).
+
+## H. Bracket generation (format-driven)
+
+The generator is chosen from the primary division's `format` on the
+`registration_closed → in_progress` transition (`tournaments.go: PatchTournament`):
+`double_elimination` (default when a division has no format) or
+`single_elimination`.
+
+31. **Single elimination sizes the field to the next power of two**: a 6-player
+    `single_elimination` division yields a size-8 bracket (W1: 4, W2: 2, W3: 1 = 7
+    matches) with 2 byes, no losers-bracket and no grand-final match, and every
+    match carries a NULL `bracket` (which is what routes its result down the
+    single-elimination advancement path).
+    (`bracket_single_test.go: TestSingleElimStructure6`)
+32. **No checked-in entrant is dropped**: for n = 3, 5, 7 every entrant appears in
+    a match (the unpaired seeds become archived BYE placeholders inserted at the
+    `seedOrder` position), the byes auto-resolve at generation so exactly n−1
+    matches are played, and the tournament plays through to `completed`.
+    (`bracket_single_test.go: TestSingleElimNoEntrantDropped`)
+33. **Double elimination keeps its shape**: 4- and 8-player structures, full
+    playthrough, a GF2 reset when the losers champ wins GF1, and 3-player byes.
+    (`bracket_double_test.go`)
+34. **A 2-player double-elimination field degrades to one decisive match**: the
+    double-elimination generator hands fields smaller than 3 to the single
+    generator. (`matches_test.go: TestBracketGenerationAndMatchFlow`)

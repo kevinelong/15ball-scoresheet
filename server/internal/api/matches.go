@@ -59,40 +59,65 @@ func (api *API) getMatch(ctx context.Context, tid, mid string) (*Match, error) {
 	return scanMatch(row)
 }
 
-// generateBracket creates round-1 single-elimination matches from checked-in
-// entrants (seeded by registration order). Byes for an odd count are resolved by
-// bracket advancement in Slice E. Runs inside the caller's transaction.
+// generateBracket builds the winners-only single-elimination graph from a
+// tournament's checked-in entrants. The field is sized up to nextPow2 and
+// unpaired seeds become BYE placeholders that resolveByes auto-advances, so every
+// checked-in entrant is in the bracket and none is ever dropped. Every round is
+// created up front with winner edges, and the last W match is the decisive final
+// (advanceBracket then has nowhere to send its winner).
+//
+// These matches carry a NULL `bracket` — that column is the double-elimination
+// tag — which is what routes their results down the single-elimination
+// advancement path in SubmitResult.
+//
+// Runs inside the caller's transaction.
 func (api *API) generateBracket(ctx context.Context, tx *sql.Tx, tid string) (int, error) {
-	rows, err := tx.QueryContext(ctx,
-		`SELECT id FROM entrants WHERE tournament_id=? AND state='checked_in' AND archived_at IS NULL
-		 ORDER BY (seed IS NULL), seed ASC, (fargo IS NULL), fargo DESC, created_at, id`, tid)
+	ent, err := api.checkedInEntrantIDs(ctx, tx, tid)
 	if err != nil {
 		return 0, err
 	}
-	var ids []string
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			rows.Close()
-			return 0, err
-		}
-		ids = append(ids, id)
+	if len(ent) == 0 {
+		return 0, nil
 	}
-	rows.Close()
 	now := time.Now().Unix()
-	created, slot := 0, 0
-	for i := 0; i+1 < len(ids); i += 2 {
-		a, b := ids[i], ids[i+1]
+	slots, err := api.seedField(ctx, tx, tid, "", ent, now)
+	if err != nil {
+		return 0, err
+	}
+
+	ids := map[string]string{} // label -> match id
+	idFor := func(l string) string {
+		if ids[l] == "" {
+			ids[l] = newID("mch_")
+		}
+		return ids[l]
+	}
+	byLabel := map[string]*mrec{}
+	var recs []*mrec
+	add := func(r *mrec) *mrec {
+		r.fwSlot, r.flSlot = -1, -1
+		recs = append(recs, r)
+		byLabel[r.label] = r
+		idFor(r.label)
+		return r
+	}
+	buildWinnersRounds(add, idFor, byLabel, len(slots), slots)
+
+	for _, r := range recs {
 		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO matches (id, tournament_id, bracket_round, slot, entrant_a_id, entrant_b_id, state, created_at, updated_at)
-			 VALUES (?,?,1,?,?,?, 'scheduled', ?, ?)`,
-			newID("mch_"), tid, slot, a, b, now, now); err != nil {
+			`INSERT INTO matches (id, tournament_id, bracket, match_label, bracket_round, slot,
+			   entrant_a_id, entrant_b_id, state, feeds_winner_match, feeds_winner_slot, created_at, updated_at)
+			 VALUES (?,?,NULL,?,?,?,?,?, 'scheduled', ?,?,?,?)`,
+			ids[r.label], tid, r.label, r.round, r.slot,
+			nullIfEmpty(r.a), nullIfEmpty(r.b), nullIfEmpty(r.fwMatch), nullSlot(r.fwSlot),
+			now, now); err != nil {
 			return 0, err
 		}
-		slot++
-		created++
 	}
-	return created, nil
+	if err := api.resolveByes(ctx, tx, tid); err != nil {
+		return 0, err
+	}
+	return len(recs), nil
 }
 
 // ListMatches: GET /api/v1/tournaments/{id}/matches (authenticated).

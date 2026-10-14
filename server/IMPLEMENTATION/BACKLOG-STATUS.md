@@ -77,3 +77,16 @@ Legend: [ ] todo · [~] in progress · [x] done+deployed.
       routes W-losers to the losers bracket and eliminates only on losers/GF losses.
       Tests: structure (4/8-player), full playthrough, GF2 reset, byes (3-player).
       Deployed (migration 0010). Remaining scope-B: additional disciplines (game types).
+- [x] Slice M — single-elimination field sizing + byes (server + console). The
+      single-elimination generator paired only complete pairs, so a non-power-of-two
+      field silently **dropped its last checked-in entrant**, never sized itself to a
+      power of two, and `resolveByes` never saw those matches (its predicate was
+      `bracket IN ('W','L')`, and single-elim matches carry a NULL bracket). Now the
+      field is seeded through the shared `seedField`/`buildWinnersRounds` helpers
+      (nextPow2 + archived BYE placeholder at the `seedOrder` position), every round
+      is created up front with `feeds_winner_*` edges, and single-elim byes resolve.
+      The console gained `single_elim` (real single elimination) beside the shipped
+      `single` (single final) and `double`, exposed as a third option in the create
+      form. Tests: `bracket_single_test.go` (structure, n=3/5/7 no-drop playthrough),
+      `bracket.test.js` (spec, scale pinning, recordWinner refusals).
+      Implemented + tested locally; **not deployed** from this branch.
