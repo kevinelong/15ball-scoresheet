@@ -36,18 +36,19 @@
     var n = GAME_DEFAULT_RACE[Sheets.id(game)];
     return n != null ? n : 25;
   }
-  // The race printed on the sheet and where it came from. The bracket carries it
-  // (`match.raceTo`); only a match the server did not resolve (an older server, no
-  // raceTo at all) falls back to the game's local default — never invented.
+  // The race printed on the sheet and where the scorer got it (`raceOrigin` on the record —
+  // not the match payload's `raceFrom`, which names the layer the server resolved).
+  // The bracket carries it (`match.raceTo`); only a match the server did not resolve (an
+  // older server, no raceTo at all) falls back to the game's local default — never invented.
   function raceOf(game, match) {
     var n = (match && match.raceTo !== undefined && match.raceTo !== null) ? parseInt(match.raceTo, 10) : NaN;
-    if (!isNaN(n)) return { raceTo: n, raceFrom: SheetPayload.FROM_BRACKET };
-    return { raceTo: localRaceTo(game), raceFrom: SheetPayload.FROM_LOCAL };
+    if (!isNaN(n)) return { raceTo: n, raceOrigin: SheetPayload.FROM_BRACKET };
+    return { raceTo: localRaceTo(game), raceOrigin: SheetPayload.FROM_LOCAL };
   }
   function raceHead(game) { return Sheets.isRack(game) ? 'Points to ' : 'Race to '; }
-  function raceLabelText(game, raceTo, raceFrom) {
+  function raceLabelText(game, raceTo, raceOrigin) {
     return raceHead(game) + raceTo + ' \u00b7 ' +
-      (raceFrom === SheetPayload.FROM_LOCAL ? 'local default' : 'from the bracket');
+      (raceOrigin === SheetPayload.FROM_LOCAL ? 'local default' : 'from the bracket');
   }
   function gameLabel(id) { return id ? (GAME_LABELS[id] || id) : ''; }
   function venueClub(t) { var p = []; if (t.club) p.push(t.club); if (t.venue) p.push(t.venue); return p.join(' · '); }
@@ -667,7 +668,7 @@
     var a = m.entrantAId, b = m.entrantBId;
     state.sheet = {
       mode: 'edit', mid: mid, game: game, spec: spec, isRack: isRack,
-      a: a, b: b, raceTo: race.raceTo, raceFrom: race.raceFrom,
+      a: a, b: b, raceTo: race.raceTo, raceOrigin: race.raceOrigin,
       winner: winnerEntrantId === b ? 'B' : (winnerEntrantId === a ? 'A' : null),
       racks: racks, tally: { A: 0, B: 0 }, busy: false, versions: null, selected: 0, loading: false
     };
@@ -686,7 +687,7 @@
     sheetTitleEl.innerHTML = esc(gameLabel(s.game));
     sheetNamesEl.innerHTML = esc(nm(s.a)) + ' <span class="muted">vs</span> ' + esc(nm(s.b));
     sheetRaceEl.innerHTML = '<b>' + esc(raceHead(s.game) + s.raceTo) + '</b> <span class="sheet-src">' +
-      (s.raceFrom === SheetPayload.FROM_LOCAL ? 'local default' : 'from the bracket') + '</span>';
+      (s.raceOrigin === SheetPayload.FROM_LOCAL ? 'local default' : 'from the bracket') + '</span>';
     sheetBodyEl.innerHTML = renderSheetBody(s);
     sheetWinnerEl.innerHTML = renderWinnerBox(s);
     sheetStackEl.innerHTML = '';
@@ -745,7 +746,7 @@
 
   function renderTallyBody(s) {
     var h = '<div class="sheet-race"><div class="sheet-racehead">' +
-      esc(raceLabelText(s.game, s.raceTo, s.raceFrom)) + '</div>';
+      esc(raceLabelText(s.game, s.raceTo, s.raceOrigin)) + '</div>';
     [['A', s.a], ['B', s.b]].forEach(function (p) {
       var side = p[0];
       h += '<div class="sheet-racer' + (s.winner === side ? ' win' : '') + '">' +
@@ -836,7 +837,7 @@
         game: state.t.game,
         sheet: collectedSheet(s),
         raceTo: s.raceTo,
-        raceFrom: s.raceFrom,
+        raceOrigin: s.raceOrigin,
         names: { a: nm(s.a), b: nm(s.b) },
         app: SHEET_APP,
         appVersion: SHEET_APP_VERSION
@@ -868,7 +869,7 @@
     var race = raceOf(state.t.game, m);
     state.sheet = {
       mode: 'stack', mid: mid, game: state.t.game, isRack: Sheets.isRack(state.t.game),
-      a: m.entrantAId, b: m.entrantBId, raceTo: race.raceTo, raceFrom: race.raceFrom,
+      a: m.entrantAId, b: m.entrantBId, raceTo: race.raceTo, raceOrigin: race.raceOrigin,
       versions: null, selected: 0, loading: true, busy: false
     };
     renderSheet();
@@ -894,7 +895,7 @@
     sheetTitleEl.innerHTML = 'Saved sheets';
     sheetNamesEl.innerHTML = esc(nm(s.a)) + ' <span class="muted">vs</span> ' + esc(nm(s.b));
     sheetRaceEl.innerHTML = '<b>' + esc(raceHead(s.game) + s.raceTo) + '</b> <span class="sheet-src">' +
-      (s.raceFrom === SheetPayload.FROM_LOCAL ? 'local default' : 'from the bracket') + '</span>';
+      (s.raceOrigin === SheetPayload.FROM_LOCAL ? 'local default' : 'from the bracket') + '</span>';
     sheetWinnerEl.innerHTML = '';
     if (s.loading) { sheetBodyEl.innerHTML = '<p class="muted">Loading…</p>'; sheetStackEl.innerHTML = ''; return; }
     if (!s.versions || !s.versions.length) {
@@ -915,7 +916,7 @@
     h += '<div class="sheet-readline">' + esc(SheetPayload.summary(view)) + '</div>';
     h += '<div class="sheet-readmeta">' + esc(SheetPayload.instrument(view));
     if (view.raceTo !== null && view.raceTo !== undefined) {
-      h += ' \u00b7 ' + esc(raceLabelText(view.discipline || state.sheet.game, view.raceTo, view.raceFrom));
+      h += ' \u00b7 ' + esc(raceLabelText(view.discipline || state.sheet.game, view.raceTo, view.raceOrigin));
     }
     h += '</div>';
     h += '<div class="sheet-readnames">' + esc(view.names.a || '\u2014') + ' <span class="muted">vs</span> ' + esc(view.names.b || '\u2014') + '</div>';

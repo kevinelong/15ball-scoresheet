@@ -230,8 +230,13 @@ const playedMatch = [
   { id: "m1", matchLabel: "W1M1", bracket: null, bracketRound: 1, slot: 0, state: "completed", entrantAId: "e1", entrantBId: "e2", winnerEntrantId: "e1", raceTo: 11 }
 ];
 const history = { versions: [
+  // v1, saved before the rename: the origin lives under the old `raceFrom` key (the word the
+  // match payload uses for the layer), which the reader must still map — so this fixture is
+  // deliberately NOT updated when the record's key changes. Its raceTo equals the match's, so
+  // an unmapped `local` would be inferred as "bracket" and its label would read "from the
+  // bracket": the console test below turns on exactly that difference. res_2 is the phone's.
   { id: "res_1", resultVersion: 1, winnerEntrantId: "e1", loserEntrantId: "e2",
-    payload: { payloadVersion: 1, sheetKind: "tally", discipline: "9ball", measure: "wins", raceTo: 11, raceFrom: "bracket",
+    payload: { payloadVersion: 1, sheetKind: "tally", discipline: "9ball", measure: "wins", raceTo: 11, raceFrom: "local",
                finals: { a: 11, b: 4 }, winner: "A", names: { a: "Ada", b: "Bo" }, app: "score-console", appVersion: "1.0.0" },
     submittedByEmail: "dir@club.test", submittedAt: 1700000000, supersededBy: "" },
   { id: "res_2", resultVersion: 2, winnerEntrantId: "e1", loserEntrantId: "e2",
@@ -339,7 +344,7 @@ const draftTournament = { id: "t1", slug: "race-cup", name: "Race Cup", game: "9
     eq(c.calls.submitResult.length, 1, "and its Save records the result — one submit");
   });
 
-  await test("console: a match with no raceTo falls back to the game default and records raceFrom local", async () => {
+  await test("console: a match with no raceTo falls back to the game default and records the origin local", async () => {
     const c = loadConsole({ tournament: nineTournament, entrants, matches: nineNoRace });
     await settle();
     const slot = findButton(c.app(), (a) => a["data-action"] === "sheet" && a["data-w"] === "e1");
@@ -352,7 +357,8 @@ const draftTournament = { id: "t1", slug: "race-cup", name: "Race Cup", game: "9
     assert(c.calls.submitResult.length === 1, "one submit");
     const rec = c.calls.submitResult[0].body.score;
     eq(rec.raceTo, 7, "the local default is echoed on the record");
-    eq(rec.raceFrom, "local", "and labelled local");
+    eq(rec.raceOrigin, "local", "and labelled local");
+    eq(rec.raceFrom, undefined, "the record never uses the match payload's raceFrom key");
   });
 
   await test("console: Save submits exactly one result whose record is the sheet", async () => {
@@ -369,12 +375,13 @@ const draftTournament = { id: "t1", slug: "race-cup", name: "Race Cup", game: "9
     eq(body.winnerEntrantId, "e2", "the tapped player's slot is the winner");
     eq(body.loserEntrantId, "e1", "the other is the loser");
     const rec = body.score;
-    eq(rec.payloadVersion, 1);
+    eq(rec.payloadVersion, 2, "the record is v2 (raceOrigin, not the match payload's raceFrom)");
     eq(rec.sheetKind, "tally");
     eq(rec.discipline, "9ball");
     eq(rec.measure, "wins");
     eq(rec.raceTo, 11);
-    eq(rec.raceFrom, "bracket");
+    eq(rec.raceOrigin, "bracket");
+    eq(rec.raceFrom, undefined, "the record carries no raceFrom key of its own");
     deepEq(rec.finals, { a: 3, b: 0 });
     eq(rec.winner, "B");
     eq(rec.app, "score-console");
@@ -442,9 +449,13 @@ const draftTournament = { id: "t1", slug: "race-cup", name: "Race Cup", game: "9
     // The newest version is selected by default: the phone's tally, 11–9.
     assert(c.sheetBody().indexOf("11\u20139") !== -1, "the phone payload reads as a tally: " + c.sheetBody());
     assert(c.sheetBody().indexOf("tally") !== -1, "…and says so: " + c.sheetBody());
-    // Selecting the older version shows that version's sheet.
+    // Selecting the older version shows that version's sheet — a v1 record whose origin sits
+    // under the legacy `raceFrom` key. Its own label is the assertion: the same record with the
+    // key ignored would be inferred as "from the bracket" (its raceTo matches the match's).
     c.click({ "data-action": "stack-version", "data-v": "1" });
     assert(c.sheetBody().indexOf("11\u20134") !== -1, "the older sheet is shown: " + c.sheetBody());
+    assert(c.sheetBody().indexOf("local default") !== -1,
+      "a legacy-keyed record still reads its origin, not a guessed one: " + c.sheetBody());
     // Closing repaints the bracket, where the control now knows its count.
     c.click({ "data-action": "sheet-close" });
     assert(c.app().indexOf("Sheets (2)") !== -1, "the control shows the count once known: " + c.app().slice(0, 500));

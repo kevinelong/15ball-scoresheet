@@ -56,13 +56,15 @@ PRs that change behavior without docs/tests updates are incomplete.
   `scanMatch`/`scanDivision`, so every match-serialising surface (list, submit response,
   snapshot, overlay) reports it. Scenarios 49–54; tests in
   `internal/api/race_to_test.go`.
-- **The sheet is one record, and the read side is the stack.** `GET …/matches/{matchId}/history`
-  now returns each version's `payload` (the `payload_json` that version wrote) and
-  `submittedByEmail`; the live console builds the record with `sheet-payload.js`, submits it
-  once per result through the existing endpoint with an `Idempotency-Key`, and lists the
-  saved sheets newest first with who and when. The one-tap "record this player as the winner"
-  control is gone — the sheet is the record, so the sheet is what submits (and an
-  `in_progress` match, the state the endpoint takes, now opens it).
+- **The sheet is one record, and the read side is the stack.** `sheet-payload.js` defines the
+  record (payloadVersion 2; `raceOrigin` is the record's own key — see the field-name warning
+  below), the live console builds it with `sheet-payload.js` and submits it
+  once per result through the existing endpoint with an `Idempotency-Key`, and
+  `GET …/matches/{matchId}/history` now returns each version's `payload` (the `payload_json`
+  that version wrote) and `submittedByEmail`, which the console lists newest first with who
+  and when. The one-tap "record this player as the winner" control is gone — the sheet is the
+  record, so the sheet is what submits (and an `in_progress` match, the state the endpoint
+  takes, now opens it).
 - **Frontend corrections.** 15-Ball Rotation got its own hint and targets (25/50, "a 4-rack
   sheet tops out at 60 balls") instead of 14.1's copied line; 14.1 stopped advertising 150;
   One Pocket's match-race and 8-balls-in-your-own-pocket rules are separate lines; the 14.1
@@ -74,11 +76,20 @@ PRs that change behavior without docs/tests updates are incomplete.
 `discipline` and `app: "score-android"`, but its number is a plain games tally, not a rack
 sheet. A reader must therefore treat a `payload_json` with `app === "score-android"` and no
 `sheetKind` as `sheetKind: "tally"`, and its hand-typed race/goals as an explicit
-`raceFrom: "override"` rather than the normal path (the scorer reads the race from the
-bracket). When the phone next ships it SHOULD add `sheetKind: "tally"` and `payloadVersion`
-to its payload; until then the console infers both and the record stays legible. The record
-shape is `DECISIONS/023-sheet-stack.md` / `sheet-payload.js`; nothing in the Android repo was
-touched by this turn.
+`raceOrigin: "override"` rather than the normal path (the scorer reads the race from the
+bracket). When the phone next ships it SHOULD add `sheetKind: "tally"`, `payloadVersion` and
+`raceOrigin` to its payload, keeping `raceSource` for the *layer* only (`match` | `division` |
+`default` | `none`) and `bracketRaceTo` for the value the bracket named even when the scorer
+overrode it; until then the console infers the tally and the origin and the record stays
+legible. The record shape is `DECISIONS/023-sheet-stack.md` / `sheet-payload.js`; nothing in
+the Android repo was touched by this turn.
+
+**Field-name warning, once:** two fields on two objects mean different things.
+`raceFrom` is the **match payload's** *layer* (`match` | `division` | `default`,
+`resolveRaceTo`). `raceOrigin` is the **saved-sheet record's** *provenance*
+(`bracket` | `local` | `override` | `unknown`). The record's key was `raceFrom` in
+payloadVersion 1; v2 renamed it and `SheetPayload.read()` still maps the old key, so a v1
+sheet already saved on a device reads its real origin (a v1 `"local"` stays `local`).
 
 Last shipped (branch `test-coverage-hardening`, tip `1d6e753`, on `main`):
 

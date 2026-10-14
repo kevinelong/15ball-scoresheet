@@ -131,9 +131,12 @@ clean). The review-flag and single-elimination work is covered by scenarios 31�
   Scoring a match submits **one sheet record** through the existing
   `POST …/matches/{matchId}/result` (`sheet-payload.js` builds it; the payload carries the
   payload version, the discipline, the measurement, the goals, the race as printed on the
-  sheet, the per-rack detail for a rack discipline, the finals, the winner, the app and its
-  version — and `sheetKind`, which names the instrument that produced the number: `rack` or
-  `tally`). Results stay append-only and versioned, so the match's history **is** the stack:
+  sheet plus `raceOrigin` — *how the scorer got it*: `bracket` | `local` | `override` |
+  `unknown`, which is a different question from the match payload's `raceFrom`, *which layer
+  supplied it*: `match` | `division` | `default` — the per-rack detail for a rack discipline,
+  the finals, the winner, the app and its version — and `sheetKind`, which names the
+  instrument that produced the number: `rack` or `tally`). Results stay append-only and
+  versioned, so the match's history **is** the stack:
   `GET …/matches/{matchId}/history` returns each saved sheet with its payload, who saved it
   (`submittedByEmail`) and when, and the console lists them newest first and shows the
   selected version. A correction is a new version (reopen → re-submit), never a rewrite.

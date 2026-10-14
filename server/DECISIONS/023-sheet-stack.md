@@ -54,7 +54,23 @@ saved it and when.**
   only — an open scoring link must not retune the race).
 - **A scorer never invents a race.** The console reads it from the match payload; only a
   match the server did not resolve at all (an older server) falls back to the game's local
-  default, and the sheet then records `raceFrom: "local"`.
+  default, and the sheet then records `raceOrigin: "local"`.
+- **Two fields about the race, named alike, meaning different things — the trap, written
+  down once.** A reader conflated them, which is why the record's key moved:
+
+  | field | where it lives | it answers | values |
+  |---|---|---|---|
+  | `raceFrom` | the **match payload** (the server's `resolveRaceTo`) | which *layer* supplied the number | `match` \| `division` \| `default` |
+  | `raceOrigin` | the **saved-sheet record** (`sheet-payload.js`) | how the *scorer* got the number | `bracket` \| `local` \| `override` \| `unknown` |
+
+  The record's key was `raceFrom` in **payloadVersion 1**, which is what made the collision
+  possible; v2 renamed it to `raceOrigin` and changed nothing else. `read()` still accepts
+  the v1 key and maps it to `raceOrigin`, so a sheet already saved on a device reads back
+  with its real origin (a v1 `"local"` stays `local`, rather than being inferred as
+  `bracket` or showing `unknown`); a record carrying both keys is read by `raceOrigin`. The
+  phone's half of the same split: it writes `raceOrigin`, keeps `raceSource` for the layer
+  only (`match` | `division` | `default` | `none`) and `bracketRaceTo` for the value the
+  bracket named even when the scorer overrode it.
 
 ### The sheet is one record
 
@@ -63,13 +79,13 @@ carries when a console records a match:
 
 | field | meaning |
 |---|---|
-| `payloadVersion` | 1; bumped when a reader must change to keep reading |
+| `payloadVersion` | 2; bumped when a reader must change to keep reading (1 → 2 is the `raceFrom` → `raceOrigin` rename) |
 | `kind` | the sheet body the discipline calls for: `rack` \| `race` (= `Sheets.kind()`) |
 | `sheetKind` | the **instrument** that produced the number: `rack` \| `tally` |
 | `discipline` | canonical id (`15ball_rotation`, `straight_14_1`, `9ball`, …) |
 | `measure` | `balls` \| `wins` |
 | `goals` | a rack discipline's usual targets; empty for a tally (its goal is its race) |
-| `raceTo`, `raceFrom` | the race as printed on the sheet (a snapshot) and where it came from (`bracket` \| `local` \| `override`) |
+| `raceTo`, `raceOrigin` | the race as printed on the sheet (a snapshot) and how the scorer got it (`bracket` \| `local` \| `override` \| `unknown`) |
 | `racks` | per rack, per side: the balls marked, fouls, and the two numbers the paper sheet adds up (`made`, `net`); a tally carries no `racks` at all |
 | `racksPlayed`, `ballsPerRack` | what the rack grid covered |
 | `finals` | `{a, b}` |
@@ -103,9 +119,13 @@ carries when a console records a match:
 `sheetKind` says what produced the number. The Android app posts `discipline` and
 `app: "score-android"` but its number is a plain games tally, not a rack sheet, and it has
 no `sheetKind`: the console reads such a payload as a **tally** (and its hand-typed race as
-an explicit `override`) instead of guessing it is a grid. The convention for the phone —
-add `sheetKind: "tally"` (and `payloadVersion`) when it next ships — is documented in
-`server/AGENTS.md`; the Java app is unchanged.
+an explicit `raceOrigin: "override"`) instead of guessing it is a grid. The convention for
+the phone — write `sheetKind: "tally"`, `payloadVersion` and `raceOrigin`, keep
+`raceSource` for the layer (`match` | `division` | `default` | `none`) and `bracketRaceTo`
+for the value the bracket named — is documented in `server/AGENTS.md`; the Java app is
+unchanged. The phone's half is also why the record's own key had to stop being `raceFrom`:
+the phone's `raceSource` is the layer, so the layer word belongs to the wire that resolves
+it.
 
 ### Bracket and overlay stay win/loss only
 
@@ -132,9 +152,11 @@ handed carries one).
 ## Test coverage required
 
 - `sheet-payload.test.js` (new): the record's shape for both instruments (a rack record
-  carries per-rack detail, a tally carries none), canonical ids, race snapshot + origin,
-  the Android payload read as a tally, an empty/unknown winner never guessed, junk payloads
-  read without throwing, and the stack's one-line wording.
+  carries per-rack detail, a tally carries none), the record's own `raceOrigin` key (never
+  the match payload's `raceFrom`), v2, canonical ids, race snapshot + origin, a v1 sheet read
+  by the legacy key (a `"local"` origin stays `local`), the Android payload read as a tally,
+  an empty/unknown winner never guessed, junk payloads read without throwing, and the stack's
+  one-line wording.
 - `live-console.test.js`: the tally's target and label come from the **match payload**, a
   match the server did not resolve falls back to the local default and says so, no result is
   submitted without a sheet, one Save submits exactly one result with the right record (and
@@ -155,4 +177,7 @@ Every new guard was broken, shown red, and restored: the resolution's match laye
 division's explicit-null clear; the director-only match patch; the record's `sheetKind`; the
 no-score bracket card; the overlay's win/loss-only slot; the tally reading the local default
 instead of the match; a result submitted without a sheet; the busy guard; the stack's
-ordering; the reachability of the advertised targets.
+ordering; the reachability of the advertised targets; the record's own `raceOrigin` key
+(adding `raceFrom` back to the record turns both the module and the console red); the v1
+legacy-key mapping (dropping it makes a saved `local` sheet read as "from the bracket" — the
+exact misreading the rename fixes); and the version bump.

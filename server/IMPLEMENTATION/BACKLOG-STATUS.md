@@ -146,10 +146,14 @@ Legend: [ ] todo · [~] in progress · [x] done+deployed.
       open-scoring group, absent ≠ null. Resolution lives in `scanMatch`/`scanDivision`, so
       every surface (list, submit response, snapshot) reports it; `MatchHistory` versions now
       carry `payload` + `submittedByEmail`. **The sheet is one record**: `sheet-payload.js`
-      (new) defines the payload the result endpoint stores verbatim — payload version, kind
+      (new) defines the payload the result endpoint stores verbatim — payload version 2 (v1
+      sheets, whose origin key was the match payload's `raceFrom` word, still read: the reader
+      maps the old key), kind
       (rack/race) and `sheetKind` (the instrument: rack/tally), discipline, measure, goals,
-      the race snapshot + its origin, per-rack detail where the discipline has racks, finals,
-      winner, names, app + version — and the live console submits it once per result behind an
+      the race snapshot + its `raceOrigin` (the record's own key — the match payload's
+      `raceFrom` is the *layer*, `match`|`division`|`default`), per-rack detail where the
+      discipline has racks, finals, winner, names, app + version — and the live console
+      submits it once per result behind an
       `Idempotency-Key` (the one-tap winner control is gone; the sheet is the record, and an
       `in_progress` match opens it). The stack is the read side: the console lists a played
       match's saved sheets newest first with who saved them and when and shows the selected
