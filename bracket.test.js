@@ -8,6 +8,10 @@ function assert(cond, msg) {
   else console.log(" ok ", msg);
 }
 
+function throws(fn) {
+  try { fn(); return false; } catch (e) { return true; }
+}
+
 // --- N=2 ---
 {
   const s = B.build([{ name: "A" }, { name: "B" }], { format: "double" });
@@ -82,6 +86,32 @@ function assert(cond, msg) {
   assert(s.champion && !s.champion.isBye && s.champion.name === final.slots[final.winner].name,
     "exactly one champion: the decisive final's winner");
   assert(s.wFinalId === "W3M1", "the decisive final is the last W round");
+}
+
+// --- recordWinner refuses what the server refuses (validPair / Match.set_winner) ---
+// Python's Match.set_winner raises ValueError for a winner who is not one of the
+// match's players; the server's validPair rejects an empty/unknown pair with 400.
+// Both refusals must leave the bracket untouched.
+{
+  const s = B.build([{ name: "A" }, { name: "B" }, { name: "C" }], { format: "single_elim" });
+  const byeMatch = Object.values(s.matches).find(m => m.resolvedAutoBye);
+  const byeSlot = byeMatch.slots[0].isBye ? 0 : 1;
+  assert(throws(() => B.recordWinner(s, byeMatch.id, byeSlot)), "recordWinner refuses a BYE slot");
+  assert(byeMatch.winner !== byeSlot, "refusing a BYE slot does not crown the bye");
+
+  // The final is still empty in a 3-player field: nothing can be recorded there.
+  const openMatch = Object.values(s.matches).find(m => m.winner === null && m.slots.some(sl => !sl));
+  assert(!!openMatch, "a 3-player single_elim field leaves an open match after the bye");
+  const emptySlot = openMatch.slots.findIndex(sl => !sl);
+  assert(throws(() => B.recordWinner(s, openMatch.id, emptySlot)), "recordWinner refuses an empty slot");
+  assert(openMatch.winner === null, "refusing an empty slot does not mutate the match");
+
+  assert(throws(() => B.recordWinner(s, "W9M9", 0)), "recordWinner refuses an unknown matchId");
+  assert(s.champion === null, "a refused call never crowns a champion");
+
+  const d = B.build([{ name: "A" }, { name: "B" }], { format: "double" });
+  assert(throws(() => B.recordWinner(d, "W1M1", 7)), "recordWinner refuses an out-of-range slot index");
+  assert(d.matches["W1M1"].winner === null, "out-of-range refusal does not mutate the match");
 }
 
 // --- N=6 double: run through, prove GF2 gets seeded when L-champ wins GF1 ---

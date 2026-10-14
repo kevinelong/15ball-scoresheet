@@ -1078,7 +1078,10 @@
     const ordered = window.BracketEngine.matchesInOrder(t.bracket);
     ordered.forEach((m) => {
       const sh = t.sheets[m.id];
-      if (sh && sh.winner) {
+      // recordWinner refuses an empty or BYE slot, and a rebuilt bracket can
+      // reshape a sheet's match (a late entry turns a bye into a real game), so
+      // only replay a decided sheet onto a match that is playable now.
+      if (sh && sh.winner && window.BracketEngine.isMatchReady(m)) {
         const winnerSlot = sh.winner === "A" ? 0 : 1;
         window.BracketEngine.recordWinner(t.bracket, m.id, winnerSlot, { score: `${sh.finalA}-${sh.finalB}` });
       }

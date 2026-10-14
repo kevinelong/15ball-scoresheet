@@ -22,6 +22,8 @@
    API:
      BracketEngine.build(participants, options)  \u2192 tournament state
      BracketEngine.recordWinner(state, matchId, winnerSlotIdx) \u2192 mutated state
+       Throws on an unknown matchId, a slot index other than 0/1, or a slot that
+       is empty or the BYE placeholder (a winner must be a real entrant).
      BracketEngine.matchesInOrder(state)  \u2192 ordered array for rendering
 */
 
@@ -376,7 +378,20 @@
 
   function recordWinner(state, matchId, winnerSlotIdx, opts) {
     const match = state.matches[matchId];
-    if (!match) return state;
+    if (!match) {
+      throw new Error("recordWinner: unknown match " + matchId);
+    }
+    if (winnerSlotIdx !== 0 && winnerSlotIdx !== 1) {
+      throw new Error("recordWinner: winnerSlotIdx must be 0 or 1 (got " + winnerSlotIdx + ")");
+    }
+    const winnerSlot = match.slots[winnerSlotIdx];
+    if (!winnerSlot || winnerSlot.isBye) {
+      // Mirrors Match.set_winner (ValueError) and the server's validPair (400):
+      // a winner is one of this match's two real entrants -- never an empty slot
+      // and never the BYE placeholder.
+      throw new Error("recordWinner: slot " + winnerSlotIdx + " of " + matchId + " is " +
+        (winnerSlot ? "the BYE placeholder" : "empty"));
+    }
     const previousWinner = match.winner;
     match.winner = winnerSlotIdx;
     if (opts && typeof opts.score === "string") match.score = opts.score;
