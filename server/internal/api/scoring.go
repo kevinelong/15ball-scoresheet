@@ -181,9 +181,10 @@ func (api *API) ReopenMatch(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// advanceBracket moves the winner into the next round. If the current round has a
-// single match it is the final (no advancement). Byes for non-power-of-2 fields
-// are a later refinement.
+// advanceBracket moves a single-elimination winner into the next round. If the
+// current round has a single match it is the final, so there is nothing to advance
+// to and its winner stands as champion. Non-power-of-two fields are handled at
+// generation time (generateBracket seeds BYEs and resolveByes advances them).
 func (api *API) advanceBracket(ctx context.Context, tx *sql.Tx, m *Match, winnerID string) error {
 	var roundCount int
 	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM matches WHERE tournament_id=? AND bracket_round=?`, m.TournamentID, m.BracketRound).Scan(&roundCount); err != nil {
@@ -193,15 +194,16 @@ func (api *API) advanceBracket(ctx context.Context, tx *sql.Tx, m *Match, winner
 		return nil // final: winner is champion
 	}
 	nextRound := m.BracketRound + 1
-	nextSlot := m.Slot / 2
-	col := "entrant_a_id"
-	if m.Slot%2 == 1 {
-		col = "entrant_b_id"
-	}
+	nextSlot := m.Slot / 2  // the next round's row this match feeds into
+	feedSlot := m.Slot % 2  // which of that match's two feeds this one occupies
 	var nextID string
 	err := tx.QueryRowContext(ctx, `SELECT id FROM matches WHERE tournament_id=? AND bracket_round=? AND slot=?`, m.TournamentID, nextRound, nextSlot).Scan(&nextID)
 	now := time.Now().Unix()
 	if errors.Is(err, sql.ErrNoRows) {
+		col := "entrant_a_id"
+		if feedSlot == 1 {
+			col = "entrant_b_id"
+		}
 		_, err = tx.ExecContext(ctx,
 			`INSERT INTO matches (id, tournament_id, bracket_round, slot, `+col+`, state, created_at, updated_at)
 			 VALUES (?,?,?,?,?, 'scheduled', ?, ?)`,
@@ -211,8 +213,7 @@ func (api *API) advanceBracket(ctx context.Context, tx *sql.Tx, m *Match, winner
 	if err != nil {
 		return err
 	}
-	_, err = tx.ExecContext(ctx, `UPDATE matches SET `+col+`=?, updated_at=? WHERE id=?`, winnerID, now, nextID)
-	return err
+	return api.advanceSlot(ctx, tx, m.TournamentID, nextID, feedSlot, winnerID)
 }
 
 func validPair(m *Match, winner, loser string) bool {

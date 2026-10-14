@@ -31,7 +31,7 @@ States: `pending` → `registered` → `checked_in` → (`eliminated` or `withdr
 
 ## Match state machine
 
-States: `scheduled` → `assigned` → `in_progress` → `completed`; correction path `completed` → `reopened` → `in_progress|completed`.
+States: `scheduled` → `assigned` → `in_progress` → `completed`; correction path `completed` → `reopened` → `in_progress|completed`. A `completed` or `reopened` match may additionally carry the review flag described after the table (it is not a state).
 
 | From | To | Allowed roles | Guards | Side effects | Invalid examples |
 |---|---|---|---|---|---|
@@ -42,7 +42,39 @@ States: `scheduled` → `assigned` → `in_progress` → `completed`; correction
 | reopened | in_progress | system_admin, club_admin, tournament_director, assigned scorekeeper | assignment active or reassigned | audit + SSE | start without assignment |
 | reopened/in_progress | completed | system_admin, club_admin, tournament_director, assigned scorekeeper | result payload valid | append next immutable result version + audit + outbox enqueue | overwrite prior result row |
 
-### General transition invariants
+### Match review flag (`matches.needs_review`)
+
+A persistent flag on a `completed` or `reopened` match, for the case a director
+reopens an upstream match whose winner has already played downstream. It is not a
+state: the match keeps its state, its result rows and its winner. Decision:
+OPEN-QUESTIONS, "Reopening an upstream match whose winner already played downstream"
+— option 3 (allow the reopen, keep the played result, record the inconsistency).
+
+- **Set** when a corrected upstream result reaches this match after it was played.
+  Bracket propagation (`advanceDouble`, `advanceBracket`, `resolveByes`) writes the
+  slot — without that the corrected pairing could not be replayed at all — leaves the
+  recorded result, the state and the winner untouched, and flags the match with an
+  audit row (`match: review_required`, carrying the incoming entrant, slot and label)
+  and an SSE event (`match.review_required`) in the same transaction.
+  While the flag is set, the match's recorded winner may **not** be one of its two
+  participants: that is precisely the inconsistency a director has to resolve.
+  One audit row and one event per flag, not per later write.
+- **Not set** for ordinary advancement: a downstream match that has not been played
+  yet is simply updated (`scheduled` → the new participant), and an incoming entrant
+  that is already in the slot changes nothing.
+- **Cleared** only by `POST /api/v1/tournaments/{id}/matches/{matchId}/clear-review`
+  (director+, see [04-api-contracts.md](./04-api-contracts.md)), which audits
+  (`match: review_cleared`) and emits `match.review_cleared`. Reopening or replaying
+  the match does **not** clear it by itself — the director states when the
+  inconsistency is resolved.
+- **Repair path (manual, in this order):** reopen the flagged match
+  (`completed → reopened`, reason required) → submit the corrected result for the
+  participants now in its slots → clear the review flag. Nothing is invalidated
+  automatically: `match_results` rows stay append-only
+  ([05-schema-contract.md](./05-schema-contract.md)), so the replay appends a new
+  version and the original row is never rewritten.
+
+## General transition invariants
 
 1. Every successful transition writes exactly one audit entry in the same transaction.
 2. No transition deletes prior audit or result history.

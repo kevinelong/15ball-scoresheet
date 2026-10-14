@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"math"
 	"time"
+
+	"github.com/kevinelong/15ball-scoresheet/server/internal/audit"
 )
 
 // Double-elimination bracket engine — a Go port of the frontend bracket.js so the
@@ -282,12 +284,12 @@ func (api *API) resolveByes(ctx context.Context, tx *sql.Tx, tid string) error {
 			return err
 		}
 		if fwM.Valid {
-			if err := api.setSlot(ctx, tx, fwM.String, int(fwS.Int64), winner); err != nil {
+			if err := api.advanceSlot(ctx, tx, tid, fwM.String, int(fwS.Int64), winner); err != nil {
 				return err
 			}
 		}
 		if flM.Valid { // propagate the bye loser too, so downstream L matches resolve
-			if err := api.setSlot(ctx, tx, flM.String, int(flS.Int64), loser); err != nil {
+			if err := api.advanceSlot(ctx, tx, tid, flM.String, int(flS.Int64), loser); err != nil {
 				return err
 			}
 		}
@@ -333,7 +335,7 @@ func (api *API) advanceDouble(ctx context.Context, tx *sql.Tx, m *Match, winnerI
 
 	// Winners / losers bracket match.
 	if fwM.Valid {
-		if err := api.setSlot(ctx, tx, fwM.String, int(fwS.Int64), winnerID); err != nil {
+		if err := api.advanceSlot(ctx, tx, m.TournamentID, fwM.String, int(fwS.Int64), winnerID); err != nil {
 			return err
 		}
 	}
@@ -342,7 +344,7 @@ func (api *API) advanceDouble(ctx context.Context, tx *sql.Tx, m *Match, winnerI
 			return err
 		}
 	} else if flM.Valid { // winners bracket: loser drops down
-		if err := api.setSlot(ctx, tx, flM.String, int(flS.Int64), loserID); err != nil {
+		if err := api.advanceSlot(ctx, tx, m.TournamentID, flM.String, int(flS.Int64), loserID); err != nil {
 			return err
 		}
 	}
@@ -356,6 +358,74 @@ func (api *API) setSlot(ctx context.Context, tx *sql.Tx, matchID string, slot in
 	}
 	_, err := tx.ExecContext(ctx, `UPDATE matches SET `+col+`=?, updated_at=? WHERE id=?`, entrantID, time.Now().Unix(), matchID)
 	return err
+}
+
+// advanceSlot is the single write path for bracket propagation (advanceDouble,
+// advanceBracket, resolveByes). A correct upstream result must be able to reach a
+// downstream match that was replayed, so the slot is written — but a match that has
+// already been decided is never rewritten *silently*: its recorded result, state and
+// winner are left exactly as they were and the match is flagged for review
+// (audit row + SSE event in this transaction) for a director to replay. See
+// 03-state-machines "Match review flag".
+func (api *API) advanceSlot(ctx context.Context, tx *sql.Tx, tid, matchID string, slot int, entrantID string) error {
+	if matchID == "" || entrantID == "" {
+		return nil
+	}
+	col := "entrant_a_id"
+	if slot == 1 {
+		col = "entrant_b_id"
+	}
+	var current, label sql.NullString
+	var state string
+	err := tx.QueryRowContext(ctx, `SELECT `+col+`, match_label, state FROM matches WHERE id=?`, matchID).
+		Scan(&current, &label, &state)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil // no target row (brackets built before the feeder graph): nothing to advance into
+	}
+	if err != nil {
+		return err
+	}
+	if current.Valid && current.String == entrantID {
+		return nil // already there: no change, so nothing to report
+	}
+	if err := api.setSlot(ctx, tx, matchID, slot, entrantID); err != nil {
+		return err
+	}
+	if state != "completed" && state != "reopened" {
+		return nil
+	}
+	return api.flagForReview(ctx, tx, tid, matchID, label.String, entrantID, slot)
+}
+
+// flagForReview records that a decided match's participants changed after it was
+// played. One audit row and one SSE event per flag, not per later write, so a
+// repeated correction cannot pile up duplicates.
+func (api *API) flagForReview(ctx context.Context, tx *sql.Tx, tid, matchID, label, entrantID string, slot int) error {
+	res, err := tx.ExecContext(ctx,
+		`UPDATE matches SET needs_review=1, updated_at=?, version=version+1 WHERE id=? AND needs_review=0`,
+		time.Now().Unix(), matchID)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil || n == 0 {
+		return err // already flagged: keep the first audit row
+	}
+	if err := audit.Write(ctx, tx, audit.Entry{
+		EntityType: "match", EntityID: matchID, Action: "review_required",
+		ActorUserID: actor(ctx), RequestID: reqID(ctx),
+		Reason: "a corrected upstream result changed this match's participants after it was played",
+		Before: map[string]interface{}{"needsReview": false},
+		After: map[string]interface{}{
+			"needsReview": true, "matchLabel": label, "entrantId": entrantID, "slot": slot,
+		},
+	}); err != nil {
+		return err
+	}
+	api.emitEvent(ctx, tx, tid, "match.review_required", map[string]interface{}{
+		"matchId": matchID, "matchLabel": label, "entrantId": entrantID, "slot": slot,
+	})
+	return nil
 }
 
 func (api *API) eliminate(ctx context.Context, tx *sql.Tx, entrantID string) error {

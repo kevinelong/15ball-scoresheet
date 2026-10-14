@@ -77,3 +77,18 @@ The generator is chosen from the primary division's `format` on the
 34. **A 2-player double-elimination field degrades to one decisive match**: the
     double-elimination generator hands fields smaller than 3 to the single
     generator. (`matches_test.go: TestBracketGenerationAndMatchFlow`)
+
+## I. Corrections, the review flag and the manual repair path
+
+35. **A played result is never silently rewritten**: a director reopens an upstream
+    match whose winner already played downstream and re-completes it with the other
+    winner. The downstream match keeps its `completed` state, its result row and its
+    `winnerEntrantId`; the corrected winner reaches its slot (so the match can be
+    replayed at all); and the match is flagged with `needsReview`, an audit row
+    (`match: review_required`) and an event (`match.review_required`). On the
+    double-elimination path both the winners-bracket target and the played
+    losers-bracket target are flagged, while the grand final the correction did not
+    feed is left clean. One audit row and one event per flag, so repeating the same
+    correction neither duplicates them nor moves a slot.
+    (`bracket_review_test.go: TestReviewFlagOnCorrectedUpstreamSingleElim`,
+    `TestReviewFlagOnCorrectedUpstreamDoubleElim`)

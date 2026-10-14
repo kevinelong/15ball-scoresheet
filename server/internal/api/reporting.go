@@ -117,6 +117,13 @@ func (api *API) buildOverlay(r *http.Request, id string) (map[string]interface{}
 	ov := map[string]interface{}{
 		"tournamentName": t.Name, "status": t.State, "updatedAt": t.UpdatedAt, "players": []interface{}{},
 	}
+	// A flagged match anywhere in the bracket is surfaced here too, so a consumer
+	// that only reads the normalized overlay can never look normal while a played
+	// result is in doubt (03-state-machines "Match review flag").
+	var review int
+	_ = api.DB.QueryRowContext(r.Context(),
+		`SELECT EXISTS(SELECT 1 FROM matches WHERE tournament_id=? AND needs_review=1)`, id).Scan(&review)
+	ov["reviewRequired"] = review == 1
 	// pick the most-recently-updated live match
 	var mid string
 	var aID, bID, tableRef sql.NullString

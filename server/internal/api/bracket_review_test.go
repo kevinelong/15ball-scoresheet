@@ -25,8 +25,8 @@ func (e *testEnv) reopenMatch(t *testing.T, tid, mid, key, reason string) {
 }
 
 // scoreMatch submits a result directly to a match that is already in
-// in_progress/reopened (a fresh idempotency key, so the earlier submission's
-// cached response is never replayed).
+// in_progress/reopened (a fresh idempotency key, so an earlier submission's cached
+// response is never replayed).
 func (e *testEnv) scoreMatch(t *testing.T, tid, mid, winner, loser, key string) {
 	t.Helper()
 	body := `{"winnerEntrantId":"` + winner + `","loserEntrantId":"` + loser + `"}`
@@ -52,8 +52,8 @@ func (e *testEnv) hasAuditAction(t *testing.T, tid, entityID, action string) boo
 	return false
 }
 
-// sseEventCount counts the emitted events of a type for a tournament (the SSE
-// replay window is the log itself).
+// sseEventCount counts the emitted events of a type for a tournament (the retained
+// log is the replay window).
 func (e *testEnv) sseEventCount(t *testing.T, tid, eventType string) int {
 	t.Helper()
 	var n int
@@ -74,144 +74,109 @@ func (e *testEnv) resultVersions(t *testing.T, tid, mid string) []interface{} {
 	return hist["versions"].([]interface{})
 }
 
-// TestReviewFlagOnCorrectedUpstreamSingleElim drives the option-3 flow end to end
-// on a single-elimination bracket: a director reopens an upstream match whose
-// winner already played downstream and re-completes it with the other winner. The
-// played downstream result must survive untouched, the inconsistency must be
-// recorded (flag + audit + SSE), and the documented repair path — reopen the
-// downstream match, re-enter the corrected result, clear the flag — must resolve it.
-func TestReviewFlagOnCorrectedUpstreamSingleElim(t *testing.T) {
-	e := newTestEnv(t)
-	tid, _ := e.startSingleElim(t, 4) // W1M1, W1M2 → W2M1 (the final)
-	e.playAll(t, tid, aWins)
+// correctedBracket is a played-out 4-player single-elimination bracket whose
+// upstream match W1M1 was corrected after its winner had already played the final.
+type correctedBracket struct {
+	tid, finalID          string
+	corrected, finalOther string // the final's participants once the correction landed
+	staleWinner           string // the final's recorded winner: no longer a participant
+}
 
+// singleElimWithCorrectedUpstream plays out W1M1, W1M2 → W2M1, then reopens W1M1 and
+// re-completes it with the other entrant — the collision option 3 records.
+func (e *testEnv) singleElimWithCorrectedUpstream(t *testing.T) correctedBracket {
+	t.Helper()
+	tid, _ := e.startSingleElim(t, 4)
+	e.playAll(t, tid, aWins)
 	ms := byLabel(t, e.matches(t, tid))
 	up, final := ms["W1M1"], ms["W2M1"]
 	if up == nil || final == nil {
 		t.Fatalf("expected W1M1 + W2M1, got %v", ms)
 	}
-	upID, finalID := up["id"].(string), final["id"].(string)
-
 	wrong, other := str(up["entrantAId"]), str(up["entrantBId"])
 	if str(up["winnerEntrantId"]) != wrong || wrong == "" || other == "" {
 		t.Fatalf("aWins should have advanced W1M1 slot a: %v", up)
 	}
-	origFinalWinner, origFinalB := str(final["winnerEntrantId"]), str(final["entrantBId"])
-	if origFinalWinner == "" || origFinalB == "" || str(final["entrantAId"]) != wrong {
+	cb := correctedBracket{
+		tid: tid, finalID: final["id"].(string), corrected: other,
+		finalOther:  str(final["entrantBId"]),
+		staleWinner: str(final["winnerEntrantId"]),
+	}
+	if cb.staleWinner == "" || cb.finalOther == "" || str(final["entrantAId"]) != wrong {
 		t.Fatalf("the final should have played the W1M1 winner: %v", final)
 	}
-
-	// 1. Correct the upstream match: reopen it and re-complete it with the other winner.
-	e.reopenMatch(t, tid, upID, "rev-open-1", "wrong player advanced")
-	e.scoreMatch(t, tid, upID, other, wrong, "rev-res-1")
-
+	e.reopenMatch(t, tid, up["id"].(string), "rev-open-1", "wrong player advanced")
+	e.scoreMatch(t, tid, up["id"].(string), other, wrong, "rev-res-1")
 	// Read the correction back from the result versions: listMatches' "current
-	// winner" cannot be used here because two append-only rows end up with
-	// superseded_by NULL after a reopen+re-submit (see OPEN-QUESTIONS, "Which
-	// result version is the current winner after a reopen and re-submit?").
-	upVersions := e.resultVersions(t, tid, upID)
-	if len(upVersions) != 2 {
-		t.Fatalf("upstream result versions: want 2, got %d", len(upVersions))
+	// winner" cannot be used because two append-only rows end up with superseded_by
+	// NULL after a reopen+re-submit (see OPEN-QUESTIONS, "Which result version is the
+	// current winner after a reopen and re-submit?").
+	vers := e.resultVersions(t, tid, up["id"].(string))
+	if len(vers) != 2 || str(vers[1].(map[string]interface{})["winnerEntrantId"]) != other {
+		t.Fatalf("upstream correction not recorded: %v", vers)
 	}
-	if v := upVersions[1].(map[string]interface{}); str(v["winnerEntrantId"]) != other {
-		t.Fatalf("upstream correction not recorded: %v", upVersions[1])
-	}
-	if got := byLabel(t, e.matches(t, tid))["W1M1"]["state"]; got != "completed" {
-		t.Fatalf("the reopened upstream match should be re-completed, got %v", got)
-	}
+	return cb
+}
 
-	final = byLabel(t, e.matches(t, tid))["W2M1"]
+// TestReviewFlagOnCorrectedUpstreamSingleElim: correcting an upstream result must
+// never silently rewrite the result it already fed, and the inconsistency must be
+// recorded rather than hidden.
+func TestReviewFlagOnCorrectedUpstreamSingleElim(t *testing.T) {
+	e := newTestEnv(t)
+	cb := e.singleElimWithCorrectedUpstream(t)
+	final := byLabel(t, e.matches(t, cb.tid))["W2M1"]
 
-	// 2. The played downstream result is never rewritten.
+	// 1. The played result is untouched.
 	if final["state"] != "completed" {
 		t.Errorf("downstream state: want completed, got %v", final["state"])
 	}
-	if got := str(final["winnerEntrantId"]); got != origFinalWinner {
-		t.Errorf("downstream winnerEntrantId: want the recorded winner %q, got %q", origFinalWinner, got)
+	if got := str(final["winnerEntrantId"]); got != cb.staleWinner {
+		t.Errorf("downstream winnerEntrantId: want the recorded winner %q, got %q", cb.staleWinner, got)
 	}
-	if versions := e.resultVersions(t, tid, finalID); len(versions) != 1 {
-		t.Errorf("downstream result versions: want the single original result, got %d", len(versions))
-	} else if v := versions[0].(map[string]interface{}); str(v["winnerEntrantId"]) != origFinalWinner {
-		t.Errorf("original result row was rewritten: %v", versions[0])
-	}
-
-	// 3. The corrected winner reaches the flagged match, so it can be replayed;
-	//    the other slot keeps the entrant that qualified there.
-	if got := str(final["entrantAId"]); got != other {
-		t.Errorf("flagged match slot a: want the corrected winner %q, got %q", other, got)
-	}
-	if got := str(final["entrantBId"]); got != origFinalB {
-		t.Errorf("flagged match slot b: want it untouched (%q), got %q", origFinalB, got)
+	vers := e.resultVersions(t, cb.tid, cb.finalID)
+	if len(vers) != 1 {
+		t.Errorf("downstream result versions: want the single original result, got %d", len(vers))
+	} else if v := vers[0].(map[string]interface{}); str(v["winnerEntrantId"]) != cb.staleWinner {
+		t.Errorf("the original result row was rewritten: %v", vers[0])
 	}
 
-	// 4. The inconsistency is recorded: persistent flag, audit row, SSE event.
+	// 2. The corrected winner reaches the flagged match, so it can be replayed; the
+	//    other slot keeps the entrant that qualified there.
+	if got := str(final["entrantAId"]); got != cb.corrected {
+		t.Errorf("flagged match slot a: want the corrected winner %q, got %q", cb.corrected, got)
+	}
+	if got := str(final["entrantBId"]); got != cb.finalOther {
+		t.Errorf("flagged match slot b: want it untouched (%q), got %q", cb.finalOther, got)
+	}
+
+	// 3. Recorded, not hidden: persistent flag, audit row, SSE event.
 	if final["needsReview"] != true {
 		t.Errorf("downstream match should be flagged for review: %v", final)
 	}
-	if !e.hasAuditAction(t, tid, finalID, "review_required") {
+	if !e.hasAuditAction(t, cb.tid, cb.finalID, "review_required") {
 		t.Errorf("no review_required audit row for the flagged match")
 	}
-	if n := e.sseEventCount(t, tid, "match.review_required"); n != 1 {
+	if n := e.sseEventCount(t, cb.tid, "match.review_required"); n != 1 {
 		t.Errorf("match.review_required events: want 1, got %d", n)
 	}
-	// The flag is idempotent per state: re-correcting the same slot must not pile
-	// up duplicate audit rows or events.
-	e.reopenMatch(t, tid, upID, "rev-open-1b", "same correction again")
-	e.scoreMatch(t, tid, upID, other, wrong, "rev-res-1b")
-	if !e.hasAuditAction(t, tid, finalID, "review_required") {
-		t.Errorf("review_required audit row disappeared")
-	}
-	if n := e.sseEventCount(t, tid, "match.review_required"); n != 1 {
-		t.Errorf("a second blocked write re-emitted match.review_required: want 1, got %d", n)
-	}
 
-	// 5. Repair path. Clearing is a director+ action and is refused while the flag
-	//    is not set / by a non-director.
-	if code, _ := e.doKey(t, "POST", "/api/v1/tournaments/"+tid+"/matches/"+finalID+"/clear-review", e.scorekeeper, `{"reason":"x"}`, "rev-clear-0"); code != http.StatusForbidden {
-		t.Errorf("scorekeeper clear-review: want 403, got %d", code)
+	// 4. Idempotent per state: repeating the same correction neither duplicates the
+	//    audit row/event nor moves a slot.
+	e.reopenMatch(t, cb.tid, byLabel(t, e.matches(t, cb.tid))["W1M1"]["id"].(string), "rev-open-1b", "same correction again")
+	e.scoreMatch(t, cb.tid, byLabel(t, e.matches(t, cb.tid))["W1M1"]["id"].(string), cb.corrected, cb.staleWinner, "rev-res-1b")
+	again := byLabel(t, e.matches(t, cb.tid))["W2M1"]
+	if again["needsReview"] != true || str(again["entrantAId"]) != cb.corrected {
+		t.Errorf("repeating the correction should change nothing: %v", again)
 	}
-	e.reopenMatch(t, tid, finalID, "rev-open-2", "replay with the corrected players")
-	e.scoreMatch(t, tid, finalID, other, origFinalB, "rev-res-2")
-	replayed := byLabel(t, e.matches(t, tid))["W2M1"]
-	if replayed["state"] != "completed" {
-		t.Fatalf("the repaired match should be re-completed, got %v", replayed["state"])
-	}
-	if replayed["needsReview"] != true {
-		t.Fatalf("clearing must be explicit, not a side effect of re-submitting: %v", replayed)
-	}
-	versions := e.resultVersions(t, tid, finalID)
-	if len(versions) != 2 {
-		t.Fatalf("replay should append a second result version, got %d", len(versions))
-	}
-	if v := versions[1].(map[string]interface{}); str(v["winnerEntrantId"]) != other {
-		t.Errorf("replay result not recorded: %v", versions[1])
-	}
-	if got := str(versions[0].(map[string]interface{})["winnerEntrantId"]); got != origFinalWinner {
-		t.Errorf("the original result row must stay immutable, got %q", got)
-	}
-	if code, r := e.doKey(t, "POST", "/api/v1/tournaments/"+tid+"/matches/"+finalID+"/clear-review", e.director, `{"reason":"replayed with the corrected players"}`, "rev-clear-1"); code != http.StatusOK {
-		t.Fatalf("clear-review: want 200, got %d (%v)", code, r)
-	}
-	cleared := byLabel(t, e.matches(t, tid))["W2M1"]
-	if cleared["needsReview"] != false {
-		t.Errorf("flag should be cleared: %v", cleared)
-	}
-	if !e.hasAuditAction(t, tid, finalID, "review_cleared") {
-		t.Errorf("no review_cleared audit row")
-	}
-	if n := e.sseEventCount(t, tid, "match.review_cleared"); n != 1 {
-		t.Errorf("match.review_cleared events: want 1, got %d", n)
-	}
-	// Clearing an unflagged match is not a transition.
-	if code, r := e.doKey(t, "POST", "/api/v1/tournaments/"+tid+"/matches/"+finalID+"/clear-review", e.director, `{}`, "rev-clear-2"); code != http.StatusConflict {
-		t.Errorf("clear-review on an unflagged match: want 409, got %d (%v)", code, r)
+	if n := e.sseEventCount(t, cb.tid, "match.review_required"); n != 1 {
+		t.Errorf("a repeated correction re-emitted match.review_required: want 1, got %d", n)
 	}
 }
 
 // TestReviewFlagOnCorrectedUpstreamDoubleElim is the same collision on the
-// double-elimination path: advanceDouble propagates the winner forward AND drops
-// the loser into the losers bracket, and both downstream matches have already been
-// played, so both must be flagged instead of quietly rewritten.
+// double-elimination path: advanceDouble propagates the winner forward AND drops the
+// loser into the losers bracket, and both downstream matches have already been
+// played, so both must be flagged.
 func TestReviewFlagOnCorrectedUpstreamDoubleElim(t *testing.T) {
 	e := newTestEnv(t)
 	tid := e.startDoubleElim(t, 4) // W1M1, W1M2 → W2M1; L1M1, L2M1; GF1
@@ -222,13 +187,11 @@ func TestReviewFlagOnCorrectedUpstreamDoubleElim(t *testing.T) {
 	if up == nil {
 		t.Fatalf("expected W1M1, got %v", ms)
 	}
-	upID := up["id"].(string)
 	wrong, other := str(up["entrantAId"]), str(up["entrantBId"])
-	if str(up["winnerEntrantId"]) != wrong {
+	if str(up["winnerEntrantId"]) != wrong || wrong == "" || other == "" {
 		t.Fatalf("aWins should have advanced W1M1 slot a: %v", up)
 	}
 
-	// Snapshot both downstream matches before the correction.
 	before := map[string]map[string]interface{}{}
 	for _, lbl := range []string{"W2M1", "L1M1", "GF1"} {
 		m := ms[lbl]
@@ -240,12 +203,9 @@ func TestReviewFlagOnCorrectedUpstreamDoubleElim(t *testing.T) {
 		}
 		before[lbl] = m
 	}
-	if str(before["W2M1"]["feedsWinnerMatch"]) == "" {
-		t.Fatalf("W2M1 should carry a winner edge to GF1")
-	}
 
-	e.reopenMatch(t, tid, upID, "revd-open-1", "wrong player advanced")
-	e.scoreMatch(t, tid, upID, other, wrong, "revd-res-1")
+	e.reopenMatch(t, tid, up["id"].(string), "revd-open-1", "wrong player advanced")
+	e.scoreMatch(t, tid, up["id"].(string), other, wrong, "revd-res-1")
 
 	after := byLabel(t, e.matches(t, tid))
 	for _, lbl := range []string{"W2M1", "L1M1"} {
@@ -262,38 +222,79 @@ func TestReviewFlagOnCorrectedUpstreamDoubleElim(t *testing.T) {
 		if !e.hasAuditAction(t, tid, m["id"].(string), "review_required") {
 			t.Errorf("%s has no review_required audit row", lbl)
 		}
+		if vers := e.resultVersions(t, tid, m["id"].(string)); len(vers) != 1 {
+			t.Errorf("%s result versions: want 1, got %d", lbl, len(vers))
+		}
 	}
-	// The grand final itself was not re-fed by the correction, so it stays clean.
+	// The grand final was not re-fed by the correction, so it stays clean.
 	if after["GF1"]["needsReview"] == true {
 		t.Errorf("GF1 should not have been touched by the correction: %v", after["GF1"])
 	}
 	if n := e.sseEventCount(t, tid, "match.review_required"); n != 2 {
-		t.Errorf("match.review_required events: want 2 (winner + loser drop), got %d", n)
-	}
-	// Distinct matters: the blocked rewrite must be explainable from the audit trail.
-	for _, lbl := range []string{"W2M1", "L1M1"} {
-		if vers := e.resultVersions(t, tid, after[lbl]["id"].(string)); len(vers) != 1 {
-			t.Errorf("%s result versions: want 1, got %d", lbl, len(vers))
-		}
+		t.Errorf("match.review_required events: want 2 (winner advance + loser drop), got %d", n)
 	}
 }
 
-// TestReviewFlagClearedOnlyOnFlaggedMatch covers the clear-review guards that do
-// not depend on a bracket: the endpoint refuses a match that is not flagged and a
-// director-only caller.
-func TestReviewFlagClearedOnlyOnFlaggedMatch(t *testing.T) {
+// TestReviewFlagRepairPath walks the documented manual repair path: reopen the
+// flagged match, re-enter the corrected result, clear the flag (audited). Clearing is
+// a director action and is refused when the match is not flagged.
+func TestReviewFlagRepairPath(t *testing.T) {
 	e := newTestEnv(t)
-	tid := e.startDoubleElim(t, 4)
-	e.playAll(t, tid, aWins)
-	mid := byLabel(t, e.matches(t, tid))["W2M1"]["id"].(string)
+	cb := e.singleElimWithCorrectedUpstream(t)
 
-	if code, _ := e.doKey(t, "POST", "/api/v1/tournaments/"+tid+"/matches/"+mid+"/clear-review", e.director, `{}`, "rev-empty"); code != http.StatusConflict {
-		t.Errorf("clear-review on an unflagged match: want 409, got %d", code)
+	// Guards: clearing is director+ only.
+	if code, _ := e.doKey(t, "POST", "/api/v1/tournaments/"+cb.tid+"/matches/"+cb.finalID+"/clear-review", e.scorekeeper, `{"reason":"x"}`, "rev-clear-spk"); code != http.StatusForbidden {
+		t.Errorf("scorekeeper clear-review: want 403, got %d", code)
 	}
-	if code, _ := e.doKey(t, "POST", "/api/v1/tournaments/"+tid+"/matches/"+mid+"/clear-review", e.viewer, `{}`, "rev-viewer"); code != http.StatusForbidden {
+	if code, _ := e.doKey(t, "POST", "/api/v1/tournaments/"+cb.tid+"/matches/"+cb.finalID+"/clear-review", e.viewer, `{}`, "rev-clear-vw"); code != http.StatusForbidden {
 		t.Errorf("viewer clear-review: want 403, got %d", code)
 	}
-	if code, _ := e.doKey(t, "POST", "/api/v1/tournaments/"+tid+"/matches/zz_nope/clear-review", e.director, `{}`, "rev-missing"); code != http.StatusNotFound {
+	if code, _ := e.doKey(t, "POST", "/api/v1/tournaments/"+cb.tid+"/matches/zz_nope/clear-review", e.director, `{}`, "rev-clear-missing"); code != http.StatusNotFound {
 		t.Errorf("clear-review on an unknown match: want 404, got %d", code)
+	}
+
+	// Replay the flagged match with the participants the correction put in its slots.
+	e.reopenMatch(t, cb.tid, cb.finalID, "rev-open-2", "replay with the corrected players")
+	e.scoreMatch(t, cb.tid, cb.finalID, cb.corrected, cb.finalOther, "rev-res-2")
+	replayed := byLabel(t, e.matches(t, cb.tid))["W2M1"]
+	if replayed["state"] != "completed" {
+		t.Fatalf("the repaired match should be re-completed, got %v", replayed["state"])
+	}
+	if replayed["needsReview"] != true {
+		t.Fatalf("clearing must be explicit, not a side effect of re-submitting: %v", replayed)
+	}
+	vers := e.resultVersions(t, cb.tid, cb.finalID)
+	if len(vers) != 2 {
+		t.Fatalf("the replay should append a second result version, got %d", len(vers))
+	}
+	if got := str(vers[0].(map[string]interface{})["winnerEntrantId"]); got != cb.staleWinner {
+		t.Errorf("the original result row must stay immutable, got %q", got)
+	}
+	if got := str(vers[1].(map[string]interface{})["winnerEntrantId"]); got != cb.corrected {
+		t.Errorf("the replay result was not recorded: %v", vers[1])
+	}
+
+	// Clear it: audited, evented, and only once.
+	body := `{"reason":"replayed with the corrected players"}`
+	if code, r := e.doKey(t, "POST", "/api/v1/tournaments/"+cb.tid+"/matches/"+cb.finalID+"/clear-review", e.director, body, "rev-clear-1"); code != http.StatusOK {
+		t.Fatalf("clear-review: want 200, got %d (%v)", code, r)
+	}
+	cleared := byLabel(t, e.matches(t, cb.tid))["W2M1"]
+	if cleared["needsReview"] != false {
+		t.Errorf("flag should be cleared: %v", cleared)
+	}
+	if !e.hasAuditAction(t, cb.tid, cb.finalID, "review_cleared") {
+		t.Errorf("no review_cleared audit row")
+	}
+	if n := e.sseEventCount(t, cb.tid, "match.review_cleared"); n != 1 {
+		t.Errorf("match.review_cleared events: want 1, got %d", n)
+	}
+	// The played result the repair kept is still the recorded one.
+	if got := str(cleared["winnerEntrantId"]); got != cb.staleWinner {
+		t.Errorf("clearing must not touch the result: winner %q", got)
+	}
+	// Clearing an unflagged match is not a transition.
+	if code, r := e.doKey(t, "POST", "/api/v1/tournaments/"+cb.tid+"/matches/"+cb.finalID+"/clear-review", e.director, `{}`, "rev-clear-2"); code != http.StatusConflict {
+		t.Errorf("clear-review on an unflagged match: want 409, got %d (%v)", code, r)
 	}
 }

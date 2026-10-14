@@ -45,8 +45,16 @@ Each event `data:` JSON is:
 - `match.updated`
 - `match.result_submitted`
 - `match.reopened`
+- `match.review_required`
+- `match.review_cleared`
 - `challonge.sync_updated`
 - `audit.appended`
+
+Match events carry `{matchId}`. `match.review_required` adds the `matchLabel`, the
+`entrantId` that arrived and the `slot` it landed in, and is emitted only on the
+0→1 transition of the flag; `match.review_cleared` marks its removal
+([03-state-machines.md](./03-state-machines.md), "Match review flag"). Any client
+rendering a bracket should treat either event as a reason to re-read the match list.
 
 ## Reconnect and snapshot behavior
 
@@ -85,3 +93,6 @@ Each event `data:` JSON is:
 - Overlay state is read-only and normalized under `snapshot.overlay`.
 - Field names are stable and transport-independent (SSE now; future transport can reuse shape).
 - Null/unknown values are explicit (`null`), never omitted if field is part of schema.
+- `overlay.reviewRequired` (boolean, always present): true when any match of the
+  tournament carries the review flag, so an overlay that never reads the match list
+  still cannot look normal while a played result is in doubt.

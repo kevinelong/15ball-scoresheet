@@ -13,52 +13,6 @@ Closed/superseded decisions now codified in `server/IMPLEMENTATION/`:
 
 ## Still unresolved
 
-### Reopening an upstream match whose winner already played downstream
-
-**Status:** open — product decision, so documented rather than implemented.
-
-**Collision.** `ReopenMatch` (`server/internal/api/scoring.go:137-182`) moves a
-completed match to `reopened` (reason + audit row) and does nothing else.
-Re-submitting then propagates the new winner unconditionally — `advanceDouble`
-(`server/internal/api/bracket.go:302`, writing the slot at `:335`) for double
-elimination, `advanceBracket` (`scoring.go:187-216`) for single elimination —
-overwriting the downstream match's slot. If that downstream match was already
-played it keeps its `completed` state, its result row and its `winnerEntrantId`
-while its slot now names the other player: a completed match whose winner is not
-one of its two entrants. Single elimination no longer escapes this by luck —
-every round is now created up front with `feeds_winner_*` edges
-(`server/internal/api/matches.go:74`), so the downstream match always exists.
-
-**Not specified.** `grep -rn -i 'downstream|invalidat' server/IMPLEMENTATION`
-returns nothing. `03-state-machines.md:34,41-43` only requires the correction path
-`completed → reopened → in_progress|completed` with a reason, an appended
-immutable result version and an audit row; `04-api-contracts.md` documents
-`reopen` only as `{reason}` → `200`, `400 reason_required`, `409`. Nothing states
-what happens to results that already depended on a reopened match.
-
-**Options.**
-1. **Block the reopen** while the match's winner has already been used downstream
-   (downstream slot populated and/or a `match_results` row exists). Cost: lowest —
-   one guard plus one error code (`409`, e.g. `downstream_played`), no state or
-   schema change, needs a doc row and one acceptance scenario. Cost against: a
-   genuine scoring error can no longer be corrected once the next round has
-   started — precisely the case reopen exists for.
-2. **Invalidate and replay downstream**: reopening clears the affected downstream
-   slots and results recursively, marks those matches `reopened` with the reason
-   carried over and requires them to be played again. Cost: highest — recursive
-   invalidation, new audit actions, standings/overlay handling, cascade tests, and
-   a decision on superseding played results (`match_results.superseded_by` exists
-   in the schema but is never set by the submit/reopen paths — only the seed
-   fixture writes it). Cost against: one correction can invalidate much of a
-   finished bracket, and reopening is currently `200` in a single transaction.
-3. **Correction flag**: allow the reopen, keep the downstream result, record the
-   inconsistency (flag + audit + SSE) for a human to resolve. Cost: medium — a new
-   column/flag, UI surfacing, and a documented manual repair path; no cascade
-   logic. Cost against: the bracket stays provably inconsistent until someone
-   acts, and the overlay/standings must render that state.
-
-Until one is chosen, reopen behaves exactly as shipped: no guard, no cascade.
-
 ### Which result version is "the current winner" after a reopen and re-submit?
 
 **Status:** open — found while testing the review-flag repair path; code left as
@@ -91,6 +45,23 @@ away.
    every reader of "current winner" must change with it.
 3. Leave the ambiguity (not recommended): it is silent, and already visible in the
    console after any correction.
+
+## Resolved 2026-10-14 — reopen collision (option 3: record, don't cascade)
+
+- **Reopening an upstream match whose winner already played downstream** →
+  **allow the reopen, keep the played result, record the inconsistency**: bracket
+  propagation writes the corrected winner into the slot (otherwise the corrected
+  pairing could not be replayed) while leaving the downstream match's state, result
+  rows and winner untouched, and sets `matches.needs_review` with a
+  `match: review_required` audit row and a `match.review_required` event in the same
+  transaction. A director resolves it by reopening the flagged match, re-submitting
+  the corrected result and clearing the flag
+  (`POST …/matches/{matchId}/clear-review`, audited + `match.review_cleared`).
+  Codified in `03-state-machines.md` ("Match review flag"),
+  `05-schema-contract.md` (migration 0017), `04-api-contracts.md`,
+  `06-realtime-contract.md` and `09-acceptance-tests.md` §I.
+  Neither of the other options was taken: the reopen is not blocked, and nothing is
+  invalidated or replayed automatically (`match_results.superseded_by` is untouched).
 
 ## Resolved 2026-09-05 (see DECISIONS/019)
 
