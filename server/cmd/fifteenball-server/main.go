@@ -137,6 +137,7 @@ func main() {
 	// scoring (Slice E)
 	matchScore.Post("/api/v1/tournaments/{id}/matches/{matchId}/result", dapi.SubmitResult)
 	matchAssign.Post("/api/v1/tournaments/{id}/matches/{matchId}/reopen", dapi.ReopenMatch)
+	matchAssign.Post("/api/v1/tournaments/{id}/matches/{matchId}/clear-review", dapi.ClearMatchReview)
 	// snapshot + public/overlay (Slice F, read side) + audit (Slice H1)
 	dirRead := r.With(a.RequireSession, a.RequireRoles(auth.DirectorOrAbove...))
 	sess.Get("/api/v1/tournaments/{id}/snapshot", dapi.Snapshot)

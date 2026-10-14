@@ -169,6 +169,10 @@
         post(T(id) + '/matches/' + encodeURIComponent(mid) + '/result', body, { idempotencyKey: key || newIdemKey() }),
       reopenMatch: (id, mid, reason, key) =>
         post(T(id) + '/matches/' + encodeURIComponent(mid) + '/reopen', { reason }, { idempotencyKey: key || newIdemKey() }),
+      // Finishes the manual repair path for a flagged match (03-state-machines
+      // "Match review flag"): reopen → submit the corrected result → clear-review.
+      clearMatchReview: (id, mid, reason, key) =>
+        post(T(id) + '/matches/' + encodeURIComponent(mid) + '/clear-review', { reason }, { idempotencyKey: key || newIdemKey() }),
 
       // ---- reporting ----
       snapshot: (id) => get(T(id) + '/snapshot'),

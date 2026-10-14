@@ -53,7 +53,10 @@ Base path: `/api/v1` (served behind `/15ball/api/v1`).
 | POST | `/tournaments/{id}/matches/{matchId}/start` | assigned scorekeeper or director+ | `{expectedVersion}` | `200 {match}` | `400` `403` `404` `409` | optional |
 | POST | `/tournaments/{id}/matches/{matchId}/result` | assigned scorekeeper or director+ | `{winnerEntrantId,loserEntrantId,score,...}` | `200 {match,resultVersion}` | `400` `403` `404` `409 invalid_transition` | **required** |
 | POST | `/tournaments/{id}/matches/{matchId}/reopen` | director+ | `{reason}` | `200 {match}` | `400 reason_required` `403` `404` `409` | **required** |
+| POST | `/tournaments/{id}/matches/{matchId}/clear-review` | director+ | `{reason?}` | `200 {match}` | `403` `404` `409 not_flagged` | **required** |
 | GET | `/tournaments/{id}/matches/{matchId}/history` | authenticated | none | `200 {versions,audit}` | `403` `404` | n/a |
+
+Match payloads carry `needsReview` (migration 0017, [05-schema-contract.md](./05-schema-contract.md)) next to `winnerEntrantId`. A match with `needsReview: true` had its participants changed after it was played — a corrected upstream result reached it — so its recorded winner may not be one of its two participants; the flag is the signal that a human has to look. The manual repair path is: reopen the match (`…/reopen`, reason required), submit the corrected result, then `…/clear-review`, which is the only thing that clears the flag and is audited (`match: review_cleared`, SSE `match.review_cleared`, [03-state-machines.md](./03-state-machines.md)). `clear-review` accepts an optional `reason` (unlike reopen, the director may be dismissing a difference they judged benign) and answers `409 not_flagged` when the match does not require review.
 
 ## Realtime and public data
 

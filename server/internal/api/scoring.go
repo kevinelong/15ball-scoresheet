@@ -181,6 +181,52 @@ func (api *API) ReopenMatch(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// ClearMatchReview: POST /api/v1/tournaments/{id}/matches/{matchId}/clear-review
+// (director+). Finishes the manual repair path for a flagged match: the director has
+// replayed it (or judged the change benign), so the review flag comes off. This is
+// the only thing that clears the flag, and the clearing is audited.
+// Idempotency-Key REQUIRED.
+func (api *API) ClearMatchReview(w http.ResponseWriter, r *http.Request) {
+	tid, mid := chi.URLParam(r, "id"), chi.URLParam(r, "matchId")
+	var body struct {
+		Reason string `json:"reason"`
+	}
+	if !decodeBody(w, r, &body) {
+		return
+	}
+	api.withIdempotency(w, r, "clear-review:"+mid, true, func() (int, interface{}) {
+		m, err := api.getMatch(r.Context(), tid, mid)
+		if errors.Is(err, sql.ErrNoRows) {
+			return http.StatusNotFound, errBody("not_found", "match not found")
+		}
+		if err != nil {
+			return http.StatusInternalServerError, errBody("server_error", "")
+		}
+		if !m.NeedsReview {
+			return http.StatusConflict, errBody("not_flagged", "match does not require review")
+		}
+		now := time.Now().Unix()
+		tx, _ := api.DB.BeginTx(r.Context(), nil)
+		defer tx.Rollback()
+		if _, err := tx.ExecContext(r.Context(),
+			`UPDATE matches SET needs_review=0, updated_at=?, version=version+1 WHERE id=? AND needs_review=1`, now, mid); err != nil {
+			return http.StatusInternalServerError, errBody("server_error", "")
+		}
+		_ = audit.Write(r.Context(), tx, audit.Entry{
+			EntityType: "match", EntityID: mid, Action: "review_cleared",
+			ActorUserID: actor(r.Context()), Reason: body.Reason, RequestID: reqID(r.Context()),
+			Before: map[string]interface{}{"needsReview": true},
+			After:  map[string]interface{}{"needsReview": false},
+		})
+		api.emitEvent(r.Context(), tx, tid, "match.review_cleared", map[string]string{"matchId": mid})
+		if err := tx.Commit(); err != nil {
+			return http.StatusInternalServerError, errBody("server_error", "")
+		}
+		nm, _ := api.getMatch(r.Context(), tid, mid)
+		return http.StatusOK, map[string]interface{}{"match": nm}
+	})
+}
+
 // advanceBracket moves a single-elimination winner into the next round. If the
 // current round has a single match it is the final, so there is nothing to advance
 // to and its winner stands as champion. Non-power-of-two fields are handled at

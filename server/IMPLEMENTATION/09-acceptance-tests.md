@@ -92,3 +92,11 @@ The generator is chosen from the primary division's `format` on the
     correction neither duplicates them nor moves a slot.
     (`bracket_review_test.go: TestReviewFlagOnCorrectedUpstreamSingleElim`,
     `TestReviewFlagOnCorrectedUpstreamDoubleElim`)
+36. **The repair path resolves the flag, and only explicitly**: reopen the flagged
+    match, submit the corrected result (appending a second result version — the first
+    row stays as it was), then `clear-review`, which is the only thing that clears the
+    flag: it is director+ only, audits (`match: review_cleared`), emits
+    `match.review_cleared`, leaves the recorded result alone and answers
+    `409 not_flagged` for a match that does not need review. The flag survives the
+    replay, so the director states when the inconsistency is resolved.
+    (`bracket_review_test.go: TestReviewFlagRepairPath`)

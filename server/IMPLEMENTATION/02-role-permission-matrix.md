@@ -22,6 +22,7 @@ See also: [03-state-machines.md](./03-state-machines.md), [04-api-contracts.md](
 | Assign scorekeeper to match | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ |
 | Submit match result | ✅ | ✅ | ✅ | ✅ (assigned only) | ❌ | ❌ |
 | Reopen completed match | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ |
+| Clear a match's review flag | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ |
 | Provide correction reason | Required | Required | Required | n/a | n/a | n/a |
 | Trigger Challonge sync | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ |
 | View private organizer screens | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ |
