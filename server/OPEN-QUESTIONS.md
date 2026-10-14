@@ -9,6 +9,7 @@ Closed/superseded decisions now codified in `server/IMPLEMENTATION/`:
 - v1 registration is director-managed (public self-registration deferred).
 - Realtime transport is SSE for read-heavy/public/OBS updates; REST handles mutations.
 - Match result and correction policy is fixed (assigned scorekeeper/director/admin submit; reopen requires director/admin + reason + immutable audit).
+- A correction that reaches an already-played match keeps the played result and flags the match for review (`matches.needs_review`); the director replays it and clears the flag explicitly.
 - Tournaments/entrants use archive semantics; audit history is never hard-deleted.
 
 ## Still unresolved
