@@ -23,6 +23,8 @@
           <a class="hdr-guide-link" href="docs/15ball-paper-sheet.pdf" target="_blank" rel="noopener" title="Blank paper score sheet (self-teaching, B&amp;W, photocopy-friendly)">Paper sheet &#8599;</a>
           <a class="hdr-guide-link" href="docs/15ball-paper-sheet-2up.pdf" target="_blank" rel="noopener" title="Two blank paper sheets per page, landscape (photocopy-friendly)">2-up sheets &#8599;</a>
           <a class="hdr-guide-link" href="docs/15ball-rules.pdf" target="_blank" rel="noopener" title="15-Ball Rotation Standard Rules, WPA-style (PDF)">Rules &#8599;</a>
+          <a class="hdr-guide-link" href="docs/141-paper-sheet.pdf" target="_blank" rel="noopener" title="Straight Pool (14.1) paper score sheet &mdash; its QR points at the rules (PDF)">14.1 sheet &#8599;</a>
+          <a class="hdr-guide-link" href="docs/141-rules.pdf" target="_blank" rel="noopener" title="Straight Pool (14.1) Standard Rules, WPA-style (PDF)">14.1 rules &#8599;</a>
           <input type="file" id="importTournamentHomeFile" accept="application/json" hidden />
         </div>
       </div>
@@ -58,6 +60,8 @@
           <a class="hdr-guide-link" href="docs/15ball-paper-sheet.pdf" target="_blank" rel="noopener" title="Blank paper score sheet (self-teaching, B&amp;W, photocopy-friendly)">Paper &#8599;</a>
           <a class="hdr-guide-link" href="docs/15ball-paper-sheet-2up.pdf" target="_blank" rel="noopener" title="Two blank paper sheets per page, landscape (photocopy-friendly)">2-up &#8599;</a>
           <a class="hdr-guide-link" href="docs/15ball-rules.pdf" target="_blank" rel="noopener" title="15-Ball Rotation Standard Rules, WPA-style (PDF)">Rules &#8599;</a>
+          <a class="hdr-guide-link" href="docs/141-paper-sheet.pdf" target="_blank" rel="noopener" title="Straight Pool (14.1) paper score sheet &mdash; its QR points at the rules (PDF)">14.1 sheet &#8599;</a>
+          <a class="hdr-guide-link" href="docs/141-rules.pdf" target="_blank" rel="noopener" title="Straight Pool (14.1) Standard Rules, WPA-style (PDF)">14.1 rules &#8599;</a>
           <input type="file" id="importTournamentFile" accept="application/json" hidden />
         </div>
       </div>
@@ -113,7 +117,7 @@
         <label class="field">
           <span id="tRaceLabel">Race To</span>
           <input type="number" id="tRaceTo" inputmode="numeric" pattern="[0-9]*" min="1" max="999" value="25" />
-          <small id="tRaceHint">Points target per match — a multiple of 25 (25 / 50 / 100 / 150), as in Straight Pool.</small>
+          <small id="tRaceHint">Points target per match — 25 or 50 here, since a 4-rack sheet tops out at 60 balls.</small>
         </label>
       </div>
       <div class="col">
@@ -158,6 +162,7 @@
       </div>
 
       <div class="modal-body">
+        <p class="device-note" id="deviceNote">Saved on this device — this console has no server link, so the sheet stays in this browser.</p>
         <!-- The paper-style 15-Ball Rotation score sheet, scoped to one match -->
         <main class="sheet" id="sheet">
           <header class="hdr">

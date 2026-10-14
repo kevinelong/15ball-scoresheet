@@ -82,6 +82,41 @@ function client() { return api.createClient({ base: "https://club.test/15ball/ap
     );
   });
 
+  await test("patchDivision: verb, path, body and CSRF header", async () => {
+    const calls = capture();
+    await client().patchDivision("t1", "d1", { raceTo: 11 });
+    assert.strictEqual(calls.length, 1, "one request");
+    const { url, opts } = calls[0];
+    assert.strictEqual(url, "https://club.test/15ball/api/v1/tournaments/t1/divisions/d1");
+    assert.strictEqual(opts.method, "PATCH");
+    assert.strictEqual(opts.headers["X-CO"], "1", "mutations carry the CSRF header");
+    assert.strictEqual(opts.headers["Content-Type"], "application/json");
+    assert.strictEqual(opts.credentials, "include", "the session cookie must go along");
+    assert.deepStrictEqual(JSON.parse(opts.body), { raceTo: 11 });
+  });
+
+  await test("patchDivision: an explicit null clears the override, ids are url-encoded", async () => {
+    const calls = capture();
+    await client().patchDivision("t/1", "d 1", { raceTo: null });
+    const { url, opts } = calls[0];
+    assert.strictEqual(url, "https://club.test/15ball/api/v1/tournaments/t%2F1/divisions/d%201");
+    assert.strictEqual(opts.method, "PATCH");
+    assert.deepStrictEqual(JSON.parse(opts.body), { raceTo: null }, "null must reach the wire, not be dropped");
+  });
+
+  await test("patchMatch: verb, path, body and CSRF header", async () => {
+    const calls = capture();
+    await client().patchMatch("t1", "m1", { raceTo: 9 });
+    assert.strictEqual(calls.length, 1, "one request");
+    const { url, opts } = calls[0];
+    assert.strictEqual(url, "https://club.test/15ball/api/v1/tournaments/t1/matches/m1");
+    assert.strictEqual(opts.method, "PATCH");
+    assert.strictEqual(opts.headers["X-CO"], "1", "mutations carry the CSRF header");
+    assert.strictEqual(opts.headers["Content-Type"], "application/json");
+    assert.strictEqual(opts.credentials, "include", "the session cookie must go along");
+    assert.deepStrictEqual(JSON.parse(opts.body), { raceTo: 9 });
+  });
+
   await test("the documented repair path is reachable end to end from the client", async () => {
     const calls = capture();
     const c = client();

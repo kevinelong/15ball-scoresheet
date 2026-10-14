@@ -9,7 +9,12 @@
   var api = FB.createClient();
   var DIRECTOR = ['tournament_director', 'club_admin', 'system_admin'];
 
-  var state = { view: 'boot', me: null, public: false, tournaments: [], t: null, roster: [], names: {}, matches: [], es: null, err: '', preview: null, editEntrant: null, pendingAdd: null, dupes: null, venues: [], newVenue: false, selVenue: '', newName: '', newClub: '', recent: null, dupePairs: null };
+  var state = { view: 'boot', me: null, public: false, tournaments: [], t: null, roster: [], names: {}, matches: [], es: null, err: '', preview: null, editEntrant: null, pendingAdd: null, dupes: null, venues: [], newVenue: false, selVenue: '', newName: '', newClub: '', recent: null, dupePairs: null, newGame: '', newRaceTo: '', divisions: [], sheet: null, sheetCounts: {} };
+
+  // The score sheet: the console's one write path. `app`/`appVersion` are named
+  // constants (never inline literals) so every saved record says what produced it.
+  var SHEET_APP = 'score-console';
+  var SHEET_APP_VERSION = '1.0.0';
 
   // Canonical disciplines (id -> display name); mirrors the backend validGames set.
   var GAMES = [
@@ -23,6 +28,27 @@
   ];
   var GAME_LABELS = {};
   GAMES.forEach(function (g) { GAME_LABELS[g[0]] = g[1]; });
+  // The game's own race target (the last layer of the server's match ?? division ??
+  // game resolution). Kept here so a tournament with no server-resolved `raceTo`
+  // still has a target — mirroring server/internal/api/games.go.
+  var GAME_DEFAULT_RACE = { '15ball_rotation': 25, 'straight_14_1': 100, '8ball': 7, '9ball': 7, '10ball': 7, 'one_pocket': 3, 'bank_pool': 5 };
+  function localRaceTo(game) {
+    var n = GAME_DEFAULT_RACE[Sheets.id(game)];
+    return n != null ? n : 25;
+  }
+  // The race printed on the sheet and where it came from. The bracket carries it
+  // (`match.raceTo`); only a match the server did not resolve (an older server, no
+  // raceTo at all) falls back to the game's local default — never invented.
+  function raceOf(game, match) {
+    var n = (match && match.raceTo !== undefined && match.raceTo !== null) ? parseInt(match.raceTo, 10) : NaN;
+    if (!isNaN(n)) return { raceTo: n, raceFrom: SheetPayload.FROM_BRACKET };
+    return { raceTo: localRaceTo(game), raceFrom: SheetPayload.FROM_LOCAL };
+  }
+  function raceHead(game) { return Sheets.isRack(game) ? 'Points to ' : 'Race to '; }
+  function raceLabelText(game, raceTo, raceFrom) {
+    return raceHead(game) + raceTo + ' \u00b7 ' +
+      (raceFrom === SheetPayload.FROM_LOCAL ? 'local default' : 'from the bracket');
+  }
   function gameLabel(id) { return id ? (GAME_LABELS[id] || id) : ''; }
   function venueClub(t) { var p = []; if (t.club) p.push(t.club); if (t.venue) p.push(t.venue); return p.join(' · '); }
   // create → register → check in (shared by single and bulk add)
@@ -58,6 +84,16 @@
   var appEl = document.getElementById('app');
   var whoEl = document.getElementById('who');
   var toastEl = document.getElementById('toast');
+  // The score-sheet modal shell (live.html). live.js only ever writes these
+  // through renderSheet*; all interaction arrives via the delegated click handler.
+  var sheetModalEl = document.getElementById('sheetModal');
+  var sheetTitleEl = document.getElementById('sheetTitle');
+  var sheetNamesEl = document.getElementById('sheetNames');
+  var sheetRaceEl = document.getElementById('sheetRace');
+  var sheetBodyEl = document.getElementById('sheetBody');
+  var sheetWinnerEl = document.getElementById('sheetWinner');
+  var sheetStackEl = document.getElementById('sheetStack');
+  var sheetSaveEl = document.getElementById('sheetSave');
 
   // ---- helpers ----
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
@@ -168,6 +204,8 @@
     state.selVenue = '';         // reset the chosen venue
     state.newName = '';          // draft tournament name preserved across venue re-renders
     state.newClub = '';
+    state.newGame = '';          // draft discipline + race, likewise
+    state.newRaceTo = '';
     renderHome();
   }
 
@@ -177,12 +215,19 @@
     // capture any in-progress typing before we replace the DOM
     if (document.getElementById('tname')) state.newName = val('tname');
     if (document.getElementById('tclub')) state.newClub = val('tclub');
+    if (document.getElementById('tgame')) state.newGame = val('tgame');
+    if (document.getElementById('trace')) state.newRaceTo = val('trace');
     state.view = 'home';
     var html = '<div class="card"><h2>Tournaments</h2>';
     if (isDirector()) {
+      var draftGame = state.newGame || '15ball_rotation';
+      var draftRace = (state.newRaceTo !== '' && state.newRaceTo != null) ? state.newRaceTo : String(localRaceTo(draftGame));
       html += '<input id="tname" placeholder="New tournament name" value="' + esc(state.newName || '') + '" />' +
         '<div class="spacer"></div>' +
-        '<div class="row"><select id="tgame">' + gameOptions('15ball_rotation') + '</select></div>' +
+        '<div class="row"><select id="tgame">' + gameOptions(draftGame) + '</select></div>' +
+        '<label>Race to</label>' +
+        '<div class="row"><input id="trace" type="number" min="1" max="999" inputmode="numeric" value="' +
+        esc(draftRace) + '" /></div>' +
         venuePickerMarkup(state.selVenue) +
         '<div class="row"><input id="tclub" placeholder="Club (optional)" value="' + esc(state.newClub || '') + '" /></div>' +
         '<div class="spacer"></div><button class="pri" data-action="create-tournament">Create</button><div class="spacer"></div>' +
@@ -296,6 +341,12 @@
     state.names = {}; all.forEach(function (e) { state.names[e.id] = e.displayName; });
     state.roster = all.filter(function (e) { return !e.archivedAt; });
     state.matches = (state.t.state === 'in_progress' || state.t.state === 'completed') ? ((await api.listMatches(cid)).items || []) : [];
+    // Divisions carry the effective race (division ?? game default) for the card control.
+    state.divisions = [];
+    if (isDirector()) {
+      try { state.divisions = (await api.listDivisions(cid)).items || []; }
+      catch (e) { state.divisions = []; } // best-effort — the control hides its value
+    }
     // Recent players at this venue (director + tournament linked to a venue).
     state.recent = null;
     if (isDirector() && state.t.venueId) {
@@ -335,6 +386,7 @@
     }
     if (t.state === 'draft' || t.state === 'registration_open' || t.state === 'registration_closed') {
       h += renderEntrants(dir);
+      if (dir) h += renderRaceControl(t);
       if (dir) h += renderStageControls(t.state);
     } else if (t.state === 'in_progress') {
       h += renderMatches(dir);
@@ -342,6 +394,22 @@
       h += '<div class="card"><h2>Final bracket</h2>' + renderBracket(false) + '</div>';
     }
     appEl.innerHTML = h;
+  }
+
+  // The director sets the race before play: a small control on the tournament card
+  // that patches the division (or creates the default one) and then shows the
+  // effective value the server returns — never the value the user typed.
+  function renderRaceControl(t) {
+    var d = (state.divisions || [])[0];
+    var effective = (d && d.raceTo != null) ? d.raceTo : null;
+    var h = '<div class="card"><h3>Race</h3>' +
+      '<div class="row"><input id="raceedit" type="number" min="1" max="999" inputmode="numeric" value="' +
+      esc(effective != null ? effective : localRaceTo(t.game)) + '" />' +
+      '<button class="pri" data-action="race-save" data-id="' + esc(d ? d.id : '') + '">Set race</button></div>' +
+      '<p class="note">Effective now: ' +
+      (effective != null ? esc(raceHead(t.game) + effective) : 'no division yet — the game default applies') +
+      ' (from the server).</p></div>';
+    return h;
   }
 
   function renderStageControls(stateName) {
@@ -579,6 +647,293 @@
     return h + '</div>';
   }
 
+  // ---- score sheet (the console's one write path) ----
+  //
+  // The sheet is opened from a match, not from a winner: tapping a player's slot
+  // preselects them as the winner candidate, the scorer fills the sheet in, and the
+  // sheet's Save is the only code path that submits a result. The race comes from the
+  // match payload (`match.raceTo`), never invented from the game here.
+  function matchById(mid) { return state.matches.filter(function (m) { return m.id === mid; })[0]; }
+
+  function openSheet(mid, winnerEntrantId) {
+    var m = matchById(mid);
+    if (!m || !state.t) return;
+    var game = state.t.game;
+    var race = raceOf(game, m);
+    var spec = Sheets.spec(game);
+    var isRack = Sheets.isRack(game);
+    var racks = [];
+    if (isRack) { for (var r = 0; r < (spec.racks || 0); r++) racks.push({ A: { balls: [], fouls: 0 }, B: { balls: [], fouls: 0 } }); }
+    var a = m.entrantAId, b = m.entrantBId;
+    state.sheet = {
+      mode: 'edit', mid: mid, game: game, spec: spec, isRack: isRack,
+      a: a, b: b, raceTo: race.raceTo, raceFrom: race.raceFrom,
+      winner: winnerEntrantId === b ? 'B' : (winnerEntrantId === a ? 'A' : null),
+      racks: racks, tally: { A: 0, B: 0 }, busy: false, versions: null, selected: 0, loading: false
+    };
+    renderSheet();
+  }
+
+  function hideSheet() { if (sheetModalEl) sheetModalEl.hidden = true; }
+  function closeSheet() { state.sheet = null; hideSheet(); renderTournament(); }
+
+  function renderSheet() {
+    var s = state.sheet;
+    if (!s || !sheetModalEl) return;
+    sheetModalEl.hidden = false;
+    if (sheetSaveEl) { sheetSaveEl.hidden = s.mode === 'stack'; sheetSaveEl.disabled = !!s.busy; }
+    if (s.mode === 'stack') return renderSheetStack();
+    sheetTitleEl.innerHTML = esc(gameLabel(s.game));
+    sheetNamesEl.innerHTML = esc(nm(s.a)) + ' <span class="muted">vs</span> ' + esc(nm(s.b));
+    sheetRaceEl.innerHTML = '<b>' + esc(raceHead(s.game) + s.raceTo) + '</b> <span class="sheet-src">' +
+      (s.raceFrom === SheetPayload.FROM_LOCAL ? 'local default' : 'from the bracket') + '</span>';
+    sheetBodyEl.innerHTML = renderSheetBody(s);
+    sheetWinnerEl.innerHTML = renderWinnerBox(s);
+    sheetStackEl.innerHTML = '';
+  }
+
+  function rackNet(s, side, r) { var e = s.racks[r][side]; return e.balls.length - e.fouls; }
+  function runningTotal(s, side) {
+    var t = 0;
+    for (var r = 0; r < s.racks.length; r++) t += rackNet(s, side, r);
+    return t;
+  }
+  function finalsOf(s) {
+    return s.isRack
+      ? { A: runningTotal(s, 'A'), B: runningTotal(s, 'B') }
+      : { A: s.tally.A, B: s.tally.B };
+  }
+
+  // ---- the sheet body: rack grid or tally, per the discipline's `measure` ----
+  function renderSheetBody(s) { return s.isRack ? renderRackBody(s) : renderTallyBody(s); }
+
+  function statCell(label, value) {
+    return '<span class="sheet-stat"><span>' + esc(label) + '</span><b>' + esc(value) + '</b></span>';
+  }
+
+  function renderRackBody(s) {
+    var spec = s.spec, h = '<div class="sheet-racks">';
+    for (var r = 0; r < spec.racks; r++) {
+      h += '<div class="sheet-rack"><div class="sheet-rackhead">Rack ' + (r + 1) + '</div>';
+      ['A', 'B'].forEach(function (side) {
+        var e = s.racks[r][side];
+        h += '<div class="sheet-side"><div class="sheet-ballrow">';
+        for (var n = 1; n <= spec.ballsPerRack; n++) {
+          var on = e.balls.indexOf(n) >= 0;
+          // `ballFaces` decides whether the mark is a ball number (15-Ball) or a
+          // plain count (14.1, where every ball is one point).
+          h += '<button type="button" class="sheet-ball' + (spec.ballFaces ? ' face' : '') + (on ? ' on' : '') + '"' +
+            ' data-action="sheet-ball" data-rack="' + r + '" data-side="' + side + '" data-ball="' + n + '"' +
+            ' aria-pressed="' + (on ? 'true' : 'false') + '">' + (spec.ballFaces ? n : '') + '</button>';
+        }
+        h += '</div><div class="sheet-stats">' +
+          statCell(spec.columns[0], e.balls.length) +
+          '<span class="sheet-stat"><span>' + esc(spec.columns[1]) + '</span>' +
+          '<button type="button" class="sheet-stepbtn" data-action="sheet-foul" data-rack="' + r + '" data-side="' + side + '" data-delta="-1">\u2212</button>' +
+          '<b>' + e.fouls + '</b>' +
+          '<button type="button" class="sheet-stepbtn" data-action="sheet-foul" data-rack="' + r + '" data-side="' + side + '" data-delta="1">+</button></span>' +
+          statCell(spec.columns[2], rackNet(s, side, r)) +
+          statCell(spec.columns[3], runningTotal(s, side)) +
+          '</div></div>';
+      });
+      h += '</div>';
+    }
+    h += '<div class="sheet-finals">' + esc(spec.finalLabel) + ' \u2014 ' + esc(nm(s.a)) + ' ' + runningTotal(s, 'A') +
+      ' \u00b7 ' + esc(nm(s.b)) + ' ' + runningTotal(s, 'B') + '</div></div>';
+    return h;
+  }
+
+  function renderTallyBody(s) {
+    var h = '<div class="sheet-race"><div class="sheet-racehead">' +
+      esc(raceLabelText(s.game, s.raceTo, s.raceFrom)) + '</div>';
+    [['A', s.a], ['B', s.b]].forEach(function (p) {
+      var side = p[0];
+      h += '<div class="sheet-racer' + (s.winner === side ? ' win' : '') + '">' +
+        '<span class="sheet-racername">' + esc(nm(p[1])) + '</span>' +
+        '<button type="button" class="sheet-stepbtn" data-action="sheet-step" data-side="' + side + '" data-delta="-1">\u2212</button>' +
+        '<span class="sheet-tally">' + s.tally[side] + '</span>' +
+        '<button type="button" class="sheet-stepbtn" data-action="sheet-step" data-side="' + side + '" data-delta="1">+</button>' +
+        '</div>';
+    });
+    h += '<div class="sheet-target">First to ' + s.raceTo + '</div></div>';
+    return h;
+  }
+
+  // The winner box, shared by both bodies.
+  function renderWinnerBox(s) {
+    var h = '<div class="sheet-winner-row">';
+    [['A', s.a], ['B', s.b]].forEach(function (p) {
+      var side = p[0];
+      h += '<button type="button" class="' + (s.winner === side ? 'pri' : 'ghost') +
+        '" data-action="sheet-winner" data-side="' + side + '">' + esc(shortName(p[1])) + ' wins</button>';
+    });
+    h += '<div class="sheet-winner-note">' + (s.winner ? 'Winner: ' + esc(nm(s.winner === 'A' ? s.a : s.b)) : 'Pick the winner') + '</div>';
+    return h + '</div>';
+  }
+
+  // The winner auto-selects the moment a side reaches the race target; the desk can
+  // still override it in the winner box.
+  function autoWinner(s) {
+    var f = finalsOf(s);
+    if (f.A >= s.raceTo && f.A > f.B) s.winner = 'A';
+    else if (f.B >= s.raceTo && f.B > f.A) s.winner = 'B';
+  }
+
+  function sheetStep(side, delta) {
+    var s = state.sheet; if (!s || s.isRack || !s.tally) return;
+    var v = s.tally[side] + delta;
+    if (v < 0) v = 0;
+    if (v > s.raceTo) v = s.raceTo;            // a step must not pass the target
+    s.tally[side] = v;
+    autoWinner(s);
+    renderSheet();
+  }
+  function sheetFoul(side, r, delta) {
+    var s = state.sheet; if (!s || !s.isRack || !s.racks[r]) return;
+    var e = s.racks[r][side];
+    e.fouls = Math.max(0, e.fouls + delta);
+    autoWinner(s);
+    renderSheet();
+  }
+  function sheetBall(side, r, n) {
+    var s = state.sheet; if (!s || !s.isRack || !s.racks[r]) return;
+    var e = s.racks[r][side], i = e.balls.indexOf(n);
+    if (i >= 0) e.balls.splice(i, 1); else e.balls.push(n);
+    autoWinner(s);
+    renderSheet();
+  }
+
+  // The console's collected sheet shape, the input SheetPayload.build expects.
+  function collectedSheet(s) {
+    var base = { winner: s.winner, pAname: nm(s.a), pBname: nm(s.b) };
+    if (s.isRack) {
+      base._kind = 'rack';
+      base.racks = s.racks;
+      base.finalA = runningTotal(s, 'A');
+      base.finalB = runningTotal(s, 'B');
+    } else {
+      base._kind = 'race';
+      base.finalA = s.tally.A;
+      base.finalB = s.tally.B;
+    }
+    return base;
+  }
+
+  // Save: assign → start (409-tolerant, best-effort) → one result carrying the built
+  // record. Guarded against a double submit, and never submitted without a winner.
+  async function saveSheet() {
+    var s = state.sheet;
+    if (!s || s.mode !== 'edit') return;
+    if (s.busy) return;                                   // one submit per sheet
+    if (!s.winner) return toast('Pick a winner');         // an unmatched loser must not be submitted
+    var mid = s.mid;
+    var winnerEntrantId = s.winner === 'A' ? s.a : s.b;
+    var loserEntrantId = s.winner === 'A' ? s.b : s.a;
+    if (!winnerEntrantId || !loserEntrantId) return toast('Pick a winner');
+    s.busy = true; renderSheet();
+    try {
+      var record = SheetPayload.build({
+        game: state.t.game,
+        sheet: collectedSheet(s),
+        raceTo: s.raceTo,
+        raceFrom: s.raceFrom,
+        names: { a: nm(s.a), b: nm(s.b) },
+        app: SHEET_APP,
+        appVersion: SHEET_APP_VERSION
+      });
+      var opts = state.me ? { scorekeeperUserId: state.me.userId } : {};
+      var ignore409 = function (e) { if (e.status !== 409) throw e; };
+      try { await api.assignMatch(state.t.id, mid, opts); } catch (e) { ignore409(e); }
+      try { await api.startMatch(state.t.id, mid); } catch (e) { ignore409(e); }
+      await api.submitResult(state.t.id, mid, { winnerEntrantId: winnerEntrantId, loserEntrantId: loserEntrantId, score: record });
+      toast('Recorded');
+      state.sheet = null;
+      hideSheet();
+      await openTournament(state.t.id);
+    } finally {
+      if (state.sheet) { state.sheet.busy = false; renderSheet(); }
+    }
+  }
+
+  // ---- the stack: the saved sheets, read back (newest first) ----
+  function whoSaved(v) { return v.submittedByEmail || 'an open scoring link'; }
+  function whenText(at) {
+    if (typeof at === 'number' && isFinite(at)) return new Date(at * 1000).toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
+    if (typeof at === 'string' && at) return at;
+    return 'unknown time';
+  }
+
+  async function openStack(mid) {
+    var m = matchById(mid); if (!m || !state.t) return;
+    var race = raceOf(state.t.game, m);
+    state.sheet = {
+      mode: 'stack', mid: mid, game: state.t.game, isRack: Sheets.isRack(state.t.game),
+      a: m.entrantAId, b: m.entrantBId, raceTo: race.raceTo, raceFrom: race.raceFrom,
+      versions: null, selected: 0, loading: true, busy: false
+    };
+    renderSheet();
+    var resp = await api.matchHistory(state.t.id, mid);
+    if (!state.sheet || state.sheet.mode !== 'stack' || state.sheet.mid !== mid) return; // closed while loading
+    var versions = ((resp && resp.versions) || []).slice();
+    versions.sort(function (x, y) { return (y.resultVersion || 0) - (x.resultVersion || 0); }); // newest first
+    state.sheet.versions = versions;
+    state.sheet.loading = false;
+    state.sheetCounts[mid] = versions.length;   // the match's Sheets control now knows its count
+    renderSheet();
+  }
+
+  function selectVersion(i) {
+    var s = state.sheet;
+    if (!s || s.mode !== 'stack' || !s.versions || i < 0 || i >= s.versions.length) return;
+    s.selected = i;
+    renderSheet();
+  }
+
+  function renderSheetStack() {
+    var s = state.sheet;
+    sheetTitleEl.innerHTML = 'Saved sheets';
+    sheetNamesEl.innerHTML = esc(nm(s.a)) + ' <span class="muted">vs</span> ' + esc(nm(s.b));
+    sheetRaceEl.innerHTML = '<b>' + esc(raceHead(s.game) + s.raceTo) + '</b> <span class="sheet-src">' +
+      (s.raceFrom === SheetPayload.FROM_LOCAL ? 'local default' : 'from the bracket') + '</span>';
+    sheetWinnerEl.innerHTML = '';
+    if (s.loading) { sheetBodyEl.innerHTML = '<p class="muted">Loading…</p>'; sheetStackEl.innerHTML = ''; return; }
+    if (!s.versions || !s.versions.length) {
+      sheetBodyEl.innerHTML = '<p class="muted">No sheets saved for this match yet.</p>';
+      sheetStackEl.innerHTML = '';
+      return;
+    }
+    sheetStackEl.innerHTML = '<ul class="sheet-versions">' + s.versions.map(function (v, i) {
+      return '<li><button type="button" class="' + (i === s.selected ? 'pri' : 'ghost') + '" data-action="stack-version" data-v="' + i + '">' +
+        'v' + esc(v.resultVersion) + ' \u00b7 ' + esc(whoSaved(v)) + ' \u00b7 ' + esc(whenText(v.submittedAt)) + '</button></li>';
+    }).join('') + '</ul>';
+    var view = SheetPayload.read(s.versions[s.selected].payload, { raceTo: s.raceTo });
+    sheetBodyEl.innerHTML = renderViewSheet(view);
+  }
+
+  function renderViewSheet(view) {
+    var h = '<div class="sheet-read">';
+    h += '<div class="sheet-readline">' + esc(SheetPayload.summary(view)) + '</div>';
+    h += '<div class="sheet-readmeta">' + esc(SheetPayload.instrument(view));
+    if (view.raceTo !== null && view.raceTo !== undefined) {
+      h += ' \u00b7 ' + esc(raceLabelText(view.discipline || state.sheet.game, view.raceTo, view.raceFrom));
+    }
+    h += '</div>';
+    h += '<div class="sheet-readnames">' + esc(view.names.a || '\u2014') + ' <span class="muted">vs</span> ' + esc(view.names.b || '\u2014') + '</div>';
+    if (view.racks && view.racks.length) {
+      h += '<ul class="sheet-readracks">' + view.racks.map(function (r) {
+        return '<li>Rack ' + esc(r.rack) + ': ' + esc(view.names.a || 'A') + ' ' + r.a.made + ' made \u00b7 ' + r.a.fouls + ' fouls \u00b7 net ' + r.a.net +
+          ' \u2014 ' + esc(view.names.b || 'B') + ' ' + r.b.made + ' made \u00b7 ' + r.b.fouls + ' fouls \u00b7 net ' + r.b.net + '</li>';
+      }).join('') + '</ul>';
+    }
+    return h + '</div>';
+  }
+
+  // The control a completed, played match carries to open its stack.
+  function stackButton(m) {
+    var n = state.sheetCounts && state.sheetCounts[m.id];
+    return '<button type="button" class="ghost sheetbtn" data-action="stack" data-m="' + esc(m.id) + '">Sheets' + (n ? ' (' + n + ')' : '') + '</button>';
+  }
+
   // ---- matches ----
   function bracketName(b) { return b === 'W' ? 'Winners' : b === 'L' ? 'Losers' : b === 'GF' ? 'Grand Final' : 'Bracket'; }
   function nm(id) { return id ? (state.names[id] || '…') : '—'; }
@@ -604,20 +959,31 @@
     return m.needsReview ? '<span class="pill warn">needs review</span>' : '';
   }
 
+  // A match a scorer can open the sheet for: both entrants are real players and the
+  // match has not been decided. `in_progress` belongs here — the result endpoint takes
+  // exactly `in_progress`/`reopened`, so the match being played is the one a scorer is
+  // scoring (assign/start are best-effort 409-tolerant steps inside the save).
+  function sheetReady(m) {
+    return m.entrantAId && m.entrantBId && !isBye(m.entrantAId) && !isBye(m.entrantBId) &&
+      (m.state === 'scheduled' || m.state === 'assigned' || m.state === 'in_progress' || m.state === 'reopened');
+  }
+
   function matchRow(m, interactive) {
     var a = m.entrantAId, b = m.entrantBId;
     var lbl = m.matchLabel || ('R' + m.bracketRound + '·' + (m.slot + 1));
-    var ready = a && b && (m.state === 'scheduled' || m.state === 'assigned' || m.state === 'reopened');
+    var ready = sheetReady(m);
     var line = '<div class="match"><span class="lbl">' + esc(lbl) + '</span>' + reviewPill(m) + '<span class="vs">';
     if (m.state === 'completed') {
       line += '<b>' + esc(nm(a)) + '</b> vs <b>' + esc(nm(b)) + '</b> <span class="pill state">done</span>';
-      line += '</span></div>';
+      line += '</span>' + stackButton(m) + '</div>';
       return line;
     }
     line += '<b>' + esc(nm(a)) + '</b> <span class="muted">vs</span> <b>' + esc(nm(b)) + '</b></span>';
     if (interactive && ready) {
-      line += '<button class="win" data-action="win" data-m="' + esc(m.id) + '" data-w="' + esc(a) + '" data-l="' + esc(b) + '">' + esc(shortName(a)) + '</button>';
-      line += '<button class="win" data-action="win" data-m="' + esc(m.id) + '" data-w="' + esc(b) + '" data-l="' + esc(a) + '">' + esc(shortName(b)) + '</button>';
+      // Tap a player to open the sheet with them as the winner candidate — the sheet's
+      // Save is the only thing that submits a result.
+      line += '<button class="win" data-action="sheet" data-m="' + esc(m.id) + '" data-w="' + esc(a) + '" data-l="' + esc(b) + '">' + esc(shortName(a)) + '</button>';
+      line += '<button class="win" data-action="sheet" data-m="' + esc(m.id) + '" data-w="' + esc(b) + '" data-l="' + esc(a) + '">' + esc(shortName(b)) + '</button>';
     } else {
       line += '<span class="pill state">' + esc(m.state) + '</span>';
     }
@@ -679,7 +1045,8 @@
   }
 
   // One entrant slot inside a bracket card. When tappable, renders a <button> that
-  // reuses the existing "win" action (assign→start→submitResult) — do not change it.
+  // opens the score sheet with that player as the winner candidate (`data-action="sheet"`);
+  // the sheet's Save is the only thing that submits a result.
   function bracketSlot(m, id, otherId, opts) {
     opts = opts || {};
     var cls = ['slot'];
@@ -694,7 +1061,7 @@
     var score = '<span class="score">' + (opts.win ? '✓' : '') + '</span>';
     var inner = seed + '<span class="name">' + nameHtml + '</span>' + score;
     if (opts.tappable) {
-      return '<button type="button" class="' + cls.join(' ') + '" data-action="win" data-m="' + esc(m.id) +
+      return '<button type="button" class="' + cls.join(' ') + '" data-action="sheet" data-m="' + esc(m.id) +
         '" data-w="' + esc(id) + '" data-l="' + esc(otherId) + '">' + inner + '</button>';
     }
     return '<div class="' + cls.join(' ') + '">' + inner + '</div>';
@@ -708,9 +1075,7 @@
     var win = m.winnerEntrantId || null;
     var aWin = !!(win && a && win === a), bWin = !!(win && b && win === b);
     var live = (m.state === 'in_progress' || m.state === 'reopened');
-    var ready = a && b && !isBye(a) && !isBye(b) &&
-      (m.state === 'scheduled' || m.state === 'assigned' || m.state === 'reopened');
-    var tappable = interactive && ready;
+    var tappable = interactive && sheetReady(m);
 
     var cls = ['match'];
     if (bWin) cls.push('bottomwin');
@@ -724,6 +1089,7 @@
     h += reviewPill(m);
     h += bracketSlot(m, a, b, { win: aWin, lose: !!win && !aWin, tappable: tappable, origin: origins.a });
     h += bracketSlot(m, b, a, { win: bWin, lose: !!win && !bWin, tappable: tappable, origin: origins.b });
+    if (m.state === 'completed') h += stackButton(m);   // a played match keeps its sheet reachable
     return h + '</div>';
   }
 
@@ -829,7 +1195,7 @@
     h += '<div class="card"><div class="row"><h2 style="flex:1">Matches</h2>';
     if (dir) h += '<button data-action="complete" class="ghost" style="flex:0 0 auto">Complete</button>';
     h += '</div>';
-    h += '<p class="note">Tap a player to record them as the winner.' + (canScore() ? '' : ' (Sign in to score.)') + '</p>';
+    h += '<p class="note">Tap a player to open the score sheet — its Save records the winner.' + (canScore() ? '' : ' (Sign in to score.)') + '</p>';
     h += renderBracket(canScore());
     return h + '</div>';
   }
@@ -885,6 +1251,10 @@
     });
     if (act === 'create-tournament') return guard(async function () {
       var name = val('tname'); if (!name) return toast('Enter a name');
+      // Remember the draft discipline + race: the division is created later (open-reg),
+      // and it is the division that carries the director's race.
+      state.newGame = val('tgame') || '15ball_rotation';
+      state.newRaceTo = val('trace');
       var vid = venueSelectValue();
       var venueName = '';
       if (vid) {
@@ -893,7 +1263,7 @@
       }
       // Pass venueId (the link) AND venue (the name label) so the existing
       // Club · Venue display keeps working.
-      var r = await api.createTournament({ name: name, game: val('tgame') || '15ball_rotation', venue: venueName, club: val('tclub'), venueId: vid || undefined });
+      var r = await api.createTournament({ name: name, game: state.newGame, venue: venueName, club: val('tclub'), venueId: vid || undefined });
       await openTournament(r.tournament.id);
     });
     if (act === 'add-entrant') return guard(async function () {
@@ -1065,7 +1435,13 @@
     });
     if (act === 'open-reg') return guard(async function () {
       var divs = (await api.listDivisions(state.t.id)).items || [];
-      if (!divs.length) await api.createDivision(state.t.id, { name: 'Open' }); // double_elimination default
+      if (!divs.length) {
+        // The division carries the race the director set on the create form.
+        var body = { name: 'Open' };
+        var rt = parseInt(state.newRaceTo, 10);
+        if (!isNaN(rt) && rt >= 1 && rt <= 999) body.raceTo = rt;
+        await api.createDivision(state.t.id, body); // double_elimination default
+      }
       await api.patchTournament(state.t.id, { state: 'registration_open' });
       await openTournament(state.t.id);
     });
@@ -1083,18 +1459,38 @@
       try { await navigator.clipboard.writeText(link); toast('Scoring link copied'); }
       catch (e) { toast(link); }
     });
-    if (act === 'win') return guard(async function () {
-      var mid = b.getAttribute('data-m'), w = b.getAttribute('data-w'), l = b.getAttribute('data-l');
-      // assign → start → submit result. Assign/start are best-effort so an already-
-      // assigned/in-progress match still scores. Scorekeeper is set only when signed in
-      // (open scoring links have no user; the backend allows an empty scorekeeper).
-      var opts = state.me ? { scorekeeperUserId: state.me.userId } : {};
-      var ignore409 = function (e) { if (e.status !== 409) throw e; };
-      try { await api.assignMatch(state.t.id, mid, opts); } catch (e) { ignore409(e); }
-      try { await api.startMatch(state.t.id, mid); } catch (e) { ignore409(e); }
-      await api.submitResult(state.t.id, mid, { winnerEntrantId: w, loserEntrantId: l });
-      toast('Recorded');
+    // Tap a player's slot / the match → open the sheet, that player as winner candidate.
+    if (act === 'sheet') return guard(function () {
+      openSheet(b.getAttribute('data-m'), b.getAttribute('data-w'));
+    });
+    if (act === 'sheet-close') return guard(function () { closeSheet(); });
+    if (act === 'sheet-winner') return guard(function () {
+      if (!state.sheet) return;
+      state.sheet.winner = b.getAttribute('data-side');
+      renderSheet();
+    });
+    if (act === 'sheet-step') return guard(function () {
+      sheetStep(b.getAttribute('data-side'), parseInt(b.getAttribute('data-delta'), 10));
+    });
+    if (act === 'sheet-ball') return guard(function () {
+      sheetBall(b.getAttribute('data-side'), parseInt(b.getAttribute('data-rack'), 10), parseInt(b.getAttribute('data-ball'), 10));
+    });
+    if (act === 'sheet-foul') return guard(function () {
+      sheetFoul(b.getAttribute('data-side'), parseInt(b.getAttribute('data-rack'), 10), parseInt(b.getAttribute('data-delta'), 10));
+    });
+    // The sheet's Save is the console's only writer.
+    if (act === 'sheet-save') return guard(saveSheet);
+    if (act === 'stack') return guard(async function () { await openStack(b.getAttribute('data-m')); });
+    if (act === 'stack-version') return guard(function () { selectVersion(parseInt(b.getAttribute('data-v'), 10)); });
+    // Director sets the race before play; the card then shows what the server returned.
+    if (act === 'race-save') return guard(async function () {
+      var did = b.getAttribute('data-id');
+      var n = parseInt(val('raceedit'), 10);
+      if (isNaN(n) || n < 1 || n > 999) return toast('Race must be 1–999');
+      if (!did) await api.createDivision(state.t.id, { name: 'Open', raceTo: n });
+      else await api.patchDivision(state.t.id, did, { raceTo: n });
       await openTournament(state.t.id);
+      toast('Race set');
     });
   });
 
@@ -1109,6 +1505,13 @@
       state.preview.choice = state.preview.choice || {};
       state.preview.choice[row] = sel.value || null; // '' → New person
       renderTournament();
+      return;
+    }
+    if (sel.id === 'tgame') {
+      // Picking a discipline re-defaults the race to that game's own target.
+      state.newGame = sel.value;
+      state.newRaceTo = String(localRaceTo(sel.value));
+      renderHome();
       return;
     }
     if (sel.id !== 'tvenue') return;

@@ -2,7 +2,11 @@ package api
 
 import (
 	"context"
+	"database/sql"
+	"encoding/json"
+	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -15,14 +19,38 @@ type Division struct {
 	Name         string `json:"name"`
 	Format       string `json:"format"`
 	State        string `json:"state"`
-	ArchivedAt   *int64 `json:"archivedAt"`
-	CreatedAt    int64  `json:"createdAt"`
-	UpdatedAt    int64  `json:"updatedAt"`
+	// RaceTo is the game's race target for this division: the division's own
+	// `race_to` when set, otherwise the game's default (never null).
+	RaceTo     int    `json:"raceTo"`
+	ArchivedAt *int64 `json:"archivedAt"`
+	CreatedAt  int64  `json:"createdAt"`
+	UpdatedAt  int64  `json:"updatedAt"`
+}
+
+// divisionCols carries the stored race_to plus the owning tournament's game, so
+// RaceTo resolves (division layer ?? game default) without a second query.
+const divisionCols = `id, tournament_id, name, format, state, archived_at, created_at, updated_at, race_to,
+	(SELECT game FROM tournaments t WHERE t.id = divisions.tournament_id)`
+
+func scanDivision(row interface{ Scan(...any) error }) (*Division, error) {
+	var d Division
+	var rawRace *int
+	var game string
+	err := row.Scan(&d.ID, &d.TournamentID, &d.Name, &d.Format, &d.State, &d.ArchivedAt, &d.CreatedAt, &d.UpdatedAt, &rawRace, &game)
+	if err != nil {
+		return &d, err
+	}
+	d.RaceTo, _ = resolveRaceTo(nil, rawRace, game)
+	return &d, nil
+}
+
+func (api *API) getDivision(ctx context.Context, tid, did string) (*Division, error) {
+	row := api.DB.QueryRowContext(ctx, `SELECT `+divisionCols+` FROM divisions WHERE id = ? AND tournament_id = ?`, did, tid)
+	return scanDivision(row)
 }
 
 func (api *API) listDivisions(ctx context.Context, tournamentID string, includeArchived bool) ([]*Division, error) {
-	q := `SELECT id, tournament_id, name, format, state, archived_at, created_at, updated_at
-	      FROM divisions WHERE tournament_id = ?`
+	q := `SELECT ` + divisionCols + ` FROM divisions WHERE tournament_id = ?`
 	if !includeArchived {
 		q += ` AND archived_at IS NULL`
 	}
@@ -34,11 +62,11 @@ func (api *API) listDivisions(ctx context.Context, tournamentID string, includeA
 	defer rows.Close()
 	out := []*Division{}
 	for rows.Next() {
-		var d Division
-		if err := rows.Scan(&d.ID, &d.TournamentID, &d.Name, &d.Format, &d.State, &d.ArchivedAt, &d.CreatedAt, &d.UpdatedAt); err != nil {
+		d, err := scanDivision(rows)
+		if err != nil {
 			return nil, err
 		}
-		out = append(out, &d)
+		out = append(out, d)
 	}
 	return out, rows.Err()
 }
@@ -65,6 +93,9 @@ func (api *API) ListDivisions(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]interface{}{"items": divs})
 }
 
+// validRaceTo reports whether a race target is in the accepted 1..999 range.
+func validRaceTo(n int) bool { return n >= 1 && n <= 999 }
+
 // CreateDivision: POST /api/v1/tournaments/{id}/divisions (director+).
 func (api *API) CreateDivision(w http.ResponseWriter, r *http.Request) {
 	tid := chi.URLParam(r, "id")
@@ -75,12 +106,17 @@ func (api *API) CreateDivision(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Name   string `json:"name"`
 		Format string `json:"format"`
+		RaceTo *int   `json:"raceTo"` // optional; NULL/absent means the game default
 	}
 	if !decodeBody(w, r, &body) {
 		return
 	}
 	if len(body.Name) == 0 || len(body.Name) > 120 {
 		writeErr(w, http.StatusBadRequest, "invalid_name", "division name is required (1-120 chars)")
+		return
+	}
+	if body.RaceTo != nil && !validRaceTo(*body.RaceTo) {
+		writeErr(w, http.StatusBadRequest, "invalid_race_to", "raceTo must be between 1 and 999")
 		return
 	}
 	format := body.Format
@@ -92,9 +128,9 @@ func (api *API) CreateDivision(w http.ResponseWriter, r *http.Request) {
 	tx, _ := api.DB.BeginTx(r.Context(), nil)
 	defer tx.Rollback()
 	_, err := tx.ExecContext(r.Context(),
-		`INSERT INTO divisions (id, tournament_id, name, format, state, created_at, updated_at)
-		 VALUES (?,?,?,?, 'active', ?, ?)`,
-		id, tid, body.Name, format, now, now)
+		`INSERT INTO divisions (id, tournament_id, name, format, state, race_to, created_at, updated_at)
+		 VALUES (?,?,?,?, 'active', ?, ?, ?)`,
+		id, tid, body.Name, format, body.RaceTo, now, now)
 	if err != nil {
 		// UNIQUE(tournament_id,name) violation
 		writeErr(w, http.StatusConflict, "duplicate_division", "a division with that name already exists")
@@ -103,15 +139,95 @@ func (api *API) CreateDivision(w http.ResponseWriter, r *http.Request) {
 	_ = audit.Write(r.Context(), tx, audit.Entry{
 		EntityType: "division", EntityID: id, Action: "created",
 		ActorUserID: actor(r.Context()), RequestID: reqID(r.Context()),
-		After: map[string]string{"tournamentId": tid, "name": body.Name, "format": format},
+		After: map[string]interface{}{"tournamentId": tid, "name": body.Name, "format": format, "raceTo": body.RaceTo},
 	})
 	if err := tx.Commit(); err != nil {
 		writeErr(w, http.StatusInternalServerError, "server_error", "")
 		return
 	}
-	var d Division
-	_ = api.DB.QueryRowContext(r.Context(),
-		`SELECT id, tournament_id, name, format, state, archived_at, created_at, updated_at FROM divisions WHERE id=?`, id).
-		Scan(&d.ID, &d.TournamentID, &d.Name, &d.Format, &d.State, &d.ArchivedAt, &d.CreatedAt, &d.UpdatedAt)
-	writeJSON(w, http.StatusCreated, map[string]interface{}{"division": &d})
+	d, _ := api.getDivision(r.Context(), tid, id)
+	writeJSON(w, http.StatusCreated, map[string]interface{}{"division": d})
+}
+
+// PatchDivision: PATCH /api/v1/tournaments/{id}/divisions/{divisionId} (director+).
+// Body may carry name?, format? and raceTo. For raceTo, absent ≠ null: an explicit
+// null clears the division override (falling back to the game default) while an
+// absent field leaves it alone, so a director never wipes it by accident.
+func (api *API) PatchDivision(w http.ResponseWriter, r *http.Request) {
+	tid := chi.URLParam(r, "id")
+	did := chi.URLParam(r, "divisionId")
+	var body struct {
+		Name   *string         `json:"name"`
+		Format *string         `json:"format"`
+		RaceTo json.RawMessage `json:"raceTo"`
+	}
+	if !decodeBody(w, r, &body) {
+		return
+	}
+	cur, err := api.getDivision(r.Context(), tid, did)
+	if errors.Is(err, sql.ErrNoRows) {
+		writeErr(w, http.StatusNotFound, "not_found", "division not found")
+		return
+	}
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "server_error", "")
+		return
+	}
+	// raceTo: the raw message distinguishes absent (nil) from explicit null.
+	var raceVal *int
+	racePresent := body.RaceTo != nil
+	if racePresent && string(body.RaceTo) != "null" {
+		var n int
+		if err := json.Unmarshal(body.RaceTo, &n); err != nil || !validRaceTo(n) {
+			writeErr(w, http.StatusBadRequest, "invalid_race_to", "raceTo must be between 1 and 999")
+			return
+		}
+		raceVal = &n
+	}
+	sets := []string{}
+	args := []any{}
+	after := map[string]interface{}{}
+	if body.Name != nil && *body.Name != "" {
+		if len(*body.Name) > 120 {
+			writeErr(w, http.StatusBadRequest, "invalid_name", "division name is required (1-120 chars)")
+			return
+		}
+		sets = append(sets, "name=?")
+		args = append(args, *body.Name)
+		after["name"] = *body.Name
+	}
+	if body.Format != nil && *body.Format != "" {
+		sets = append(sets, "format=?")
+		args = append(args, *body.Format)
+		after["format"] = *body.Format
+	}
+	if racePresent {
+		sets = append(sets, "race_to=?")
+		args = append(args, raceVal)
+		after["raceTo"] = raceVal
+	}
+	if len(sets) == 0 {
+		writeJSON(w, http.StatusOK, map[string]interface{}{"division": cur})
+		return
+	}
+	now := time.Now().Unix()
+	tx, _ := api.DB.BeginTx(r.Context(), nil)
+	defer tx.Rollback()
+	args = append(args, now, did)
+	if _, err := tx.ExecContext(r.Context(),
+		`UPDATE divisions SET `+strings.Join(sets, ", ")+`, updated_at=? WHERE id=?`, args...); err != nil {
+		writeErr(w, http.StatusConflict, "duplicate_division", "a division with that name already exists")
+		return
+	}
+	_ = audit.Write(r.Context(), tx, audit.Entry{
+		EntityType: "division", EntityID: did, Action: "updated",
+		ActorUserID: actor(r.Context()), RequestID: reqID(r.Context()),
+		After: after,
+	})
+	if err := tx.Commit(); err != nil {
+		writeErr(w, http.StatusInternalServerError, "server_error", "")
+		return
+	}
+	d, _ := api.getDivision(r.Context(), tid, did)
+	writeJSON(w, http.StatusOK, map[string]interface{}{"division": d})
 }

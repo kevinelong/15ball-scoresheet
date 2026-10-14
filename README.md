@@ -32,6 +32,15 @@ It ships in two layers that share one bracket model:
   15 ball faces over 4 racks (GAME SUBTOTAL), **Straight Pool 14.1** marks 14 plain circles
   over 8 racks (RUNNING TOTAL, FINAL MATCH TOTAL, goals 75/100), and the race disciplines
   (8/9/10-Ball, One Pocket, Bank Pool) get a games tally in the same sheet chrome
+- **Each discipline advertises its own targets, and only targets its own sheet can reach.**
+  15-Ball Rotation offers 25/50 and says so ("a 4-rack sheet tops out at 60 balls"), instead of
+  carrying 14.1's "multiple of 25 (25 / 50 / 100 / 150)" line across; 14.1 offers 75/100 (8 racks
+  = 112 balls) and no longer advertises an unreachable 150. One Pocket's catalog line keeps its
+  two models apart: the *match* is a race of games, and a *game* is won by pocketing 8 balls in
+  your own pocket. The hint text and the goal presets are pinned against the sheet's own ceiling
+  by `app-render.test.js`, so the copy cannot drift away from the geometry again.
+- The 14.1 paper sheet and its rules ship with the 14.1 in-app sheet: the header links both
+  (`docs/141-paper-sheet.pdf`, whose QR points at `docs/141-rules.pdf`)
 - Live per-rack totals, running totals, and final totals
 - Fouls per rack, aggregated per player
 - Player names pre-populated from the bracket slot; goal presets pre-checked from the setup
@@ -42,6 +51,13 @@ It ships in two layers that share one bracket model:
   games tally is one step for that player (up +1, down −1). It is an accelerator — the ± buttons and
   the ball taps remain the accessible and desktop path, and a mouse drag never takes the gesture
 - Winner selection advances the bracket automatically on save (auto-selected at the target)
+- **The bracket shows win/loss and nothing else** — a decided card marks the winner and the
+  loser, and prints no score; the sheet is where the numbers live. Pinned by
+  `app-render.test.js` (console card) and `overlay-bracket.test.js` (the OBS bracket overlay).
+- **This console has no server link, and says so.** A sheet saved here is a local draft:
+  the modal carries a "saved on this device … stays in this browser" note and the save toast
+  repeats it, so a local save can never read as "recorded" somewhere. Submitting a sheet to a
+  server tournament is the live console's job (see *Server*, below)
 
 ### Persistence & sharing
 - Auto-saves the entire tournament (bracket + every match sheet) to browser storage
@@ -80,6 +96,8 @@ code they cover:
 ```bash
 node bracket.test.js        # bracket engine: single-elim spec, scale pinning, refusals
 node sheets.test.js         # per-discipline sheet specs: id resolution, rack geometry, goals
+node sheet-payload.test.js  # the saved sheet record: shape, instruments, the phone's payload
+node overlay-bracket.test.js # OBS bracket overlay: win/loss only, never a score
 node roster.test.js         # roster parsing
 node tables.test.js         # table naming/parsing (25 tests)
 node migration.test.js      # storage-key + legacy-state migration
@@ -102,18 +120,41 @@ clean). The review-flag and single-elimination work is covered by scenarios 31�
   `single_elim` (single elimination), `single` (double elimination settled by one decisive
   grand final) and `double` (with the GF2 reset) — see the two vocabularies in
   `server/IMPLEMENTATION/12-frontend-integration-guide.md` §7.
+- **The score sheet is a submitted artifact; the bracket carries the race.** The bracket
+  records win/loss and nothing else, but it carries each match's race target —
+  `matches.race_to ?? divisions.race_to ?? the game's own default` — exposed on the match
+  payload as `raceTo` and `raceFrom` (`"match"` | `"division"` | `"default"`) and on the
+  division as a resolved `raceTo`. `GET /tournaments/{id}/matches` is where a scorer reads
+  it: the live console's tally takes its target and label from the match and never invents
+  one (only a director sets one, via `POST …/divisions` or `PATCH …/divisions/{divisionId}`,
+  with an optional per-match `PATCH …/matches/{matchId}` override for a longer final).
+  Scoring a match submits **one sheet record** through the existing
+  `POST …/matches/{matchId}/result` (`sheet-payload.js` builds it; the payload carries the
+  payload version, the discipline, the measurement, the goals, the race as printed on the
+  sheet, the per-rack detail for a rack discipline, the finals, the winner, the app and its
+  version — and `sheetKind`, which names the instrument that produced the number: `rack` or
+  `tally`). Results stay append-only and versioned, so the match's history **is** the stack:
+  `GET …/matches/{matchId}/history` returns each saved sheet with its payload, who saved it
+  (`submittedByEmail`) and when, and the console lists them newest first and shows the
+  selected version. A correction is a new version (reopen → re-submit), never a rewrite.
+  Docs: `DECISIONS/023-sheet-stack.md`, `IMPLEMENTATION/04-api-contracts.md` (§divisions and
+  §matches), `05-schema-contract.md` (migration 0018), `09-acceptance-tests.md` §K.
 - **Corrections.** Reopening a match whose winner already played downstream keeps the played
   result and flags the downstream match for review (`matches.needs_review`) with an audit row
   and an SSE event; a director replays it and clears the flag. Contract:
   `server/IMPLEMENTATION/03-state-machines.md` ("Match review flag").
 - **Deployment is manual and belongs to the maintainer.** The live service is updated by
   pulling this repo on the server (`cd /home/kevin/15ball-scoresheet && git pull`) and
-  restarting it — **a pushed commit is not a deployed one**. Migration
-  `0017_match_review_flag.sql` (the review flag) applies automatically on the next service
-  start: additive column, `DEFAULT 0`, no backfill.
+  restarting it — **a pushed commit is not a deployed one**. Two migrations apply
+  automatically on the next service start, both additive with no backfill: 
+  `0017_match_review_flag.sql` (the review flag, `DEFAULT 0`) and
+  `0018_race_to.sql` (`divisions.race_to`, `matches.race_to`, both nullable — existing rows
+  read back as "not set here" and resolve to the game's default / the division). Until 0018
+  has run, the race resolution is inert and a match payload reports the game's own default.
 - **Next.** The one open decision is in `server/OPEN-QUESTIONS.md` (which result version
   counts as the current winner after a reopen and re-submit); beyond that, disciplines other
-  than 15-ball, and a console control for clearing a review flag.
+  than 15-ball, a console control for clearing a review flag, and a console UI for the
+  per-match race override (the server takes it; nothing sets it yet).
 
 ## Bracket engine (`bracket.js`)
 
@@ -151,6 +192,9 @@ tables.test.js     # table roster tests
 roster.js          # roster parsing
 roster.test.js     # roster tests
 migration.test.js  # storage-key + legacy-state migration tests
+sheet-payload.js   # the score sheet as a record (the result payload + its reader)
+sheet-payload.test.js  # the record's shape, its two instruments, the phone's payload
+overlay-bracket.test.js # OBS bracket overlay: win/loss only
 app-render.test.js     # console render tests (formats, grand final, sheet replay)
 live-console.test.js   # cloud console render + SSE tests
 review-flags.test.js   # OBS overlay review-flag tests

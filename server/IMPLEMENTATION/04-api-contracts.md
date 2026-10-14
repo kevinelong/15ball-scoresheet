@@ -32,7 +32,8 @@ Base path: `/api/v1` (served behind `/15ball/api/v1`).
 | PATCH | `/tournaments/{id}` | director+ | partial editable fields | `200 {tournament}` | `400` `403` `404` `409 invalid_transition` | optional |
 | POST | `/tournaments/{id}/archive` | director+ | `{reason?}` | `200 {tournament}` | `403` `404` `409 already_archived` | optional |
 | GET | `/tournaments/{id}/divisions` | authenticated | pagination | `200` | `403` `404` | n/a |
-| POST | `/tournaments/{id}/divisions` | director+ | division payload | `201` | `400` `403` `404` | optional |
+| POST | `/tournaments/{id}/divisions` | director+ | division payload (`{name,format?,raceTo?}`) | `201 {division}` | `400 invalid_name` `400 invalid_race_to` `403` `404` `409 duplicate_division` | optional |
+| PATCH | `/tournaments/{id}/divisions/{divisionId}` | director+ | `{name?,format?,raceTo?}` | `200 {division}` | `400 invalid_name` `400 invalid_race_to` `403` `404` `409 duplicate_division` | optional |
 
 ## Entrants and check-in
 
@@ -49,6 +50,7 @@ Base path: `/api/v1` (served behind `/15ball/api/v1`).
 | Method | Path | Auth | Request | Success | Errors | Idempotency |
 |---|---|---|---|---|---|---|
 | GET | `/tournaments/{id}/matches` | authenticated | pagination + filters | `200 {items,nextCursor}` | `403` `404` | n/a |
+| PATCH | `/tournaments/{id}/matches/{matchId}` | director+ | `{raceTo}` | `200 {match}` | `400 invalid_race_to` `403` `404` | optional |
 | POST | `/tournaments/{id}/matches/{matchId}/assign` | director+ | `{scorekeeperUserId,tableRef?}` | `200 {match}` | `400` `403` `404` `409 invalid_transition` | optional |
 | POST | `/tournaments/{id}/matches/{matchId}/start` | assigned scorekeeper or director+ | `{expectedVersion}` | `200 {match}` | `400` `403` `404` `409` | optional |
 | POST | `/tournaments/{id}/matches/{matchId}/result` | assigned scorekeeper or director+ | `{winnerEntrantId,loserEntrantId,score,...}` | `200 {match,resultVersion}` | `400` `403` `404` `409 invalid_transition` | **required** |
@@ -57,6 +59,13 @@ Base path: `/api/v1` (served behind `/15ball/api/v1`).
 | GET | `/tournaments/{id}/matches/{matchId}/history` | authenticated | none | `200 {versions,audit}` | `403` `404` | n/a |
 
 Match payloads carry `needsReview` (migration 0017, [05-schema-contract.md](./05-schema-contract.md)) next to `winnerEntrantId`. A match with `needsReview: true` had its participants changed after it was played — a corrected upstream result reached it — so its recorded winner may not be one of its two participants; the flag is the signal that a human has to look. The manual repair path is: reopen the match (`…/reopen`, reason required), submit the corrected result, then `…/clear-review`, which is the only thing that clears the flag and is audited (`match: review_cleared`, SSE `match.review_cleared`, [03-state-machines.md](./03-state-machines.md)). `clear-review` accepts an optional `reason` (unlike reopen, the director may be dismissing a difference they judged benign) and answers `409 not_flagged` when the match does not require review.
+
+Match payloads also carry the race target: `raceTo` (always a number) and `raceFrom` (`"match"` | `"division"` | `"default"`), resolved as `matches.race_to ?? divisions.race_to ?? game default` (migration 0018, [05-schema-contract.md](./05-schema-contract.md)). A scorer reads it from `GET /tournaments/{id}/matches` and never invents one. Two layers are director-settable:
+
+- **Division layer** — `POST …/divisions` (optional `raceTo` at create) and `PATCH …/divisions/{divisionId}` accept `raceTo` (1–999; `400 invalid_race_to` otherwise). The division payload exposes the resolved `raceTo` (`division ?? game default`).
+- **Match layer** — `PATCH …/matches/{matchId}` sets an optional per-match override (e.g. a longer final). It is **director+ only** on its own route, deliberately not in the open-scoring group: an open scoring link must not be able to retune the race.
+
+On both PATCH bodies, **absent ≠ null**: an explicit `"raceTo": null` clears that layer (the value falls through to the next layer) while an absent field leaves it untouched, so a director never wipes a target by accident. Both writes are audited, and both return the updated payload with the resolved `raceTo`/`raceFrom`.
 
 ## Realtime and public data
 

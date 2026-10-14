@@ -41,6 +41,45 @@ PRs that change behavior without docs/tests updates are incomplete.
 
 ## Where the work stands (handoff, 2026-10-14)
 
+**This turn — the score sheet as a saved stack, and the race carried by the bracket**
+(branch `sheet-stack`; decisions: `DECISIONS/023-sheet-stack.md`):
+
+- **The race is bracket data** (migration `0018_race_to.sql`). `divisions.race_to` holds the
+  division's target, `matches.race_to` an optional per-match override (a longer final), and
+  the resolved value is `match ?? division ?? the game's own default`
+  (`internal/api/games.go` mirrors the front end's `GAMES[*].defaultRaceTo`) — the match
+  payload carries `raceTo` (always a number) plus `raceFrom` (`"match"|"division"|"default"`)
+  and the division payload carries the resolved `raceTo`. Writes: `POST …/divisions`
+  (optional `raceTo`), new `PATCH …/divisions/{divisionId}` and `PATCH …/matches/{matchId}`
+  — both director+ on their **own** route, deliberately outside the open-scoring group, with
+  absent ≠ null (an explicit `null` clears that layer). Resolution lives in
+  `scanMatch`/`scanDivision`, so every match-serialising surface (list, submit response,
+  snapshot, overlay) reports it. Scenarios 49–54; tests in
+  `internal/api/race_to_test.go`.
+- **The sheet is one record, and the read side is the stack.** `GET …/matches/{matchId}/history`
+  now returns each version's `payload` (the `payload_json` that version wrote) and
+  `submittedByEmail`; the live console builds the record with `sheet-payload.js`, submits it
+  once per result through the existing endpoint with an `Idempotency-Key`, and lists the
+  saved sheets newest first with who and when. The one-tap "record this player as the winner"
+  control is gone — the sheet is the record, so the sheet is what submits (and an
+  `in_progress` match, the state the endpoint takes, now opens it).
+- **Frontend corrections.** 15-Ball Rotation got its own hint and targets (25/50, "a 4-rack
+  sheet tops out at 60 balls") instead of 14.1's copied line; 14.1 stopped advertising 150;
+  One Pocket's match-race and 8-balls-in-your-own-pocket rules are separate lines; the 14.1
+  paper sheet + rules PDFs are linked from both headers; the offline console says plainly
+  that it saves **on this device**; and the bracket card no longer prints a score (pinned
+  with the OBS bracket overlay by `overlay-bracket.test.js`).
+
+**The phone's payload — the marker convention (no Java change made):** the Android app posts
+`discipline` and `app: "score-android"`, but its number is a plain games tally, not a rack
+sheet. A reader must therefore treat a `payload_json` with `app === "score-android"` and no
+`sheetKind` as `sheetKind: "tally"`, and its hand-typed race/goals as an explicit
+`raceFrom: "override"` rather than the normal path (the scorer reads the race from the
+bracket). When the phone next ships it SHOULD add `sheetKind: "tally"` and `payloadVersion`
+to its payload; until then the console infers both and the record stays legible. The record
+shape is `DECISIONS/023-sheet-stack.md` / `sheet-payload.js`; nothing in the Android repo was
+touched by this turn.
+
 Last shipped (branch `test-coverage-hardening`, tip `1d6e753`, on `main`):
 
 - **Review flag — option 3 of the reopen collision.** A corrected upstream result still
@@ -130,9 +169,13 @@ behaviour, no deploy step.
 **A pushed commit is not a deployed one.** The live service picks changes up when Kevin
 pulls and restarts it: `cd /home/kevin/15ball-scoresheet && git pull` + service restart.
 
-- Pending on the next service start: migration **`0017_match_review_flag.sql`** (adds
-  `matches.needs_review`; additive, `DEFAULT 0`, no backfill — existing rows read back as
-  clear). The review flag is inert until that migration has run.
+- Pending on the next service start, both additive with no backfill: migration
+  **`0017_match_review_flag.sql`** (adds `matches.needs_review`, `DEFAULT 0` — existing rows
+  read back as clear; the review flag is inert until it has run) and migration
+  **`0018_race_to.sql`** (adds `divisions.race_to` and `matches.race_to`, both nullable —
+  existing rows read back as "not set here" and resolve to the game's default / the
+  division). Until 0018 has run, every match payload reports the game's own default as
+  `raceTo`/`raceFrom: "default"`, and the two PATCH routes are the only way to set a race.
 - No other deploy step changed this round; no tag, release or deploy is performed from this
   branch.
 

@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -40,22 +41,34 @@ type Match struct {
 	// NeedsReview marks a match whose participants changed after it was played: the
 	// recorded result is kept as-is and the match waits for a director to replay it
 	// (migration 0017, 03-state-machines "Match review flag").
-	NeedsReview bool  `json:"needsReview"`
-	Version     int64 `json:"version"`
+	NeedsReview bool `json:"needsReview"`
+	// RaceTo/RaceFrom are the resolved race target (migration 0018,
+	// 05-schema-contract): matches.race_to, else the division's race_to, else the
+	// game's default — always a number, never null. RaceFrom names the layer that
+	// supplied it: "match", "division" or "default". Filled by scanMatch.
+	RaceTo      int    `json:"raceTo"`
+	RaceFrom    string `json:"raceFrom"`
+	Version     int64  `json:"version"`
 	StartedAt   *int64 `json:"startedAt"`
 	CompletedAt *int64 `json:"completedAt"`
 	CreatedAt   int64  `json:"createdAt"`
 	UpdatedAt   int64  `json:"updatedAt"`
 }
 
-const matchCols = `id, tournament_id, division_id, bracket_round, slot, entrant_a_id, entrant_b_id, state, assigned_scorekeeper_user_id, table_ref, version, started_at, completed_at, created_at, updated_at, bracket, match_label, feeds_winner_match, feeds_winner_slot, feeds_loser_match, feeds_loser_slot, needs_review`
+// matchCols also carries the two race layers below the match (the division's
+// stored race_to and the tournament's game) so scanMatch can resolve raceTo /
+// raceFrom in one pass, in every query that reads a match.
+const matchCols = `id, tournament_id, division_id, bracket_round, slot, entrant_a_id, entrant_b_id, state, assigned_scorekeeper_user_id, table_ref, version, started_at, completed_at, created_at, updated_at, bracket, match_label, feeds_winner_match, feeds_winner_slot, feeds_loser_match, feeds_loser_slot, needs_review, race_to, (SELECT race_to FROM divisions d WHERE d.id = matches.division_id), (SELECT game FROM tournaments t WHERE t.id = matches.tournament_id)`
 
 func scanMatch(row interface{ Scan(...any) error }) (*Match, error) {
 	var m Match
+	var matchRace, divRace *int
+	var game string
 	err := row.Scan(&m.ID, &m.TournamentID, &m.DivisionID, &m.BracketRound, &m.Slot, &m.EntrantAID, &m.EntrantBID,
 		&m.State, &m.Scorekeeper, &m.TableRef, &m.Version, &m.StartedAt, &m.CompletedAt, &m.CreatedAt, &m.UpdatedAt,
 		&m.Bracket, &m.MatchLabel, &m.FeedsWinnerMatch, &m.FeedsWinnerSlot, &m.FeedsLoserMatch, &m.FeedsLoserSlot,
-		&m.NeedsReview)
+		&m.NeedsReview, &matchRace, &divRace, &game)
+	m.RaceTo, m.RaceFrom = resolveRaceTo(matchRace, divRace, game)
 	return &m, err
 }
 
@@ -351,6 +364,60 @@ func (api *API) StartMatch(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]interface{}{"match": nm})
 }
 
+// PatchMatch: PATCH /api/v1/tournaments/{id}/matches/{matchId} (director+ only).
+// The per-match race override is director-set on purpose: an open scoring link
+// must never be able to retune the race. Body carries raceTo with absent ≠ null —
+// an explicit null clears the override (the match inherits its division again),
+// absence leaves it alone. Returns the resolved match.
+func (api *API) PatchMatch(w http.ResponseWriter, r *http.Request) {
+	tid, mid := chi.URLParam(r, "id"), chi.URLParam(r, "matchId")
+	var body struct {
+		RaceTo json.RawMessage `json:"raceTo"`
+	}
+	if !decodeBody(w, r, &body) {
+		return
+	}
+	m, err := api.getMatch(r.Context(), tid, mid)
+	if errors.Is(err, sql.ErrNoRows) {
+		writeErr(w, http.StatusNotFound, "not_found", "match not found")
+		return
+	}
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "server_error", "")
+		return
+	}
+	if body.RaceTo != nil {
+		var raceVal *int
+		if string(body.RaceTo) != "null" {
+			var n int
+			if err := json.Unmarshal(body.RaceTo, &n); err != nil || !validRaceTo(n) {
+				writeErr(w, http.StatusBadRequest, "invalid_race_to", "raceTo must be between 1 and 999")
+				return
+			}
+			raceVal = &n
+		}
+		now := time.Now().Unix()
+		tx, _ := api.DB.BeginTx(r.Context(), nil)
+		defer tx.Rollback()
+		if _, err := tx.ExecContext(r.Context(),
+			`UPDATE matches SET race_to=?, updated_at=?, version=version+1 WHERE id=?`, raceVal, now, mid); err != nil {
+			writeErr(w, http.StatusInternalServerError, "server_error", "")
+			return
+		}
+		_ = audit.Write(r.Context(), tx, audit.Entry{
+			EntityType: "match", EntityID: mid, Action: "updated",
+			ActorUserID: actor(r.Context()), RequestID: reqID(r.Context()),
+			After: map[string]interface{}{"raceTo": raceVal},
+		})
+		if err := tx.Commit(); err != nil {
+			writeErr(w, http.StatusInternalServerError, "server_error", "")
+			return
+		}
+		m, _ = api.getMatch(r.Context(), tid, mid)
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"match": m})
+}
+
 // canScoreMatch: the assigned scorekeeper, or any director+ (or anyone, when
 // open match editing is enabled).
 func (api *API) canScoreMatch(ctx context.Context, m *Match) bool {
@@ -372,22 +439,30 @@ func (api *API) MatchHistory(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusNotFound, "not_found", "match not found")
 		return
 	}
-	// result versions
+	// result versions: each saved sheet, newest first is up to the caller
+	// (ORDER BY result_version), carrying the payload this version wrote and who
+	// saved it (submittedByEmail is "" when submitted_by is NULL — an open scoring link).
 	rrows, _ := api.DB.QueryContext(r.Context(),
-		`SELECT id, result_version, winner_entrant_id, loser_entrant_id, payload_json, submitted_by, submitted_at, superseded_by
-		 FROM match_results WHERE match_id=? ORDER BY result_version`, mid)
+		`SELECT r.id, r.result_version, r.winner_entrant_id, r.loser_entrant_id, r.payload_json, r.submitted_by, u.email, r.submitted_at, r.superseded_by
+		 FROM match_results r LEFT JOIN users u ON u.id = r.submitted_by
+		 WHERE r.match_id=? ORDER BY r.result_version`, mid)
 	versions := []map[string]interface{}{}
 	if rrows != nil {
 		defer rrows.Close()
 		for rrows.Next() {
 			var id, payload string
 			var rv int
-			var win, lose, by, sup sql.NullString
+			var win, lose, by, email, sup sql.NullString
 			var at int64
-			_ = rrows.Scan(&id, &rv, &win, &lose, &payload, &by, &at, &sup)
+			_ = rrows.Scan(&id, &rv, &win, &lose, &payload, &by, &email, &at, &sup)
+			raw := json.RawMessage(payload)
+			if payload == "" {
+				raw = json.RawMessage("{}")
+			}
 			versions = append(versions, map[string]interface{}{
 				"id": id, "resultVersion": rv, "winnerEntrantId": win.String, "loserEntrantId": lose.String,
-				"submittedBy": by.String, "submittedAt": at, "supersededBy": sup.String,
+				"payload": raw, "submittedBy": by.String, "submittedByEmail": email.String,
+				"submittedAt": at, "supersededBy": sup.String,
 			})
 		}
 	}

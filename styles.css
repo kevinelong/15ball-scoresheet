@@ -626,10 +626,8 @@ body { padding: 0; }
 .slot:last-child { border-bottom: 0; }
 .slot .nm { font-weight: 600; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .slot .sd { font-size: 10px; color: var(--muted); margin-right: 6px; letter-spacing: .5px; }
-.slot .sc { color: var(--muted); font-weight: 700; font-size: 13px; min-width: 24px; text-align: right; }
 .slot.winner { background: #eefbe9; }
 .slot.winner .nm { color: var(--hit-ink); font-weight: 800; }
-.slot.winner .sc { color: var(--hit-ink); }
 .slot.loser .nm { color: var(--muted); }
 .slot.bye { color: var(--muted); font-style: italic; }
 .slot.empty .nm { color: #cbd5e1; }
@@ -680,6 +678,12 @@ body { padding: 0; }
 }
 .iconbtn:hover { color: var(--red); }
 .modal-body .sheet { max-width: 100%; margin: 0; }
+/* This console has no backend: the sheet a save produces stays in this browser. */
+.device-note {
+  margin: 0 0 8px; padding: 8px 12px; font-size: 12px; color: var(--navy);
+  background: #fff; border: 1px solid var(--line); border-left: 3px solid var(--red);
+  border-radius: 6px;
+}
 .modal-actions {
   display: flex; gap: 8px; align-items: center;
   background: #fff; padding: 10px 12px; border-radius: 10px;

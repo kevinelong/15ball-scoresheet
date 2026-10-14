@@ -7,9 +7,11 @@ See also: [03-state-machines.md](./03-state-machines.md), [04-api-contracts.md](
 1. `users` (id, email_normalized unique, created_at, last_login_at, pending_role boolean).
 2. `user_roles` (user_id, role enum, granted_by, granted_at, revoked_at nullable).
 3. `tournaments` (id, slug unique, name, game=`15ball_rotation`, state, archived_at nullable, created_by, created_at, updated_at, version).
-4. `divisions` (id, tournament_id FK, name, format, state, archived_at nullable, unique(tournament_id,name)).
+4. `divisions` (id, tournament_id FK, name, format, state, race_to nullable, archived_at nullable, unique(tournament_id,name)).
+   - `divisions.race_to` (migration 0018): the division's race target — games for the win-measured disciplines, points for the ball-measured ones. NULL means "not set here", so the division falls back to the game's own default. The division payload's `raceTo` is `divisions.race_to ?? game default` (always a number).
 5. `entrants` (id, tournament_id FK, division_id FK nullable, display_name, state, check_in_at nullable, archived_at nullable, created_at, updated_at, version).
-6. `matches` (id, tournament_id FK, division_id FK nullable, bracket_round, side, state, assigned_scorekeeper_user_id nullable, reopened_from_result_id nullable, version, scheduled_at, started_at, completed_at).
+6. `matches` (id, tournament_id FK, division_id FK nullable, bracket_round, side, state, assigned_scorekeeper_user_id nullable, reopened_from_result_id nullable, version, scheduled_at, started_at, completed_at, race_to nullable).
+   - `matches.race_to` (migration 0018): an optional per-match race override (e.g. a longer final). NULL inherits the division. The match payload's `raceTo` resolves the three layers — `matches.race_to ?? divisions.race_to ?? game default` — and `raceFrom` names the layer that supplied it (`"match"` | `"division"` | `"default"`); `raceTo` is always a number, never null. A match whose `division_id` is NULL skips the division layer and reads the tournament game's default.
    - `matches.needs_review` (migration 0017): 0/1, default 0. Set when a corrected upstream result reached this match after it was played — the recorded result is kept and the match waits for a director to replay it and clear the flag. Set only by bracket propagation; cleared only by `POST …/matches/{matchId}/clear-review` (04-api-contracts). Semantics in 03-state-machines ("Match review flag").
 7. `match_results` (id, match_id FK, result_version int, winner_entrant_id, loser_entrant_id, payload_json, submitted_by, submitted_at, superseded_by nullable).
 8. `audit_log` (id, entity_type, entity_id, action, actor_user_id nullable, reason nullable, before_json, after_json, request_id, created_at).

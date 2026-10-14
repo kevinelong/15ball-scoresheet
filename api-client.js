@@ -131,7 +131,10 @@
 
       // ---- divisions ----
       listDivisions: (id) => get(T(id) + '/divisions'),
-      createDivision: (id, body) => post(T(id) + '/divisions', body), // {name, format?}
+      createDivision: (id, body) => post(T(id) + '/divisions', body), // {name, format?, raceTo?}
+      // raceTo: absent ≠ null — an explicit null clears the division override
+      // (falling back to the game default), while an absent field leaves it alone.
+      patchDivision: (id, divisionId, body) => patch(T(id) + '/divisions/' + encodeURIComponent(divisionId), body), // {name?, format?, raceTo?}
 
       // ---- entrants ----
       listEntrants: (id, params) => get(T(id) + '/entrants', params),
@@ -161,6 +164,8 @@
       // ---- matches ----
       listMatches: (id, params) => get(T(id) + '/matches', params),
       assignMatch: (id, mid, body) => post(T(id) + '/matches/' + encodeURIComponent(mid) + '/assign', body), // {scorekeeperUserId, tableRef?}
+      // Per-match race override (director+); server capability, no console UI.
+      patchMatch: (id, mid, body) => patch(T(id) + '/matches/' + encodeURIComponent(mid), body), // {raceTo?}
       startMatch: (id, mid) => post(T(id) + '/matches/' + encodeURIComponent(mid) + '/start'),
       matchHistory: (id, mid) => get(T(id) + '/matches/' + encodeURIComponent(mid) + '/history'),
 

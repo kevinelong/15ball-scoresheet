@@ -25,6 +25,11 @@
   const LEGACY_KEY_V2 = "fifteenBall.tournament.v1";
   const LEGACY_KEY_V2_OLD = "kball.tournament.v1";  // pre-rename v2 key
 
+  // This console has no backend: a saved sheet lives in this browser only. Said in the
+  // score-sheet modal (index.html, same wording) and in the toast on save, so "Result
+  // recorded" can no longer read as if something were sent somewhere.
+  const DEVICE_SAVE_NOTE = "Saved on this device — this console has no server link, so the sheet stays in this browser.";
+
   // ---------- safe storage adapter ----------
   const store = (function () {
     let mem = null;
@@ -75,12 +80,12 @@
   // Curated game catalog. The *sheet* for a game — rack geometry, column labels, goal
   // presets, and whether the match is marked by balls or by games won — lives in sheets.js.
   const GAMES = {
-    fifteenBall:{ id: "fifteenBall",name: "15-Ball Rotation",         defaultRaceTo: 25, raceLabel: "Points to win", raceHint: "Points target per match — a multiple of 25 (25 / 50 / 100 / 150), as in Straight Pool.",                  scoringHint: "1 point per ball pocketed; a completed rack totals 15." },
+    fifteenBall:{ id: "fifteenBall",name: "15-Ball Rotation",         defaultRaceTo: 25, raceLabel: "Points to win", raceHint: "Points target per match — 25 or 50 here, since a 4-rack sheet tops out at 60 balls.",                  scoringHint: "1 point per ball pocketed; a completed rack totals 15." },
     "8ball":    { id: "8ball",    name: "8-Ball",                    defaultRaceTo: 7,   raceLabel: "Race to",       raceHint: "Games needed to win the match (typical: 5 / 7 / 9).",           scoringHint: "Games won \u2014 first to the race target." },
     "9ball":    { id: "9ball",    name: "9-Ball",                    defaultRaceTo: 7,   raceLabel: "Race to",       raceHint: "Games needed to win the match (typical: 7 / 9 / 11).",          scoringHint: "Games won \u2014 first to the race target." },
     "10ball":   { id: "10ball",   name: "10-Ball",                   defaultRaceTo: 7,   raceLabel: "Race to",       raceHint: "Games needed to win the match (typical: 7 / 9).",              scoringHint: "Games won \u2014 first to the race target." },
-    "onepocket":{ id: "onepocket",name: "One Pocket",                defaultRaceTo: 3,   raceLabel: "Race to",       raceHint: "Balls-in-pocket to win the match (typical: 3 / 4).",            scoringHint: "Games won \u2014 first to the race target of pocketed-in-your-pocket wins." },
-    "14_1":     { id: "14_1",     name: "Straight Pool (14.1 Continuous)", defaultRaceTo: 100, raceLabel: "Points to",     raceHint: "Point target per match (typical: 75 / 100 / 125 / 150).",       scoringHint: "Continuous points \u2014 first to the point target." },
+    "onepocket":{ id: "onepocket",name: "One Pocket",                defaultRaceTo: 3,   raceLabel: "Race to",       raceHint: "Games needed to win the match — first to the race target (typical: 3 / 4).",            scoringHint: "Each game is won by pocketing 8 balls in your own pocket; the match is won by games \u2014 first to the race target." },
+    "14_1":     { id: "14_1",     name: "Straight Pool (14.1 Continuous)", defaultRaceTo: 100, raceLabel: "Points to",     raceHint: "Point target per match (typical: 75 / 100) — an 8-rack sheet tops out at 112 balls.",       scoringHint: "Continuous points \u2014 first to the point target." },
     "banks":    { id: "banks",    name: "Bank Pool",                 defaultRaceTo: 5,   raceLabel: "Race to",       raceHint: "Banked-ball games to win the match (typical: 3 / 5).",          scoringHint: "Banked wins \u2014 first to the race target." }
   };
   function gameOf(t) { return GAMES[t?.game] || GAMES.fifteenBall; }
@@ -777,7 +782,6 @@
     card.className = "match-card";
     card.dataset.matchId = match.id;
 
-    const t = activeT();
     const playable = match.slots[0] && match.slots[1]
       && !match.slots[0].isBye && !match.slots[1].isBye;
     const decided = match.winner !== null;
@@ -802,15 +806,11 @@
         row.classList.add("bye");
         row.innerHTML = `<span class="nm">BYE</span>`;
       } else {
+        // The bracket records who won and who lost, and nothing else: no score on the card.
+        // The score sheet is a separate artifact (the modal, and sheet-payload.js downstream).
         if (decided) row.classList.add(match.winner === slotIdx ? "winner" : "loser");
         const seed = s.seed ? `<span class="sd">#${s.seed}</span>` : "";
-        const sheet = t && t.sheets ? t.sheets[match.id] : null;
-        let sc = "";
-        if (sheet && decided) {
-          const final = slotIdx === 0 ? sheet.finalA : sheet.finalB;
-          sc = final != null ? String(final) : "";
-        }
-        row.innerHTML = `<span>${seed}<span class="nm">${escapeHtml(s.name)}</span></span><span class="sc">${sc}</span>`;
+        row.innerHTML = `<span>${seed}<span class="nm">${escapeHtml(s.name)}</span></span>`;
       }
       card.appendChild(row);
     });
@@ -1073,7 +1073,7 @@
       t.sheets[activeMatchId] = sheet;
       persist();
       renderBracket();
-      toast("Saved (no winner set)");
+      toast("Saved on this device (no winner set) — this console has no server link, so the sheet stays in this browser.");
       return;
     }
     t.sheets[activeMatchId] = sheet;
@@ -1083,7 +1083,7 @@
     persist();
     renderBracket();
     closeMatch();
-    toast("Result recorded");
+    toast(DEVICE_SAVE_NOTE);
   }
 
   function clearMatch() {

@@ -155,3 +155,39 @@ The generator is chosen from the primary division's `format` on the
 48. **Clearing a sheet rebuilds without replaying it onto a match that is not playable**:
     the surviving downstream sheet is skipped (no throw, final left undecided) instead of
     being replayed onto a match with an empty slot. (`app-render.test.js`)
+
+## K. Race target (the bracket carries the race)
+
+The bracket shows win/loss only, but the race target travels with the division and
+the match: `matches.race_to ?? divisions.race_to ?? game default`, exposed on the
+match payload as `raceTo` plus `raceFrom` (`"match"` | `"division"` | `"default"`).
+The server's game catalog mirrors the front end's `GAMES[*].defaultRaceTo`
+(`15ball_rotation` 25, `straight_14_1` 100, 8/9/10-ball 7, `one_pocket` 3,
+`bank_pool` 5; an unknown or empty game reads 25).
+
+49. **Default resolution**: a match with no override and a division with no
+    `race_to` reads the game default as `raceTo` with `raceFrom: "default"`; a match
+    whose `division_id` is NULL skips the division layer and still reads the
+    tournament game's default, and setting the game to an unknown id falls back to
+    25. (`race_to_test.go: TestRaceToDefaultResolution`, `TestGameDefaultRaceCatalog`)
+50. **Division beats the default**: setting `raceTo` on a division (at create or via
+    PATCH) makes its matches read that number with `raceFrom: "division"`, and the
+    division payload exposes the same resolved `raceTo`. (`race_to_test.go:
+    TestRaceToDivisionBeatsDefault`)
+51. **An override beats the division, and clearing it inherits again**: a match PATCH
+    of `raceTo` wins with `raceFrom: "match"`; an explicit `"raceTo": null` clears the
+    override so the match reads the division again, and clearing the division falls
+    back to the default. An absent `raceTo` (a body that omits it) leaves the layer
+    untouched. (`race_to_test.go: TestRaceToMatchOverrideAndClear`)
+52. **A viewer or scorekeeper cannot set either layer**: both PATCH routes answer
+    `403` for a non-director while a director succeeds; the match route is
+    deliberately outside the open-scoring group, so an open scoring link can never
+    retune the race. (`race_to_test.go: TestRaceToDirectorOnly`)
+53. **Race bounds are enforced**: `raceTo` outside 1–999 (0, 1000, negative) is
+    `400 invalid_race_to` on create and on both PATCH routes, while 1 and 999 are
+    accepted. (`race_to_test.go: TestRaceToBounds`)
+54. **A history version carries its payload and its submitter**: after a real
+    `SubmitResult`, the match history version embeds the raw `payload_json` the
+    version wrote and `submittedByEmail` (the saver's email; `""` for a NULL
+    `submitted_by`, i.e. an open scoring link). (`race_to_test.go:
+    TestMatchHistoryCarriesPayloadAndSubmitter`)

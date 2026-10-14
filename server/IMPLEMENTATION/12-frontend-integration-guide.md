@@ -31,6 +31,12 @@ Audience: the frontend/overlay agent. Companion to
   increments on write. Surface stale-write conflicts (409) to the user.
 - **Error envelope:** non-2xx returns `{ "error": { "code", "message" } }`; the
   client throws `FBApiError` with `.status` and `.code`.
+- **Race target:** a match payload carries `raceTo` (always a number) and `raceFrom`
+  (`"match"` | `"division"` | `"default"`), resolved as
+  `matches.race_to ?? divisions.race_to ?? game default`. The scorer reads it from the
+  match — it never invents or recomputes a target; only a director sets one (`PATCH
+  …/divisions/{divisionId}` and `PATCH …/matches/{matchId}`, both accepting
+  `raceTo` with absent ≠ null).
 
 ## 2. Using the client
 ```html
@@ -82,7 +88,8 @@ gating as UX only.
 (server generates the bracket), `listMatches`, `assignMatch`
 (`{scorekeeperUserId, tableRef}` — setting a table **fires the match-ready SMS**),
 `startMatch`, `submitResult`, `reopenMatch`, `clearMatchReview` (see §10 — a match can
-come back flagged for review), `matchHistory`.
+come back flagged for review), `matchHistory`. Read the match's `raceTo` for the sheet's
+target (it is a property of the match, not something the client picks).
 **Slice 5 — Live:** `api.events(id)` (EventSource) for the scoreboard; point
 `overlay.html` at `publicOverlay(id)` + `events(id)` for OBS.
 **Slice 6 — Migrate:** push existing localStorage tournaments to the server (see §8).

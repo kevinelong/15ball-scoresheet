@@ -30,10 +30,18 @@ function test(name, fn) {
 }
 
 function mkEl(tag) {
+  // classList is backed by a real set so a test can read the classes the module adds
+  // (`card.classList.add("decided")` and the winner/loser row marks).
+  const classes = new Set();
   const base = {
     tagName: tag || "div", innerHTML: "", textContent: "", value: "", hidden: false,
-    className: "", dataset: {}, style: {}, _kids: [], _listeners: {},
-    classList: { add() {}, remove() {}, toggle() {}, contains() { return false; } },
+    className: "", dataset: {}, style: {}, _kids: [], _listeners: {}, _classes: classes,
+    classList: {
+      add(...names) { names.forEach((n) => classes.add(n)); },
+      remove(...names) { names.forEach((n) => classes.delete(n)); },
+      toggle(n) { if (classes.has(n)) { classes.delete(n); return false; } classes.add(n); return true; },
+      contains(n) { return classes.has(n); }
+    },
     addEventListener(type, fn) { (base._listeners[type] = base._listeners[type] || []).push(fn); },
     removeEventListener() {},
     appendChild(c) { base._kids.push(c); return c; },
@@ -67,6 +75,12 @@ function textOf(node) {
   };
   walk(node);
   return out;
+}
+
+// slotRows returns the two player rows of a rendered match card, in slot order — the rows
+// renderMatchCard builds, as opposed to the match-id badge above them.
+function slotRows(card) {
+  return (card._kids || []).filter((k) => k.className === "slot");
 }
 
 // loadApp builds a tournament with the real bracket engine, seeds it into localStorage,
@@ -271,8 +285,14 @@ test("clearing a sheet rebuilds without replaying it onto a match that is not pl
   });
 
   assert.ok(app.bracketText().indexOf("awaiting") === -1, "fixture: a played-out bracket has no open slots");
-  assert.ok(app.cardText("W2M1").indexOf("12") !== -1, "fixture: the final's sheet should be on screen before the clear");
-  assert.ok(app.cardText("W1M2").indexOf("11") !== -1, "fixture: the semi's sheet should be on screen before the clear");
+  // The card carries win/loss and nothing else, so the fixture is proven by its winner rows
+  // (there is no score text to look for any more).
+  const finalBefore = lastCard(app.created, "W2M1");
+  assert.ok(slotRows(finalBefore).some((r) => r._classes.has("winner")),
+    "fixture: the final's winner should be on screen before the clear");
+  const semiBefore = lastCard(app.created, "W1M2");
+  assert.ok(slotRows(semiBefore).some((r) => r._classes.has("winner")),
+    "fixture: the semi's winner should be on screen before the clear");
   assert.ok(app.getEl("#champBanner").hidden === false, "fixture: the played-out bracket has a champion");
 
   app.clickCard("W1M2");               // open the sheet modal for the semi
@@ -281,7 +301,10 @@ test("clearing a sheet rebuilds without replaying it onto a match that is not pl
   const finalCard = app.cardText("W2M1");
   assert.ok(finalCard.indexOf("awaiting") !== -1,
     `the rebuilt final should wait on its feeder: ${finalCard}`);
-  assert.ok(app.cardText("W1M2").indexOf("11") === -1, "the cleared sheet must be gone");
+  // The cleared match no longer has a winner to mark.
+  const semiAfter = lastCard(app.created, "W1M2");
+  assert.ok(!slotRows(semiAfter).some((r) => r._classes.has("winner")),
+    "the cleared sheet must leave no winner behind");
   // The surviving final sheet must be skipped, not replayed: it would have decided the
   // final (a score on slot a, and a champion) even though one slot is empty.
   assert.ok(finalCard.indexOf("25") === -1,
@@ -407,6 +430,123 @@ test("a drag that starts on the increment button scores exactly once", () => {
   assert.strictEqual(app.clickThroughPanel({ raceInc: "A" }), false,
     "the press the drag started on is cancelled, not also scored");
   assert.strictEqual(app.getEl("#raceAScore").textContent, "2", "so the button does not score a second time");
+});
+
+// ---------- the bracket card: win/loss only ----------
+// The bracket records who won and who lost, and nothing else. A played-out match's sheet
+// (with its finals) must not bleed onto the card — no score element, no final values — while
+// the card still marks the winner against the loser.
+test("a decided bracket card shows win/loss and no score", () => {
+  const app = loadApp("cardwin", (B) => {
+    const bracket = B.build(players, { format: "single_elim" });
+    B.recordWinner(bracket, "W1M1", 0, { score: "25-10" });
+    const sheets = { W1M1: { winner: "A", finalA: 25, finalB: 10 } };
+    return tourney("t_cardwin", "single_elim", bracket, sheets);
+  });
+
+  const card = lastCard(app.created, "W1M1");
+  const markup = textOf(card);
+  assert.ok(markup.indexOf('class="sc"') === -1, `the card must carry no score element: ${markup}`);
+  assert.ok(markup.indexOf("25") === -1, `the sheet's 25 must not be on the card: ${markup}`);
+  assert.ok(markup.indexOf("10") === -1, `the sheet's 10 must not be on the card: ${markup}`);
+
+  const rows = slotRows(card);
+  assert.strictEqual(rows.length, 2, `a two-slot card renders two rows: ${rows.length}`);
+  assert.ok(rows[0]._classes.has("winner"), "the winner's row is marked");
+  assert.ok(rows[1]._classes.has("loser"), "the loser's row is marked");
+  assert.ok(card._classes.has("decided"), "a decided card says so");
+});
+
+// ---------- every advertised target is reachable ----------
+// A discipline's sheet has a fixed number of racks, so it has a ceiling: racks x ballsPerRack.
+// A hint that advertises a target above that ceiling offers the scorekeeper something their
+// sheet cannot record (15-Ball Rotation used to show 14.1's text, with 150 on a 60-ball sheet).
+test("every target a rack discipline advertises is reachable on its sheet", () => {
+  const S = require("./sheets.js");
+  const appGames = ["fifteenBall", "8ball", "9ball", "10ball", "onepocket", "14_1", "banks"];
+  const hints = {};
+  for (const game of appGames) {
+    const app = loadApp("reach-" + game, (B) =>
+      tourney("t_" + game, "single_elim", B.build(players, { format: "single_elim" }), null, { game }));
+    hints[game] = app.getEl("#tRaceHint").textContent;
+    const spec = S.spec(game);
+    if (!spec.racks) continue;                       // a games tally has no rack ceiling
+    const ceiling = spec.racks * spec.ballsPerRack;
+    for (const n of (hints[game].match(/\d+/g) || []).map(Number)) {
+      if (n <= spec.ballsPerRack) continue;          // a rack/ball count, not a target
+      assert.ok(n <= ceiling,
+        `${game} advertises ${n} in its hint, above its own ceiling of ${ceiling}: ${hints[game]}`);
+    }
+    for (const g of S.goals(game)) {
+      assert.ok(g >= spec.ballsPerRack && g <= ceiling,
+        `${game}'s goal ${g} is outside its reachable ${spec.ballsPerRack}..${ceiling}`);
+    }
+  }
+  // 15-Ball keeps its own text: 14.1's copy (and its 150) must not be on it.
+  assert.ok(hints.fifteenBall.indexOf("Straight Pool") === -1,
+    `15-Ball must not carry 14.1's text: ${hints.fifteenBall}`);
+  assert.ok(!/(^|\D)150(\D|$)/.test(hints.fifteenBall),
+    `15-Ball must not advertise 150: ${hints.fifteenBall}`);
+  assert.ok(!/(^|\D)150(\D|$)/.test(hints["14_1"]),
+    `14.1 must not advertise 150 either: ${hints["14_1"]}`);
+});
+
+// ---------- One Pocket's two models ----------
+// One Pocket's catalog line used to run the match's race and the game's rule together as if
+// "balls-in-pocket" were what a match races to. The match is a race of games; a game is won
+// by pocketing 8 balls in your own pocket — each said once, in its own place.
+test("One Pocket reads as a race of games, and the 8-balls rule is the game's own line", () => {
+  const app = loadApp("onepocket", (B) =>
+    tourney("t_op", "single_elim", B.build(players, { format: "single_elim" }), null, { game: "onepocket", raceTo: 3 }));
+  const hint = app.getEl("#tRaceHint").textContent;
+  assert.ok(/games/i.test(hint), `the match line must read as a race of games: ${hint}`);
+  assert.ok(hint.indexOf("Balls-in-pocket") === -1, `the match line is not balls-in-pocket: ${hint}`);
+  const own = app.getEl("#tGameHint").textContent;
+  assert.ok(/8\b/.test(own) && /own pocket/i.test(own),
+    `the game's own line must state the 8-balls-in-your-own-pocket rule: ${own}`);
+});
+
+// ---------- the static default hint ----------
+// index.html's #tRaceHint is what a first-load visitor reads before app.js runs, and the
+// app's default game is 15-Ball. It is the same string the app writes, read off disk so the
+// two cannot drift.
+test("index.html's static race hint is the 15-Ball hint the app writes", () => {
+  const html = fs.readFileSync(path.join(__dirname, "index.html"), "utf8");
+  const m = /<small id="tRaceHint">([\s\S]*?)<\/small>/.exec(html);
+  assert.ok(m, "index.html should carry a static #tRaceHint");
+  const app = loadApp("statichint", (B) =>
+    tourney("t_sh", "single_elim", B.build(players, { format: "single_elim" })));
+  assert.strictEqual(m[1].trim(), app.getEl("#tRaceHint").textContent,
+    "the static default hint must be exactly the 15-Ball hint the app writes on load");
+});
+
+// ---------- the 14.1 paper sheet and rules are linked ----------
+test("both 14.1 PDFs are linked from the app header", () => {
+  const html = fs.readFileSync(path.join(__dirname, "index.html"), "utf8");
+  const sheet = (html.match(/docs\/141-paper-sheet\.pdf/g) || []).length;
+  const rules = (html.match(/docs\/141-rules\.pdf/g) || []).length;
+  assert.strictEqual(sheet, 2, `both header blocks should link the 14.1 paper sheet (found ${sheet})`);
+  assert.strictEqual(rules, 2, `both header blocks should link the 14.1 rules (found ${rules})`);
+});
+
+// ---------- the console saves on this device ----------
+test("the score sheet says the console saves on this device, and the save toast agrees", () => {
+  const NOTE = "Saved on this device — this console has no server link, so the sheet stays in this browser.";
+  const html = fs.readFileSync(path.join(__dirname, "index.html"), "utf8");
+  const modalAt = html.indexOf('id="matchModal"');
+  const noteAt = html.indexOf(NOTE);
+  assert.ok(modalAt !== -1 && noteAt !== -1, "the modal must carry the device-only note");
+  assert.ok(noteAt > modalAt && noteAt < html.indexOf('id="exportModal"'),
+    "the note belongs to the score-sheet modal, not another one");
+
+  const app = loadApp("device", (B) =>
+    tourney("t_device", "single_elim", B.build(players, { format: "single_elim" })));
+  app.clickCard("W1M1");
+  app.action("save-match");
+  const toast = app.getEl("#toast").textContent;
+  assert.ok(toast.indexOf("this device") !== -1, `the save toast must say where the sheet goes: ${toast}`);
+  assert.ok(toast.indexOf("no server link") !== -1, `the save toast must say there is no server link: ${toast}`);
+  assert.ok(toast.indexOf("Result recorded") === -1, `the old over-claiming toast is gone: ${toast}`);
 });
 
 console.log(`\n${passed} passed, ${failed} failed.`);

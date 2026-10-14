@@ -136,6 +136,35 @@ Legend: [ ] todo · [~] in progress · [x] done+deployed.
       guard falsified): `sheets.test.js` measure/body/quickAdd pins; `app-render.test.js` no jump
       control in any dialog for any discipline + nine steps on a race to 7 leave 7 (`'9' !== '7'`
       with the clamp removed). Frontend only.
+- [x] Slice S — the score sheet as a saved stack, and the race carried by the bracket
+      (branch `sheet-stack`). **The race is bracket data**: migration `0018_race_to.sql` adds
+      `divisions.race_to` and `matches.race_to`, resolved `match ?? division ?? game default`
+      (`internal/api/games.go`, mirroring `GAMES[*].defaultRaceTo`), exposed on the match
+      payload as `raceTo` + `raceFrom` and on the division as a resolved `raceTo`; the write
+      paths are `POST …/divisions` (optional `raceTo`), new `PATCH …/divisions/{divisionId}`
+      and `PATCH …/matches/{matchId}` — both director+ on their own routes, out of the
+      open-scoring group, absent ≠ null. Resolution lives in `scanMatch`/`scanDivision`, so
+      every surface (list, submit response, snapshot) reports it; `MatchHistory` versions now
+      carry `payload` + `submittedByEmail`. **The sheet is one record**: `sheet-payload.js`
+      (new) defines the payload the result endpoint stores verbatim — payload version, kind
+      (rack/race) and `sheetKind` (the instrument: rack/tally), discipline, measure, goals,
+      the race snapshot + its origin, per-rack detail where the discipline has racks, finals,
+      winner, names, app + version — and the live console submits it once per result behind an
+      `Idempotency-Key` (the one-tap winner control is gone; the sheet is the record, and an
+      `in_progress` match opens it). The stack is the read side: the console lists a played
+      match's saved sheets newest first with who saved them and when and shows the selected
+      version; a correction is a new version (reopen → re-submit), never a rewrite. The phone's
+      payload (`app: "score-android"`, a plain tally, no `sheetKind`) is read as a tally and its
+      hand-typed race as an explicit override — the convention is documented in `AGENTS.md`,
+      no Java changed. **Corrections**: 15-Ball Rotation's own targets/hint (25/50, 60-ball
+      4-rack ceiling) instead of 14.1's copied line, 14.1 no longer advertises 150, One Pocket's
+      race-of-games and 8-balls-in-your-own-pocket lines split, the 14.1 paper sheet + rules
+      PDFs linked from both headers, the offline console saying it saves **on this device**, and
+      the bracket card printing win/loss only. Tests: `sheet-payload.test.js` (new),
+      `overlay-bracket.test.js` (new), `live-console.test.js`, `api-client.test.js`,
+      `app-render.test.js`, `sheets.test.js`; Go `internal/api/race_to_test.go` (scenarios
+      49–54). Every new guard falsified (break → red → restore). Docs: `DECISIONS/023`.
+      **Deployment:** migration `0018_race_to.sql` applies on the next service start.
 - [x] Slice R — swipe to step the tally, ported from the Android app's `SwipePanel`. A
       mostly-vertical drag past 48 CSS px on either half of the games tally is one step for that
       side (up +1, down −1), one step per gesture, taken from the child (the panel keeps the
