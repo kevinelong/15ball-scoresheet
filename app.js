@@ -82,6 +82,11 @@
   };
   function gameOf(t) { return GAMES[t?.game] || GAMES.fifteenBall; }
 
+  // Bracket format vocabulary. "single" is a single *final* inside a
+  // double-elimination bracket; "single_elim" is real single elimination.
+  const FORMAT_LABELS = { double: "Double Final", single: "Single Final", single_elim: "Single Elimination" };
+  function formatLabel(f) { return FORMAT_LABELS[f] || FORMAT_LABELS.single; }
+
   const SIGNUPS_SEPT7 = [
     { name: "Tyler Layton", fargo: 476, notes: "Under 500 division" },
     { name: "David Scarth", fargo: null, notes: "" },
@@ -275,7 +280,7 @@
         <span>&middot;</span>
         <span>${escapeHtml(gameOf(t).name)}</span>
         <span>&middot;</span>
-        <span>${t.format === "double" ? "Double Final" : "Single Final"}</span>
+        <span>${formatLabel(t.format)}</span>
         <span>&middot;</span>
         <span>${escapeHtml(gameOf(t).raceLabel)} ${t.raceTo}</span>
       </div>
@@ -625,7 +630,7 @@
     const g = gameOf(t);
     $("#tournamentTitle").textContent = t.name;
     const dt = [t.date, t.startTime].filter(Boolean).join(" ").trim();
-    $("#tournamentTagline").textContent = `${g.name} \u00b7 ${t.format === "double" ? "Double Final" : "Single Final"} \u00b7 ${g.raceLabel} ${t.raceTo}${dt ? " \u00b7 " + dt : ""}`;
+    $("#tournamentTagline").textContent = `${g.name} \u00b7 ${formatLabel(t.format)} \u00b7 ${g.raceLabel} ${t.raceTo}${dt ? " \u00b7 " + dt : ""}`;
     $("#tName").value = t.name || "";
     $("#tDate").value = t.date || "";
     $("#tTime").value = t.startTime || "";
@@ -670,16 +675,19 @@
       });
     });
 
-    container.appendChild(renderSection("Winners Bracket", groups.W, "W", t.bracket));
+    container.appendChild(renderSection(t.format === "single_elim" ? "Bracket" : "Winners Bracket", groups.W, "W", t.bracket));
     if (t.bracket.lRounds > 0) container.appendChild(renderSection("Losers Bracket", groups.L, "L", t.bracket));
-    const gfSection = renderSection("Grand Finals", groups.GF, "GF", t.bracket);
-    gfSection.classList.add("gf-region");
-    container.appendChild(gfSection);
+    // Single elimination has no grand final: do not render an empty section.
+    if (Object.keys(groups.GF).length) {
+      const gfSection = renderSection("Grand Finals", groups.GF, "GF", t.bracket);
+      gfSection.classList.add("gf-region");
+      container.appendChild(gfSection);
+    }
 
     const played = Object.values(t.bracket.matches).filter((m) => m.winner !== null && !m.resolvedAutoBye).length;
     const total = Object.values(t.bracket.matches).filter((m) => !m.conditional || (m.slots[0] && m.slots[1])).length;
     const g = gameOf(t);
-    $("#statusText").textContent = `${g.name} \u00b7 ${t.participants.length} players \u00b7 ${played} of ${total} matches decided \u00b7 ${t.format === "double" ? "Double Final" : "Single Final"} \u00b7 ${g.raceLabel} ${t.raceTo}`;
+    $("#statusText").textContent = `${g.name} \u00b7 ${t.participants.length} players \u00b7 ${played} of ${total} matches decided \u00b7 ${formatLabel(t.format)} \u00b7 ${g.raceLabel} ${t.raceTo}`;
 
     const banner = $("#champBanner");
     if (t.bracket.champion) {

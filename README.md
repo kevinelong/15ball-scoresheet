@@ -21,7 +21,7 @@ It ships in two layers that share one bracket model:
 - Paste a participant list (one per line, optional Fargo rating in parentheses)
 - **Sort by Fargo** or **Shuffle** to seed
 - Build a full double-elimination bracket for any N &ge; 2 (byes auto-resolve)
-- **Grand Final format toggle**: Single Final vs. Must Beat Twice (with GF2 reset)
+- **Bracket format toggle**: Single Elimination (winners bracket only), Single Final, or Must Beat Twice (with the GF2 reset)
 - Winners' bracket, losers' bracket, and Grand Finals sections rendered as cards you can tap
 - Pending matches greyed out; playable ones highlighted; decided ones show score
 - Champion banner when the last match is decided
@@ -68,9 +68,12 @@ Or point a custom subdomain (like `score.columbiacueclub.com`) at Pages via a `C
 
 Pure-function module, standalone testable. Exposes `BracketEngine.build(participants, { format })` and `BracketEngine.recordWinner(state, matchId, slotIdx, { score })`. `bracket.test.js` runs a small suite under Node: `node bracket.test.js`.
 
+`format` is one of `single_elim` (real single elimination), `single` (the default: double elimination with a decisive GF1 — a single *final*, not a single bracket) or `double` (a GF2 reset when the losers-bracket player wins GF1). `recordWinner` refuses an unknown match, a slot index other than 0/1, and a slot that is empty or a BYE.
+
 - Standard "seed vs. opposite" ordering: #1 meets #2 in the final if form holds
 - Bracket size rounds up to the next power of 2, extra slots become BYEs
 - BYEs auto-advance so real players face real opponents
+- `single_elim` builds the winners rounds only — no losers bracket and no grand final, with the last W match as the decisive final
 - W-bracket winners feed forward; W-bracket losers cross-side into the L-bracket
 - L-bracket rounds alternate consolidate/drop-in for standard double-elim shape
 - Grand Final always has GF1; GF2 exists only in double-final format and only

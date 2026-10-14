@@ -102,11 +102,13 @@
           <small id="tGameHint">Rotation scoring by pocketed ball value.</small>
         </label>
         <label class="field">
-          <span>Grand Final Format</span>
+          <span>Bracket Format</span>
           <select id="tFormat">
-            <option value="double">Double Final (must beat twice)</option>
-            <option value="single">Single Final</option>
+            <option value="double">Double Elimination &mdash; Double Final (must beat twice)</option>
+            <option value="single">Double Elimination &mdash; Single Final (one decider)</option>
+            <option value="single_elim">Single Elimination (one loss and you're out)</option>
           </select>
+          <small>Double Elimination keeps a losers bracket; Single Final settles it with one grand final, Double Final needs a second game if the losers-bracket player wins it. Single Elimination has no losers bracket.</small>
         </label>
         <label class="field">
           <span id="tRaceLabel">Race To</span>

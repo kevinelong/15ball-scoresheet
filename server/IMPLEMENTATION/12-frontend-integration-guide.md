@@ -9,10 +9,13 @@ Audience: the frontend/overlay agent. Companion to
 - The live app (`index.html` + `app.js` + `bracket.js` + `tables.js`) is a
   standalone **localStorage** client and makes **no** backend calls today.
 - The backend (`/api/v1`, deployed as service `fifteenball`) is complete and
-  tested (30-scenario acceptance suite) but unused by the UI.
+  tested (acceptance suite in `09-acceptance-tests.md`: scenarios 1–30 plus §H for
+  bracket generation) but unused by the UI.
 - **Chosen v1 scope: B — grow the backend to match the frontend** (double
-  elimination + all disciplines). See §7 for the server work that unblocks full
-  parity; slices 1–3 below do not depend on it and can start now.
+  elimination + all disciplines). The bracket half has landed — double elimination
+  is the default and single elimination works for any field size — so disciplines
+  beyond 15-ball are what remains. See §7 for the detail and the two format
+  vocabularies; slices 1–3 below do not depend on it and can start now.
 
 ## 1. Model / ground rules
 - **Same-origin, no CORS.** The app is served under `/15ball/`; the API is
@@ -97,20 +100,39 @@ Event ordering, `Last-Event-ID` replay, and `snapshot_required` semantics are in
 06-realtime-contract.
 
 ## 7. Scope B — backend growth needed for full parity
-The frontend supports **double elimination** and **multiple disciplines**; the
-backend today is **single-elimination, 15-ball only**. The schema already has the
-seams — `tournaments.game` and `divisions.format` — so the API surface below does
-**not** change as these land:
-- **Double elimination:** implement winner/loser bracket generation + advancement
-  keyed on `divisions.format` (`single_elimination` | `double_elimination`),
-  including grand-final logic. (Server work; `listMatches` gains loser-bracket rows
-  but the shape is unchanged — add a `bracket` field like `winners`/`losers`.)
+Both sides now support **double elimination** (the backend default) and real
+**single elimination**; what is still missing is **multiple disciplines** — the
+backend accepts only `game: 15ball_rotation` (`tournaments.go` `validGames`). The
+schema already has the seams — `tournaments.game` and `divisions.format` — so the
+API surface below does **not** change as the rest lands:
+- **Bracket formats (done, server).** The generator is chosen on the
+  `registration_closed → in_progress` transition from the primary division's
+  `format`: `double_elimination` (default when a division has no format — winners,
+  losers and grand-final matches, with the GF2 reset when the losers champ wins
+  GF1) or `single_elimination` (winners rounds only; a field that is not a power of
+  two is seeded through `seedOrder` with an archived BYE placeholder per missing
+  seed, so no entrant is dropped, and the byes auto-resolve). `listMatches` rows
+  carry `bracket` (`W`/`L`/`GF`; **null for single elimination**) and `matchLabel`
+  (`W1M1`, `L2M1`, `GF1`), plus `feedsWinnerMatch`/`feedsWinnerSlot`/
+  `feedsLoserMatch`/`feedsLoserSlot` — derive losers-bracket origin tags from the
+  feeder edges instead of inferring them. Coverage: `09-acceptance-tests.md` §H;
+  unresolved (do not assume either way): `OPEN-QUESTIONS.md` on reopening a match
+  whose winner already played downstream.
+- **Two vocabularies — do not conflate them.** The console (`index.html`,
+  `bracket.js`, `app.js`) uses `single_elim` (real single elimination), `single`
+  (double elimination settled by one decisive grand final) and `double` (with the
+  GF2 reset). `divisions.format` uses `single_elimination` | `double_elimination`.
+  When pushing a local tournament to the cloud, map `single_elim` →
+  `single_elimination` and both `single` and `double` → `double_elimination`: the
+  GF1/GF2 choice is **not** part of the division format, and
+  `double_elimination` always resets on a losers-champ GF1 win. Request a format
+  field if the cloud needs the console's Single Final semantics.
 - **Disciplines:** accept `game` values beyond `15ball_rotation` (8/9/10-ball,
   14.1, bank, one-pocket) and their scoring/win-condition differences. Call-shot
   and rotation rules already generalize; 14.1-style vs winning-ball games differ in
   `submitResult`/advancement.
-- Until these land, the client works unchanged; cloud tournaments are limited to
-  15-ball single-elim (surface that in the create form).
+- Until the disciplines land, cloud tournaments are limited to 15-ball; the client
+  works unchanged.
 
 These are tracked as the next backend slices; the frontend can build slices 1–3
 against the stable surface immediately.
