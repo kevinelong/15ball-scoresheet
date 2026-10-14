@@ -100,3 +100,35 @@ The generator is chosen from the primary division's `format` on the
     `409 not_flagged` for a match that does not need review. The flag survives the
     replay, so the director states when the inconsistency is resolved.
     (`bracket_review_test.go: TestReviewFlagRepairPath`)
+37. **Every propagation path records, none rewrites**: the guard covers `advanceDouble`'s
+    winner advance, `advanceDouble`'s loser drop into the losers bracket, `advanceBracket`
+    (single elimination) and `resolveByes` — the last driven directly on a crafted state,
+    because no API sequence leaves a bye unresolved while its target is already played
+    (defence in depth). Each path flags a played target exactly once, leaves its state,
+    result and winner alone, and puts the corrected entrant in its slot so it can be
+    replayed. (`bracket_review_paths_test.go: TestReviewFlagPropagationPaths`)
+38. **Repeating a correction is inert**: an identical re-correction, and re-submitting a
+    winner that is already in the target slot, both change nothing — same flag, same row
+    version, no second audit row, no second event.
+    (`bracket_review_paths_test.go: TestReviewFlagIdempotentAndInert`)
+39. **The flag is a note, not a lock**: a flagged match still reopens, replays and
+    completes, and the tournament still completes while it is flagged.
+    (`bracket_review_paths_test.go: TestFlaggedMatchStillTransitions`)
+40. **`clear-review` guards and idempotency**: a missing `Idempotency-Key` is `400`, a
+    non-director `403`, an unknown match `404`, an unflagged match `409 not_flagged`; the
+    clear audits `match: review_cleared` and emits `match.review_cleared`, and replaying
+    the same key returns the cached response without a second audit row or event.
+    (`bracket_review_paths_test.go: TestClearReviewGuardsAndIdempotency`)
+41. **`needsReview` is exposed where clients read a match**: the match list, the
+    single-match payloads the match actions return, and `snapshot.matches` — true for a
+    flagged match, false for a clean one; and `snapshot.overlay.reviewRequired` (plus the
+    public overlay endpoint) carries the bracket-level signal for the four states the OBS
+    overlay renders, including a flagged bracket with nothing live.
+    (`bracket_review_paths_test.go: TestNeedsReviewOnMatchPayloads`,
+    `TestOverlayReviewRequired`)
+42. **Migration 0017 is additive**: it applies to a database that already holds matches
+    (existing rows read back as 0, inserts that never mention the column still land), the
+    column is `NOT NULL DEFAULT 0`, and a fresh store records every embedded migration.
+    (`server/internal/store/store_test.go: TestMigration0017IsAdditive`,
+    `TestOpenAppliesMigrations` — `store`/`migrations` had no test convention before it,
+    so it follows the runner's own rules.)
