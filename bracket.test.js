@@ -88,6 +88,63 @@ function throws(fn) {
   assert(s.wFinalId === "W3M1", "the decisive final is the last W round");
 }
 
+// --- Scale pinning: nextPow2 / seedOrder / rounds / final label ---
+// Mirrors the Python edge tests (64 players -> num_rounds 6 = log2(64); a
+// one-player field is a no-op) and locks the round labels that the "single"
+// (single final) format mislabelled before.
+{
+  const cases = [
+    { n: 2, size: 2, rounds: 1, perRound: [1] },
+    { n: 3, size: 4, rounds: 2, perRound: [2, 1] },
+    { n: 6, size: 8, rounds: 3, perRound: [4, 2, 1] },
+    { n: 8, size: 8, rounds: 3, perRound: [4, 2, 1] },
+    { n: 64, size: 64, rounds: 6, perRound: [32, 16, 8, 4, 2, 1] }
+  ];
+  cases.forEach((c) => {
+    const players = Array.from({ length: c.n }, (_, i) => ({ name: "S" + (i + 1) }));
+    const s = B.build(players, { format: "single_elim" });
+    assert(B.nextPow2(c.n) === c.size, "nextPow2(" + c.n + ") === " + c.size);
+    assert(s.bracketSize === c.size && s.byes === c.size - c.n,
+      "n=" + c.n + " -> bracketSize " + c.size + ", " + (c.size - c.n) + " byes");
+    assert(s.wRounds === c.rounds && s.lRounds === 0, "n=" + c.n + " -> " + c.rounds + " W rounds, 0 L rounds");
+    const wm = Object.values(s.matches).filter(m => m.bracket === "W");
+    assert(wm.length === c.size - 1, "n=" + c.n + " -> " + (c.size - 1) + " W match nodes");
+    for (let r = 1; r <= c.rounds; r++) {
+      const got = wm.filter(m => m.round === r).length;
+      assert(got === c.perRound[r - 1], "n=" + c.n + " round " + r + " -> " + c.perRound[r - 1] + " match(es)");
+    }
+    const order = B.seedOrder(c.size);
+    assert(order.length === c.size && new Set(order).size === c.size && Math.min(...order) === 1 && Math.max(...order) === c.size,
+      "seedOrder(" + c.size + ") is a permutation of 1.." + c.size);
+    assert(s.wFinalId === "W" + c.rounds + "M1", "n=" + c.n + " -> the final is W" + c.rounds + "M1");
+    // Play it out: n-1 real matches decide it, whatever the field size.
+    for (let pass = 0; pass < c.rounds + 2; pass++) {
+      const ready = B.matchesInOrder(s).filter(m => m.bracket === "W" && !m.winner && B.isMatchReady(m));
+      if (!ready.length) break;
+      ready.forEach(m => B.recordWinner(s, m.id, 0));
+    }
+    const played = Object.values(s.matches).filter(m => m.bracket === "W" && !m.resolvedAutoBye).length;
+    assert(played === c.n - 1, "n=" + c.n + " -> n-1 = " + (c.n - 1) + " matches are played");
+    assert(s.champion && !s.champion.isBye, "n=" + c.n + " -> exactly one champion");
+    assert(Object.values(s.matches).every(m => m.winner !== null), "n=" + c.n + " -> every match decided");
+  });
+
+  // Round labels for the shipped formats: GF1 follows the last W round, GF2 the
+  // reset. A field smaller than 2 has no bracket at all.
+  const six = [1, 2, 3, 4, 5, 6].map(n => ({ name: "P" + n }));
+  const single = B.build(six, { format: "single" });
+  assert(single.matches["GF1"].round === single.wRounds + 1, "single: GF1 sits one round past the W final");
+  assert(!single.matches["GF2"], "single: no GF2 node");
+  const dbl = B.build(six, { format: "double" });
+  assert(dbl.matches["GF1"].round === dbl.wRounds + 1 && dbl.matches["GF2"].round === dbl.wRounds + 2,
+    "double: GF1/GF2 sit one and two rounds past the W final");
+  for (const n of [0, 1]) {
+    const solo = B.build(Array.from({ length: n }, (_, i) => ({ name: "Solo" + i })), { format: "single_elim" });
+    assert(solo.wRounds === 0 && solo.lRounds === 0 && Object.keys(solo.matches).length === 0,
+      "a field of " + n + " builds no bracket");
+  }
+}
+
 // --- recordWinner refuses what the server refuses (validPair / Match.set_winner) ---
 // Python's Match.set_winner raises ValueError for a winner who is not one of the
 // match's players; the server's validPair rejects an empty/unknown pair with 400.
