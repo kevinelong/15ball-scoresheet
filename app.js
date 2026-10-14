@@ -84,8 +84,8 @@
     "banks":    { id: "banks",    name: "Bank Pool",                 defaultRaceTo: 5,   raceLabel: "Race to",       raceHint: "Banked-ball games to win the match (typical: 3 / 5).",          scoringHint: "Banked wins \u2014 first to the race target." }
   };
   function gameOf(t) { return GAMES[t?.game] || GAMES.fifteenBall; }
-  /** The sheet definition for a tournament's game (see sheets.js). */
-  function sheetOf(t) { return window.Sheets.spec(t && t.game); }
+  /** The sheet definition for a game id (see sheets.js). */
+  function sheetOf(game) { return window.Sheets.spec(game); }
 
   // Bracket format vocabulary. "single" is a single *final* inside a
   // double-elimination bracket; "single_elim" is real single elimination.
@@ -542,10 +542,11 @@
     }
   }
 
-  function collectSheet(spec) {
-    const rack = spec.kind === window.Sheets.RACK;
+  function collectSheet(game) {
+    const spec = sheetOf(game);
+    const rack = window.Sheets.isRack(game);
     const s = {
-      _kind: spec.kind,
+      _kind: window.Sheets.kind(game),
       pAname: $(`#sheet input[data-field="pAname"]`).value,
       pBname: $(`#sheet input[data-field="pBname"]`).value,
       goalA: ($(`#sheet input[name="goalA"]:checked`) || {}).value || "",
@@ -573,9 +574,11 @@
     return s;
   }
 
-  function applySheet(sheet, matchInfo, spec) {
-    spec = spec || sheetOf(activeT());
-    const rack = spec.kind === window.Sheets.RACK;
+  function applySheet(sheet, matchInfo, game) {
+    const active = activeT();
+    game = game || (active && active.game);
+    const spec = sheetOf(game);
+    const rack = window.Sheets.isRack(game);
     $$("#sheet .ball.on").forEach((b) => { b.classList.remove("on"); b.setAttribute("aria-pressed", "false"); });
     $$("#sheet input[data-foul]").forEach((i) => { i.value = ""; });
     $$("#sheet input[data-field]").forEach((i) => { if (!i.readOnly) i.value = ""; });
@@ -601,9 +604,8 @@
       return;
     }
 
-    const t = activeT();
-    const goals = window.Sheets.goals(t && t.game);
-    const goalVal = String(t ? t.raceTo : goals[0]);
+    const goals = window.Sheets.goals(game);
+    const goalVal = String(active ? active.raceTo : goals[0]);
     const isPreset = goals.map(String).includes(goalVal);
     ["A", "B"].forEach((side) => {
       if (isPreset) {
@@ -835,10 +837,10 @@
     if (!match || !match.slots[0] || !match.slots[1]) return;
     activeMatchId = matchId;
     const info = { matchId, playerA: match.slots[0], playerB: match.slots[1] };
-    const spec = renderSheetBody(t);
+    renderSheetBody(t);
     $("#matchEyebrow").textContent = matchLabel(match);
     $("#matchTitle").textContent = `${match.slots[0].name}  vs.  ${match.slots[1].name}`;
-    applySheet(t.sheets[matchId] || null, info, spec);
+    applySheet(t.sheets[matchId] || null, info, t.game);
     $("#matchModal").hidden = false;
     document.body.style.overflow = "hidden";
   }
@@ -846,11 +848,12 @@
   /**
    * Build the sheet's body for this tournament's game: a rack grid for the ball-marked
    * disciplines, a games tally for the rest. Everything a sheet needs to differ by
-   * discipline comes from sheets.js, so this is the only place that branches.
+   * discipline comes from sheets.js — the measurement decides the controls, the spec the
+   * geometry and wording — so this is the only place that branches.
    */
   function renderSheetBody(t) {
-    const spec = sheetOf(t);
-    const rack = spec.kind === window.Sheets.RACK;
+    const spec = sheetOf(t.game);
+    const rack = window.Sheets.isRack(t.game);
     $("#sheetGameTitle").textContent = gameOf(t).name;
     $("#racks").hidden = !rack;
     $("#race").hidden = rack;
@@ -892,15 +895,23 @@
   function raceGet(side) {
     return parseInt($(`#race${side}Score`).textContent, 10) || 0;
   }
+  /** The tournament's race target, or 0 when it has none to speak of. */
+  function raceTarget(t) {
+    return (t && (t.raceTo || gameOf(t).defaultRaceTo)) || 0;
+  }
+
   function raceSet(side, n) {
-    const v = Math.max(0, Math.min(999, n | 0));
+    const t = activeT();
+    const race = raceTarget(t);
+    // A race is won *at* its target, so a step can never carry the tally past it: nothing
+    // here can take a race to 7 to 8, let alone to 15 (the jumps that could are gone — see
+    // sheets.js -> quickAdd). Only a target we do not know is uncapped.
+    const v = Math.max(0, Math.min(race > 0 ? race : 999, n | 0));
     $(`#race${side}Score`).textContent = String(v);
     // Auto-select the winner the moment a side reaches the race target.
-    const t = activeT();
     if (!t) return;
-    const race = t.raceTo || gameOf(t).defaultRaceTo;
     const other = side === "A" ? raceGet("B") : raceGet("A");
-    if (race > 0 && v >= race && v > other &&
+    if (v >= race && v > other &&
         !$$(`#sheet input[name="winner"]`).some((r) => r.checked)) {
       const rb = $(`#sheet input[name="winner"][value="${side}"]`);
       if (rb) rb.checked = true;
@@ -988,7 +999,7 @@
     if (!activeMatchId) return;
     const t = activeT();
     if (!t) return;
-    const sheet = collectSheet(sheetOf(t));
+    const sheet = collectSheet(t.game);
     if (!sheet.winner) {
       if (!confirm("No winner is selected on this sheet. Save it as an in-progress match anyway (bracket won't advance)?")) return;
       t.sheets[activeMatchId] = sheet;
@@ -1019,7 +1030,7 @@
       m.score = null;
       rebuildFromParticipants();
     }
-    applySheet(null, { matchId: activeMatchId, playerA: m.slots[0], playerB: m.slots[1] }, sheetOf(t));
+    applySheet(null, { matchId: activeMatchId, playerA: m.slots[0], playerB: m.slots[1] }, t.game);
     persist();
     renderBracket();
     toast("Cleared");
@@ -1144,19 +1155,14 @@
       const n = Math.max(1, Math.min(64, parseInt($("#tTableCount").value, 10) || DEFAULT_TABLE_COUNT));
       $("#tTableNaming").placeholder = window.Tables ? window.Tables.namingPlaceholder(n) : `1-${n}`;
     });
-    // Games-won tally inside the sheet (delegated): the +/- buttons and the quick jumps.
+    // Games-won tally inside the sheet (delegated): the +/- step buttons, one game each.
+    // There is no quick-add control and no case for one: a jump can overshoot a race, and no
+    // discipline offers one (sheets.js -> quickAdd).
     document.body.addEventListener("click", (ev) => {
       const inc = ev.target.closest("[data-race-inc]");
       if (inc) { raceInc(inc.dataset.raceInc); return; }
       const dec = ev.target.closest("[data-race-dec]");
       if (dec) { raceDec(dec.dataset.raceDec); return; }
-      const jump = ev.target.closest("[data-race-jump]");
-      if (jump) {
-        const side = jump.dataset.raceJump;
-        const delta = parseInt(jump.dataset.delta, 10) || 0;
-        raceSet(side, raceGet(side) + delta);
-        return;
-      }
     });
     document.body.addEventListener("click", (ev) => {
       const el = ev.target.closest("[data-action]");

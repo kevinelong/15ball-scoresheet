@@ -804,8 +804,7 @@ body { padding: 0; }
 .radio-tile p { margin: 0; color: var(--muted); font-size: 12px; }
 .hint { color: var(--muted); font-size: 12px; margin: 8px 0 0; }
 
-/* =============================== COUNTER MODAL (8/9/10-ball) =============================== */
-.modal-card-md { max-width: 720px; }
+/* =============================== RACE BODY (games-won disciplines) =============================== */
 .counter-body { background: #fff; border-radius: 10px; border: 1px solid var(--line); padding: 24px 20px; }
 .counter-grid {
   display: grid; grid-template-columns: 1fr auto 1fr; gap: 20px; align-items: center;
@@ -840,10 +839,6 @@ body { padding: 0; }
   font-family: "Playfair Display", Georgia, serif; font-size: 44px; font-weight: 700;
   color: var(--red); min-width: 60px; line-height: 1;
 }
-.counter-check {
-  display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--navy);
-  cursor: pointer;
-}
 .counter-vs {
   font-family: "Playfair Display", Georgia, serif; font-style: italic;
   font-size: 24px; color: var(--muted); font-weight: 700;
@@ -874,15 +869,3 @@ body { padding: 0; }
   background: #fef3c7; color: #92400e; padding: 2px 6px; border-radius: 4px;
   font-weight: 700; margin-left: 6px; vertical-align: middle;
 }
-
-/* Counter jump buttons (for point-scored games like 14.1) */
-.counter-jumps {
-  display: flex; justify-content: center; gap: 6px; margin-bottom: 10px;
-}
-.counter-jump {
-  padding: 4px 10px; font-size: 12px; font-weight: 700; letter-spacing: 0.5px;
-  border: 1.4px solid var(--line); border-radius: 5px; background: #fff;
-  color: var(--navy); cursor: pointer; min-width: 40px;
-  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
-}
-.counter-jump:hover { background: var(--navy); color: #fff; border-color: var(--navy); }

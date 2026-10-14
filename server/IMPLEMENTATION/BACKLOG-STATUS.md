@@ -125,4 +125,15 @@ Legend: [ ] todo · [~] in progress · [x] done+deployed.
       `.gitattributes` marking `*.pdf` binary (CRLF corruption of a PDF's xref offsets).
       Tests: `sheets.test.js` (new); `app-render.test.js`'s harness now loads `sheets.js`,
       as `index.html` does. Frontend only — nothing new pending on a service restart.
+- [x] Slice Q — one model per game, and every quick-add control deleted. `Sheets.spec(game).measure`
+      ("balls" | "wins") is the declared way a discipline is scored and the only thing that decides
+      its controls; `Sheets.kind(game)` (the body, and the `_kind` a saved sheet stores) is derived
+      from it. All twelve `+5`/`+10`/`−5` controls are gone (six with the counter modal in Slice P,
+      six from the ported race body here), with the `pointsMode` (`raceTo >= 50`) heuristic, its
+      delegate case and its dead CSS (`counter-jumps`, `counter-jump`, `counter-check`,
+      `modal-card-md`). Every discipline declares `quickAdd: []`, and `raceSet()` clamps the tally to
+      the race target, so a step cannot carry a race to 7 past 7. Tests (red first, then green, each
+      guard falsified): `sheets.test.js` measure/body/quickAdd pins; `app-render.test.js` no jump
+      control in any dialog for any discipline + nine steps on a race to 7 leave 7 (`'9' !== '7'`
+      with the clamp removed). Frontend only.
 

@@ -93,6 +93,20 @@ them. The wanted parts were ported onto today's `main` as new commits on
   `DECISIONS/021-per-game-sheets.md`. `.gitattributes` marks `*.pdf` binary so
   `core.autocrlf` cannot corrupt a generated PDF's xref offsets on checkout.
 
+**One model per game, and no quick-add control (2026-10-14).** How a discipline is scored
+is data now, not an inference about a number: `Sheets.spec(game).measure` is `"balls"`
+(marked one at a time — a rack grid) or `"wins"` (stepped — a tally against the race
+target), and `Sheets.kind(game)` (the body a sheet renders, and the `_kind` a saved sheet
+stores) is derived from it, so the two cannot disagree. All twelve `+5`/`+10`/`−5`
+controls are gone — the six in the old counter modal went with the modal, the six in the
+ported race body are deleted here — along with the `pointsMode` heuristic
+(`raceTo >= 50`) that used to gate them, its delegate case and its dead CSS. Every
+discipline declares `quickAdd: []`, and the race tally is clamped to its target, so a race
+to 7 cannot read 8 (let alone 15 with the winner auto-selected, which the audit
+reproduced). Tests: `sheets.test.js` (measure ↔ body, no jumps declared),
+`app-render.test.js` (no `+5`/`+10`/`−5` in any dialog for any discipline; nine steps on a
+race to 7 leave 7). Frontend only.
+
 No server behaviour changed this turn, so nothing new is pending on a service restart.
 
 ## Deployment (Kevin's, not the implementing agent's)

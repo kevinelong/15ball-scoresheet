@@ -35,6 +35,9 @@ It ships in two layers that share one bracket model:
 - Live per-rack totals, running totals, and final totals
 - Fouls per rack, aggregated per player
 - Player names pre-populated from the bracket slot; goal presets pre-checked from the setup
+- **How a discipline is scored is data** (`sheets.js` → `measure`): a ball-marked sheet marks balls
+  one at a time, a win-measured race steps one game per press with the ± buttons and cannot pass its
+  race target. There are no quick-add jumps anywhere — a jump could overshoot a race
 - Winner selection advances the bracket automatically on save (auto-selected at the target)
 
 ### Persistence & sharing
