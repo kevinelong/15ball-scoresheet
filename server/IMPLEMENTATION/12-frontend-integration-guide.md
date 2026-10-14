@@ -191,3 +191,10 @@ that difference is exactly what a human has to resolve. Semantics:
   Until step 3 the match keeps saying it needs review, which is intended: the director
   states when the inconsistency is resolved.
 
+These client behaviours are pinned by hand-run Node suites next to the files they cover:
+`live-console.test.js` (console render + SSE) and `review-flags.test.js` (overlay) drive
+the real modules in a DOM stub, `api-client.test.js` stubs `fetch` and asserts the
+request the client builds, and `app-render.test.js` drives `app.js`'s own render path
+(format labels, the grand-final card, the sheet-replay guard). Run them with
+`node <file>.test.js`, like the other suites in the repo.
+

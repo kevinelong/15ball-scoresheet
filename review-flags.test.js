@@ -1,13 +1,15 @@
-/* Review-flag surfacing tests for the clients that render a bracket.
+/* Review-flag surfacing tests for the OBS overlay client.
    Run with:  node review-flags.test.js
 
-   A match can come back flagged for review when a corrected upstream result reaches
-   it after it was played (03-state-machines "Match review flag"). The OBS overlay and
-   the console must show that state — never look normal, never crash.
+   A match can come back flagged for review when a corrected upstream result reaches it
+   after it was played (03-state-machines "Match review flag"). The overlay must show that
+   state - never look normal, never crash - and the normalized `overlay.reviewRequired`
+   that a non-DOM consumer reads must agree with what the DOM shows. The four cases here
+   mirror the four subtests of TestOverlayReviewRequired in bracket_review_paths_test.go,
+   which pins the server side of that signal.
 
-   overlay-live.js runs in a hand-rolled DOM/FB stub (same style as migration.test.js);
-   live.js is a closed IIFE, so it is loaded for a no-throw check plus a source check
-   that a flagged match is marked. */
+   overlay-live.js runs in a hand-rolled DOM/FB stub (same style as migration.test.js).
+   Assertions are positive, so a swallowed error cannot pass as success. */
 
 const fs = require("fs");
 const path = require("path");
@@ -25,6 +27,7 @@ async function test(name, fn) {
   }
 }
 function assert(cond, msg) { if (!cond) throw new Error(msg); }
+function flush() { return new Promise((r) => setTimeout(r, 0)); }
 
 function el() {
   return {
@@ -35,9 +38,8 @@ function el() {
     querySelectorAll() { return []; }, closest() { return null; }
   };
 }
-function flush() { return new Promise((r) => setTimeout(r, 0)); }
 
-// Loads overlay-live.js against the given data and returns the card element.
+// Loads overlay-live.js against the given data and returns the card element it writes.
 function loadOverlay(data) {
   const card = el();
   const api = {
@@ -63,6 +65,10 @@ function loadOverlay(data) {
   return card;
 }
 
+// The rule the server implements for snapshot.overlay.reviewRequired: true when any match
+// of the tournament carries needsReview.
+const anyFlagged = (ms) => ms.filter((m) => m.needsReview === true).length > 0;
+
 const tournament = { id: "t1", name: "Review Cup", game: "15ball_rotation", state: "in_progress" };
 const entrants = [
   { id: "e1", displayName: "Ada", archivedAt: null },
@@ -70,71 +76,39 @@ const entrants = [
   { id: "e3", displayName: "Cy", archivedAt: null }
 ];
 const live = { id: "m2", matchLabel: "W1M2", bracket: "W", bracketRound: 1, slot: 1, state: "in_progress", entrantAId: "e2", entrantBId: "e3" };
-const flaggedFinal = { id: "m3", matchLabel: "W2M1", bracket: "W", bracketRound: 2, slot: 0, state: "completed", entrantAId: "e1", entrantBId: "e3", winnerEntrantId: "e3", needsReview: true };
-const cleanFinal = Object.assign({}, flaggedFinal, { needsReview: false });
-const cleanLive = Object.assign({}, live, { needsReview: false });
+const flagged = { id: "m3", matchLabel: "W2M1", bracket: "W", bracketRound: 2, slot: 0, state: "completed", entrantAId: "e1", entrantBId: "e3", winnerEntrantId: "e3", needsReview: true };
+
+const cases = [
+  { name: "flagged match that is not featured", matches: [live, flagged], reviewRequired: true, tag: "Needs review: W2M1", also: "W1M2" },
+  { name: "flagged featured match", matches: [Object.assign({}, live, { needsReview: true }), Object.assign({}, flagged, { needsReview: false })], reviewRequired: true, tag: "Needs review: W1M2", also: null },
+  { name: "clean bracket", matches: [Object.assign({}, live, { needsReview: false }), Object.assign({}, flagged, { needsReview: false })], reviewRequired: false, tag: null, also: "W1M2" },
+  { name: "flagged bracket with nothing live", matches: [flagged], reviewRequired: true, tag: "Needs review: W2M1", also: "Standing by" }
+];
 
 (async function run() {
-  await test("overlay: a flagged match that is not featured still shows on the card", async () => {
-    const card = loadOverlay({ tournament, entrants, matches: [live, flaggedFinal] });
-    await flush(); await flush(); await flush();
-    assert(card.innerHTML.indexOf("Needs review: W2M1") !== -1, "expected the review tag, got: " + card.innerHTML);
-    assert(card.innerHTML.indexOf("W1M2") !== -1, "the live match should still be featured: " + card.innerHTML);
-  });
+  for (const c of cases) {
+    await test(`overlay: ${c.name}`, async () => {
+      // The fixture has to describe the bracket consistently with the normalized signal.
+      assert(anyFlagged(c.matches) === c.reviewRequired,
+        `fixture: anyFlagged=${anyFlagged(c.matches)} but reviewRequired=${c.reviewRequired}`);
 
-  await test("overlay: a flagged featured match is named in the tag", async () => {
-    const card = loadOverlay({ tournament, entrants, matches: [Object.assign({}, live, { needsReview: true }), cleanFinal] });
-    await flush(); await flush(); await flush();
-    assert(card.innerHTML.indexOf("Needs review: W1M2") !== -1, "expected the featured label, got: " + card.innerHTML);
-  });
+      const card = loadOverlay({ tournament, entrants, matches: c.matches });
+      await flush(); await flush(); await flush();
+      const html = card.innerHTML;
 
-  await test("overlay: nothing flagged, nothing shown", async () => {
-    const card = loadOverlay({ tournament, entrants, matches: [cleanLive, cleanFinal] });
-    await flush(); await flush(); await flush();
-    assert(card.innerHTML.indexOf("Needs review") === -1, "no flag should render no tag: " + card.innerHTML);
-    assert(card.innerHTML.indexOf("W1M2") !== -1, "the live match should still render: " + card.innerHTML);
-  });
-
-  await test("overlay: standing by still reports an outstanding review", async () => {
-    const card = loadOverlay({ tournament, entrants, matches: [flaggedFinal] });
-    await flush(); await flush(); await flush();
-    assert(card.innerHTML.indexOf("Standing by") !== -1, "expected the standby card: " + card.innerHTML);
-    assert(card.innerHTML.indexOf("Needs review: W2M1") !== -1, "the standby card must not look normal: " + card.innerHTML);
-  });
-
-  await test("live.js loads under a DOM stub without throwing", () => {
-    const sandbox = {
-      console, URLSearchParams,
-      location: { search: "", hash: "", href: "http://localhost/live.html" },
-      document: (() => {
-        const stub = new Proxy(function () { return stub; }, {
-          get: (t, k) => (k === "innerHTML" || k === "textContent" || k === "value" ? "" : stub),
-          set: () => true, apply: () => stub
-        });
-        return { getElementById: () => stub, querySelector: () => stub, querySelectorAll: () => [],
-          addEventListener() {}, removeEventListener() {}, body: stub, readyState: "complete", createElement: () => stub };
-      })(),
-      localStorage: { getItem: () => null, setItem() {}, removeItem() {} },
-      history: { replaceState() {}, pushState() {} },
-      navigator: { userAgent: "node" },
-      setTimeout: () => 0, clearTimeout() {}, setInterval: () => 0, clearInterval() {},
-      EventSource: function () {}, fetch: () => Promise.resolve({ ok: true, json: () => Promise.resolve({}) }),
-      FB: { createClient: () => new Proxy({}, { get: () => () => Promise.resolve({ items: [] }) }) }
-    };
-    sandbox.window = sandbox;
-    sandbox.globalThis = sandbox;
-    vm.runInNewContext(fs.readFileSync(path.join(__dirname, "live.js"), "utf8"), sandbox, { filename: "live.js" });
-  });
-
-  await test("live.js marks a flagged match in both renderers", () => {
-    const src = fs.readFileSync(path.join(__dirname, "live.js"), "utf8");
-    assert(/function reviewPill\(m\)\s*\{[^}]*needsReview/.test(src), "reviewPill should key off needsReview");
-    assert(src.indexOf("pill warn") !== -1, "the marker should reuse the warn pill");
-    const matchRow = src.slice(src.indexOf("function matchRow"), src.indexOf("function shortName"));
-    const bracketCard = src.slice(src.indexOf("function bracketCard"), src.indexOf("function bracketColumn"));
-    assert(matchRow.indexOf("reviewPill(m)") !== -1, "the match list should mark a flagged match");
-    assert(bracketCard.indexOf("reviewPill(m)") !== -1, "the bracket card should mark a flagged match");
-  });
+      if (c.also) {
+        assert(html.indexOf(c.also) !== -1, `expected ${c.also} in the card, got: ${html}`);
+      }
+      if (c.tag) {
+        assert(html.indexOf(c.tag) !== -1, `expected the review tag "${c.tag}", got: ${html}`);
+      } else {
+        assert(html.indexOf("Needs review") === -1, `expected no review tag, got: ${html}`);
+      }
+      // The DOM signal and the normalized signal agree in every case.
+      assert((html.indexOf("Needs review") !== -1) === c.reviewRequired,
+        "the rendered tag must agree with overlay.reviewRequired");
+    });
+  }
 
   console.log(`\n${passed} passed, ${failed} failed.`);
   process.exit(failed === 0 ? 0 : 1);

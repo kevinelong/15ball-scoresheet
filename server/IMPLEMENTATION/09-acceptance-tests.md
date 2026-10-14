@@ -65,7 +65,7 @@ The generator is chosen from the primary division's `format` on the
     matches) with 2 byes, no losers-bracket and no grand-final match, and every
     match carries a NULL `bracket` (which is what routes its result down the
     single-elimination advancement path).
-    (`bracket_single_test.go: TestSingleElimStructure6`)
+    (`bracket_single_test.go: TestSingleElimStructure6`; console side: §J 43–44)
 32. **No checked-in entrant is dropped**: for n = 3, 5, 7 every entrant appears in
     a match (the unpaired seeds become archived BYE placeholders inserted at the
     `seedOrder` position), the byes auto-resolve at generation so exactly n−1
@@ -134,3 +134,24 @@ The generator is chosen from the primary division's `format` on the
     (`server/internal/store/store_test.go: TestMigration0017IsAdditive`,
     `TestOpenAppliesMigrations` — `store`/`migrations` had no test convention before it,
     so it follows the runner's own rules.)
+
+## J. Client rendering (console, overlay, client library)
+
+43. **Format labels stay distinct**: `single_elim` reads "Single Elimination", while the
+    shipped `single` still reads "Single Final" and `double` "Double Final", in the
+    console's header. (`app-render.test.js`)
+44. **Single elimination renders no grand-final card**, and the shipped formats still do.
+    (`app-render.test.js`)
+45. **The console marks a review-flagged match** in both the bracket tree and the flat
+    match list, marks nothing when the bracket is clean, and picks the marker up from an
+    SSE event without anyone calling a render function. (`live-console.test.js`)
+46. **The overlay never looks normal with an outstanding review**: the card names every
+    flagged match (including one that is not featured), the standing-by card names it too,
+    and in all four states the rendered signal agrees with `overlay.reviewRequired`.
+    (`review-flags.test.js`, plus `TestOverlayReviewRequired` for the server side)
+47. **`clearMatchReview` sends the documented request**: POST `…/clear-review` with the
+    CSRF header, an Idempotency-Key (generated when the caller omits one) and an optional
+    reason body; a `409 not_flagged` surfaces as `FBApiError`. (`api-client.test.js`)
+48. **Clearing a sheet rebuilds without replaying it onto a match that is not playable**:
+    the surviving downstream sheet is skipped (no throw, final left undecided) instead of
+    being replayed onto a match with an empty slot. (`app-render.test.js`)
