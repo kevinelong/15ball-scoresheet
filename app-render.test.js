@@ -108,6 +108,11 @@ function loadApp(label, buildTournament) {
   };
   sandbox.window = sandbox;
   sandbox.globalThis = sandbox;
+  // The swipe gesture needs a panel box: 400px wide at the origin, so a gesture starting left
+  // of x=200 is Player A's half and one starting right of it is Player B's.
+  const swipePanel = getEl("#race");
+  swipePanel.getBoundingClientRect = () => ({ left: 0, top: 0, width: PANEL_WIDTH, height: 600 });
+  swipePanel.setPointerCapture = () => {};
   const ctx = vm.createContext(sandbox);
   // The script order index.html uses: bracket.js, tables.js, sheets.js, then app.js.
   // sheets.js matters here because opening a match now builds its sheet body from the
@@ -146,7 +151,40 @@ function loadApp(label, buildTournament) {
     // control (the markup for one is what the sheet is not supposed to have any more).
     raceInc(side) { this.delegatedClick({ raceInc: side }); },
     raceDec(side) { this.delegatedClick({ raceDec: side }); },
-    raceJump(side, delta) { this.delegatedClick({ raceJump: side, delta: String(delta) }); }
+    raceJump(side, delta) { this.delegatedClick({ raceJump: side, delta: String(delta) }); },
+    // pointer fires one pointer event at the swipe panel, as a real finger would.
+    pointer(type, opts) {
+      const panel = getEl("#race");
+      const handlers = (panel._listeners && panel._listeners[type]) || [];
+      assert.ok(handlers.length > 0, `the tally panel should listen for ${type}`);
+      const ev = Object.assign({
+        pointerType: "touch", pointerId: 1, clientX: 100, clientY: 100, cancelable: true,
+        preventDefault() {}, stopPropagation() {}
+      }, opts || {});
+      handlers.forEach((fn) => fn(ev));
+    },
+    // swipe is one whole gesture: down at (x, from), move to `to`, release.
+    swipe(x, from, to, opts) {
+      this.pointer("pointerdown", Object.assign({ clientX: x, clientY: from }, opts || {}));
+      this.pointer("pointermove", Object.assign({ clientX: x, clientY: to }, opts || {}));
+      this.pointer("pointerup", Object.assign({ clientX: x, clientY: to }, opts || {}));
+    },
+    // clickThroughPanel presses the +/- button the way the browser would: the panel's
+    // capture listeners see the click first, and the delegated body handler only runs if
+    // none of them stopped propagation - which is how a taken gesture cancels the press.
+    clickThroughPanel(attrs) {
+      let stopped = false;
+      const ev = {
+        target: { closest: (sel) => controlFor(sel, attrs) },
+        stopPropagation() { stopped = true; },
+        preventDefault() {}
+      };
+      const panel = getEl("#race");
+      (((panel._listeners || {}).click) || []).forEach((fn) => fn(ev));
+      if (stopped) return false;
+      this.delegatedClick(attrs);
+      return true;
+    }
   };
 }
 
@@ -160,6 +198,19 @@ function controlFor(sel, attrs) {
 }
 
 const players = [{ name: "P1" }, { name: "P2" }, { name: "P3" }, { name: "P4" }];
+
+// The swipe panel's box in the harness (see loadApp), and the gesture's 48px threshold.
+const PANEL_WIDTH = 400;
+const PANEL_MID = PANEL_WIDTH / 2;
+const SWIPE_MIN = 48;
+
+// raceApp opens the tally for a 9-ball race to 7 — the sheet the step and swipe paths share.
+function raceApp(label) {
+  const app = loadApp(label, (B) => tourney("t_" + label, "single_elim",
+    B.build(players, { format: "single_elim" }), null, { game: "9ball", raceTo: 7 }));
+  app.clickCard("W1M1");
+  return app;
+}
 function tourney(id, format, bracket, sheets, opts) {
   return Object.assign({
     id, name: "T " + id, date: "2026-01-01", startTime: "14:00", game: "fifteenBall",
@@ -261,9 +312,7 @@ test("no dialog offers a +5 / +10 / -5 quick add, for any discipline", () => {
 
 test("a win-measured race cannot exceed its target by a step, and a stray jump scores nothing", () => {
   // 9-ball: a games-won discipline, race to 7.
-  const app = loadApp("race", (B) => tourney("t_race", "single_elim", B.build(players, { format: "single_elim" }),
-    null, { game: "9ball", raceTo: 7 }));
-  app.clickCard("W1M1");
+  const app = raceApp("race");
   assert.strictEqual(app.getEl("#raceAScore").textContent, "0", "fixture: the tally opens at 0");
 
   app.raceJump("A", 5);
@@ -280,6 +329,84 @@ test("a win-measured race cannot exceed its target by a step, and a stray jump s
   assert.strictEqual(app.getEl("#raceAScore").textContent, "6", "and a step back still works");
   app.raceInc("A");
   assert.strictEqual(app.getEl("#raceAScore").textContent, "7", "back up to the target, not past it");
+});
+
+// ---------- the swipe gesture (ported from the Android app's SwipePanel) ----------
+// Real pointer events at the tally panel: a mostly-vertical drag past ~48 CSS px is one step
+// for the side the gesture started in, and only ever for a touch or pen finger.
+test("one gesture is one step, however far the finger travels, on the half it started in", () => {
+  const app = raceApp("swipe");
+  app.pointer("pointerdown", { clientX: PANEL_MID - 120, clientY: 300 });
+  app.pointer("pointermove", { clientX: PANEL_MID - 120, clientY: 300 - SWIPE_MIN });
+  assert.strictEqual(app.getEl("#raceAScore").textContent, "1",
+    `a ${SWIPE_MIN}px drag up in the left half steps Player A`);
+  app.pointer("pointermove", { clientX: PANEL_MID - 120, clientY: 40 });
+  assert.strictEqual(app.getEl("#raceAScore").textContent, "1", "a finger that keeps travelling does not step again");
+  assert.strictEqual(app.getEl("#raceBScore").textContent, "0", "and the other half is untouched");
+  app.pointer("pointerup", { clientX: PANEL_MID - 120, clientY: 40 });
+
+  app.swipe(PANEL_MID + 120, 300, 300 - SWIPE_MIN);
+  assert.strictEqual(app.getEl("#raceBScore").textContent, "1", "a fresh gesture in the right half steps Player B");
+  assert.strictEqual(app.getEl("#raceAScore").textContent, "1", "and leaves Player A alone");
+});
+
+test("the half is the panel's half: the midpoint belongs to Player B", () => {
+  const app = raceApp("half");
+  app.swipe(PANEL_MID - 1, 300, 300 - SWIPE_MIN);
+  assert.strictEqual(app.getEl("#raceAScore").textContent, "1", "just left of the midpoint is A");
+  app.swipe(PANEL_MID, 300, 300 - SWIPE_MIN);
+  assert.strictEqual(app.getEl("#raceBScore").textContent, "1", "the midpoint itself is B");
+});
+
+test("a downward drag steps back, and stops at zero", () => {
+  const app = raceApp("down");
+  app.swipe(100, 300, 300 - SWIPE_MIN);
+  assert.strictEqual(app.getEl("#raceAScore").textContent, "1", "fixture: one step up");
+  app.swipe(100, 100, 100 + SWIPE_MIN);
+  assert.strictEqual(app.getEl("#raceAScore").textContent, "0", "a finger down steps back");
+  app.swipe(100, 100, 100 + 200);
+  assert.strictEqual(app.getEl("#raceAScore").textContent, "0", "and the tally cannot go below zero");
+});
+
+test("a drag shorter than the threshold does nothing", () => {
+  const app = raceApp("short");
+  app.swipe(100, 300, 300 - (SWIPE_MIN - 8));
+  assert.strictEqual(app.getEl("#raceAScore").textContent, "0",
+    `a ${SWIPE_MIN - 8}px drag is under the ${SWIPE_MIN}px travel the gesture needs`);
+});
+
+test("a drag across the panel does nothing", () => {
+  const app = raceApp("across");
+  app.pointer("pointerdown", { clientX: 60, clientY: 300 });
+  app.pointer("pointermove", { clientX: 260, clientY: 280 });
+  app.pointer("pointerup", { clientX: 260, clientY: 280 });
+  assert.strictEqual(app.getEl("#raceAScore").textContent, "0", "a mostly-horizontal drag is not a step");
+  // Vertical-dominant only: 70px of fall with 80px of travel across it is a drag across.
+  app.pointer("pointerdown", { clientX: 60, clientY: 300 });
+  app.pointer("pointermove", { clientX: 140, clientY: 230 });
+  app.pointer("pointerup", { clientX: 140, clientY: 230 });
+  assert.strictEqual(app.getEl("#raceAScore").textContent, "0", "a diagonal that is not vertical-dominant is not a step");
+});
+
+test("a mouse drag never takes the gesture", () => {
+  const app = raceApp("mouse");
+  app.swipe(100, 300, 160, { pointerType: "mouse" });
+  assert.strictEqual(app.getEl("#raceAScore").textContent, "0",
+    "a vertical mouse drag must keep scrolling the page, not score");
+});
+
+test("a drag that starts on the increment button scores exactly once", () => {
+  const app = raceApp("button");
+  assert.strictEqual(app.clickThroughPanel({ raceInc: "A" }), true, "fixture: a plain press on + scores");
+  assert.strictEqual(app.getEl("#raceAScore").textContent, "1", "fixture: one step");
+
+  app.pointer("pointerdown", { clientX: 100, clientY: 300 });
+  app.pointer("pointermove", { clientX: 100, clientY: 300 - SWIPE_MIN });
+  app.pointer("pointerup", { clientX: 100, clientY: 300 - SWIPE_MIN });
+  assert.strictEqual(app.getEl("#raceAScore").textContent, "2", "the drag itself is one step");
+  assert.strictEqual(app.clickThroughPanel({ raceInc: "A" }), false,
+    "the press the drag started on is cancelled, not also scored");
+  assert.strictEqual(app.getEl("#raceAScore").textContent, "2", "so the button does not score a second time");
 });
 
 console.log(`\n${passed} passed, ${failed} failed.`);
