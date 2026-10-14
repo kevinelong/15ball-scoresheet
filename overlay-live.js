@@ -79,9 +79,19 @@
     cardEl.innerHTML = h;
   }
 
+  // Matches a director still has to resolve: their participants changed after they
+  // were played (03-state-machines "Match review flag"). The overlay must never look
+  // normal while one of these is outstanding, including when it is not the match
+  // being featured.
+  function reviewLabels() {
+    return (state.matches || []).filter(function (m) { return m.needsReview; })
+      .map(function (m) { return m.matchLabel || ('R' + m.bracketRound + '·' + (m.slot + 1)); });
+  }
+
   function render() {
     var t = state.t;
     if (!t) { renderStandby('Standing by'); return; }
+    var review = reviewLabels();
 
     var m = pickMatch(state.matches || []);
     var head =
@@ -91,7 +101,8 @@
       '</div>';
 
     if (!m) {
-      cardEl.innerHTML = head + '<div class="standby" style="font-size:clamp(1rem,1.9vw,1.7rem)">Standing by</div>';
+      cardEl.innerHTML = head + '<div class="standby" style="font-size:clamp(1rem,1.9vw,1.7rem)">Standing by</div>' +
+        (review.length ? '<div class="subtle">Needs review: ' + esc(review.join(', ')) + '</div>' : '');
       return;
     }
 
@@ -100,6 +111,7 @@
     var bt = bracketTag(m.bracket);
     if (bt) tags += '<span class="tag bracket-' + esc(m.bracket) + '">' + esc(bt) + '</span>';
     if (m.tableRef) tags += '<span class="tag table">Table ' + esc(m.tableRef) + '</span>';
+    if (review.length) tags += '<span class="tag">Needs review: ' + esc(review.join(', ')) + '</span>';
     tags += '</div>';
 
     var players =

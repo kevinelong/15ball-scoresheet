@@ -597,11 +597,18 @@
     return out;
   }
 
+  // A match whose participants changed after it was played: the result is kept and a
+  // director still has to replay it and clear the flag (03-state-machines "Match
+  // review flag"). Never hidden, and never "repaired" client-side.
+  function reviewPill(m) {
+    return m.needsReview ? '<span class="pill warn">needs review</span>' : '';
+  }
+
   function matchRow(m, interactive) {
     var a = m.entrantAId, b = m.entrantBId;
     var lbl = m.matchLabel || ('R' + m.bracketRound + '·' + (m.slot + 1));
     var ready = a && b && (m.state === 'scheduled' || m.state === 'assigned' || m.state === 'reopened');
-    var line = '<div class="match"><span class="lbl">' + esc(lbl) + '</span><span class="vs">';
+    var line = '<div class="match"><span class="lbl">' + esc(lbl) + '</span>' + reviewPill(m) + '<span class="vs">';
     if (m.state === 'completed') {
       line += '<b>' + esc(nm(a)) + '</b> vs <b>' + esc(nm(b)) + '</b> <span class="pill state">done</span>';
       line += '</span></div>';
@@ -714,6 +721,7 @@
     var h = '<div class="' + cls.join(' ') + '">';
     h += '<span class="mlabel">' + esc(m.matchLabel || ('R' + m.bracketRound + '·' + (m.slot + 1))) + '</span>';
     if (live) h += '<span class="live-pill">LIVE</span>';
+    h += reviewPill(m);
     h += bracketSlot(m, a, b, { win: aWin, lose: !!win && !aWin, tappable: tappable, origin: origins.a });
     h += bracketSlot(m, b, a, { win: bWin, lose: !!win && !bWin, tappable: tappable, origin: origins.b });
     return h + '</div>';

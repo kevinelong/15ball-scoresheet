@@ -81,7 +81,8 @@ gating as UX only.
 **Slice 4 — Bracket/matches/scoring:** move to `in_progress` via `patchTournament`
 (server generates the bracket), `listMatches`, `assignMatch`
 (`{scorekeeperUserId, tableRef}` — setting a table **fires the match-ready SMS**),
-`startMatch`, `submitResult`, `reopenMatch`, `matchHistory`.
+`startMatch`, `submitResult`, `reopenMatch`, `clearMatchReview` (see §10 — a match can
+come back flagged for review), `matchHistory`.
 **Slice 5 — Live:** `api.events(id)` (EventSource) for the scoreboard; point
 `overlay.html` at `publicOverlay(id)` + `events(id)` for OBS.
 **Slice 6 — Migrate:** push existing localStorage tournaments to the server (see §8).
@@ -151,3 +152,42 @@ fan-out is too chatty — request it and it'll be added.
   risk a duplicate; let the client generate one per user action and reuse it.
 - Treat 409 as an optimistic-concurrency/transition conflict, not a hard error —
   re-fetch and let the user retry.
+- After a `reopenMatch` + `submitResult`, `listMatches`' `winnerEntrantId` can still
+  report the **superseded** winner: both result rows end up with `superseded_by NULL`
+  and the read path picks one without ordering. Read the correction from
+  `matchHistory(id, mid).versions` (ordered by `resultVersion`) until that is decided —
+  see `OPEN-QUESTIONS.md`, "Which result version is the current winner after a reopen
+  and re-submit?".
+
+## 10. Match review flag — a correction that reached a played match
+
+If a director reopens a match whose winner **already played downstream**, the
+corrected winner is written into the downstream slot (otherwise the corrected pairing
+could not be replayed), the downstream match keeps its state, its result rows and its
+recorded winner, and it comes back flagged (`needsReview: true`) with an audit row
+(`match: review_required`) and an SSE event (`match.review_required`). While the flag
+is set, that match's `winnerEntrantId` may **not** be one of its two participants —
+that difference is exactly what a human has to resolve. Semantics:
+[03-state-machines.md](./03-state-machines.md) ("Match review flag"); decision:
+`OPEN-QUESTIONS.md` → resolved, option 3.
+
+- **Console (`live.js`)** — match list rows and bracket cards mark a flagged match
+  next to its label (`needs review` pill, reusing `live.html`'s `.pill.warn`). Do not
+  hide it and do not "fix" it client-side; `live.js` re-reads on any SSE event, so the
+  flag appears on its own.
+- **Overlay (`overlay-live.js`)** — the card carries a `Needs review: <labels>` tag
+  whenever *any* match of the tournament is flagged, not just the featured one, and it
+  is shown on the standing-by card too, so the stream never looks normal while a
+  result is in doubt. `snapshot.overlay.reviewRequired` carries the same signal for a
+  consumer that only reads the normalized state.
+- **Repair procedure (director, in this order):**
+  1. `reopenMatch(id, matchId, reason)` — the flag stays.
+  2. `submitResult(id, matchId, {winnerEntrantId, loserEntrantId})` with the
+     participants now in that match's slots; a new result version is appended and the
+     earlier one is left untouched.
+  3. `clearMatchReview(id, matchId, reason)` — the only thing that clears the flag:
+     audited (`match: review_cleared`), emits `match.review_cleared`, leaves the
+     recorded result alone, and answers `409 not_flagged` if there is nothing to clear.
+  Until step 3 the match keeps saying it needs review, which is intended: the director
+  states when the inconsistency is resolved.
+
