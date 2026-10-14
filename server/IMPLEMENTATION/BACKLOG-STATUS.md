@@ -136,4 +136,17 @@ Legend: [ ] todo · [~] in progress · [x] done+deployed.
       guard falsified): `sheets.test.js` measure/body/quickAdd pins; `app-render.test.js` no jump
       control in any dialog for any discipline + nine steps on a race to 7 leave 7 (`'9' !== '7'`
       with the clamp removed). Frontend only.
+- [x] Slice R — swipe to step the tally, ported from the Android app's `SwipePanel`. A
+      mostly-vertical drag past 48 CSS px on either half of the games tally is one step for that
+      side (up +1, down −1), one step per gesture, taken from the child (the panel keeps the
+      pointer and cancels the click, so a drag that starts on `+` scores exactly once), gated to
+      touch/pen pointers so a mouse drag never hijacks scrolling, and wired to the same
+      `raceInc`/`raceDec` the ± buttons call. Haptics only via `navigator.vibrate` where the
+      platform offers it; `.race` gets `touch-action: pan-x` so a phone delivers the drag rather
+      than scrolling it. Docs: `DECISIONS/022-swipe-to-score.md`. Tests: `app-render.test.js`
+      drives real pointer events — one step per gesture however far the finger travels, the half
+      test at the midpoint, a downward drag and its zero floor, a sub-threshold drag, a
+      horizontal drag, a non-vertical-dominant diagonal, a mouse drag, and the cancelled button
+      press — with all six guards falsified (remove threshold / dominance / pointer gate /
+      one-step flag / click cancel / half test → the matching assertion fails). Frontend only.
 

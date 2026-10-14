@@ -107,7 +107,23 @@ reproduced). Tests: `sheets.test.js` (measure ↔ body, no jumps declared),
 `app-render.test.js` (no `+5`/`+10`/`−5` in any dialog for any discipline; nine steps on a
 race to 7 leave 7). Frontend only.
 
-No server behaviour changed this turn, so nothing new is pending on a service restart.
+**Swipe to step the tally (2026-10-14).** The console had no gesture; the Android scorer has
+had one since it shipped (`SwipePanel.java`), and it is now the same gesture in the browser:
+a mostly-vertical drag past 48 CSS px on either half of the games tally is one step for that
+side (up +1, down −1), taken from the child — the panel keeps the pointer and cancels the
+click, so a drag that starts on `+` scores exactly once. It is gated to touch/pen pointers
+(a vertical mouse drag must keep scrolling), the panel is hidden with the tally so the
+ball-marked sheets have no gesture, and it calls the very same `raceInc`/`raceDec` the ±
+buttons call: the buttons, the ball taps and the winner box all remain, and the gesture is
+never the only way to score. `navigator.vibrate(10)` where the platform offers haptics,
+silently where it does not; `.race` gets `touch-action: pan-x` so a real phone delivers the
+drag instead of scrolling it. Docs: `DECISIONS/022-swipe-to-score.md`. Tests:
+`app-render.test.js` drives real pointer events (one step per gesture, the half test, the
+threshold, horizontals and diagonals, the mouse gate, and the cancelled button press), each
+guard falsified. Frontend only.
+
+Nothing in this turn changes what a running deployment must pick up: no migration, no server
+behaviour, no deploy step.
 
 ## Deployment (Kevin's, not the implementing agent's)
 

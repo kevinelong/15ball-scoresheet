@@ -38,6 +38,9 @@ It ships in two layers that share one bracket model:
 - **How a discipline is scored is data** (`sheets.js` → `measure`): a ball-marked sheet marks balls
   one at a time, a win-measured race steps one game per press with the ± buttons and cannot pass its
   race target. There are no quick-add jumps anywhere — a jump could overshoot a race
+- **Flick to score, on a touch screen**: a mostly-vertical drag past ~48 px on either half of the
+  games tally is one step for that player (up +1, down −1). It is an accelerator — the ± buttons and
+  the ball taps remain the accessible and desktop path, and a mouse drag never takes the gesture
 - Winner selection advances the bracket automatically on save (auto-selected at the target)
 
 ### Persistence & sharing

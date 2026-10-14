@@ -920,6 +920,74 @@
   function raceInc(side) { raceSet(side, raceGet(side) + 1); }
   function raceDec(side) { raceSet(side, raceGet(side) - 1); }
 
+  // ============================================================
+  // Swipe to step the tally (the phone gesture, from the Android app's SwipePanel)
+  // ============================================================
+  // A mostly-vertical drag on the tally is one step: up +1, down -1, on the side of the panel
+  // the gesture started in. It is a shortcut for the +/- buttons, which stay the accessible
+  // and desktop path, and it answers touch and pen pointers only — a vertical mouse drag must
+  // keep scrolling the page.
+  const SWIPE_MIN_TRAVEL = 48;   // CSS px, the 48dp threshold the app uses
+
+  function isSwipePointer(ev) { return ev.pointerType === "touch" || ev.pointerType === "pen"; }
+
+  /** One short buzz where the platform offers one, silently where it does not. */
+  function hapticTap() {
+    if (typeof navigator === "undefined" || typeof navigator.vibrate !== "function") return;
+    try { navigator.vibrate(10); } catch (e) { /* no haptics, no complaint */ }
+  }
+
+  function wireSwipe(panel) {
+    if (!panel) return;
+    let id = null;                          // the pointer that owns the gesture in flight
+    let startX = 0, startY = 0;
+    let taken = false;                      // this gesture has already been reported
+    let swallow = false;                    // the press it started on is cancelled, not scored
+
+    panel.addEventListener("pointerdown", (ev) => {
+      if (id !== null || !isSwipePointer(ev)) return;
+      id = ev.pointerId;
+      startX = ev.clientX;
+      startY = ev.clientY;
+      taken = false;
+      swallow = false;
+    });
+    panel.addEventListener("pointermove", (ev) => {
+      if (ev.pointerId !== id || taken) return;
+      const dy = ev.clientY - startY;
+      const dx = Math.abs(ev.clientX - startX);
+      if (Math.abs(dy) < SWIPE_MIN_TRAVEL || Math.abs(dy) <= dx) return;
+      taken = true;
+      swallow = true;
+      // The gesture is taken from whatever is under the finger: the panel keeps the moves,
+      // and the click the child would have got on release is cancelled below instead of
+      // scoring a second time.
+      if (ev.cancelable) ev.preventDefault();
+      if (panel.setPointerCapture) {
+        try { panel.setPointerCapture(ev.pointerId); } catch (e) { /* already gone */ }
+      }
+      const rect = panel.getBoundingClientRect();
+      const side = startX < rect.left + rect.width / 2 ? "A" : "B";
+      // The same step the buttons take: the gesture is a shortcut, never the only way to score.
+      if (dy < 0) raceInc(side); else raceDec(side);
+      hapticTap();
+    });
+    const end = (ev) => {
+      if (ev.pointerId !== id) return;
+      id = null;
+      taken = false;
+    };
+    panel.addEventListener("pointerup", end);
+    panel.addEventListener("pointercancel", end);
+    // Capture phase, so a swallowed click never reaches the child or the delegated handler.
+    panel.addEventListener("click", (ev) => {
+      if (!swallow) return;
+      swallow = false;
+      ev.stopPropagation();
+      ev.preventDefault();
+    }, true);
+  }
+
   function matchLabel(match) {
     const t = activeT();
     const g = gameOf(t);
@@ -1164,6 +1232,8 @@
       const dec = ev.target.closest("[data-race-dec]");
       if (dec) { raceDec(dec.dataset.raceDec); return; }
     });
+    // The tally's swipe gesture (hidden with the tally for the ball-marked disciplines).
+    wireSwipe($("#race"));
     document.body.addEventListener("click", (ev) => {
       const el = ev.target.closest("[data-action]");
       if (!el) return;

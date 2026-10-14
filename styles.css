@@ -110,7 +110,10 @@ body {
 .racks { margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
 
 /* The games-won body sits in the same flow as the rack grid it replaces. */
-.race { margin-top: 12px; }
+/* `pan-x` keeps vertical flicks for the scoring gesture (see the swipe section in app.js):
+   with the default `auto` the browser would take a vertical drag for scrolling and cancel
+   the pointer moves, so the gesture could never cross its threshold on a real phone. */
+.race { margin-top: 12px; touch-action: pan-x; }
 
 /* A section the sheet hides has to beat its own display rule: .racks is flex and
    .totals is grid, and neither loses to the bare hidden attribute on its own. */
