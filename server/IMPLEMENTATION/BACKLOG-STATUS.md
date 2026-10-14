@@ -114,4 +114,15 @@ Legend: [ ] todo · [~] in progress · [x] done+deployed.
       `review-flags.test.js`, `api-client.test.js`, `app-render.test.js`. Scenarios 37–48.
       Two assertions were deleted because they could not fail (a second-granularity
       `updated_at` check, and a score that an empty slot never renders).
+- [x] Slice P — per-discipline score sheets, ported forward from `per-discipline-sheets`
+      (branch `per-discipline-sheets-v2`). `sheets.js` holds one spec per discipline and
+      resolves **both** the console's ids and the server's canonical ones, which fixes the
+      live bug where a server-imported tournament fell back to the 15-Ball sheet
+      (`gameOf()`'s unknown-game fallback). 14.1 gets its own rack sheet (14 balls, 8 racks,
+      RUNNING TOTAL, FINAL MATCH TOTAL, goals 75/100); the race disciplines get a games
+      tally inside the sheet chrome and the second counter modal is gone. Docs: 14.1's paper
+      sheet + rules PDF and their builders under `docs/`, `DECISIONS/021`, and
+      `.gitattributes` marking `*.pdf` binary (CRLF corruption of a PDF's xref offsets).
+      Tests: `sheets.test.js` (new); `app-render.test.js`'s harness now loads `sheets.js`,
+      as `index.html` does. Frontend only — nothing new pending on a service restart.
 

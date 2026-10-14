@@ -143,7 +143,9 @@
     </section>
   </main>
 
-  <!-- =============================== 15-BALL ROTATION SCORE SHEET MODAL =============================== -->
+  <!-- =============================== MATCH SCORE SHEET MODAL ===============================
+       One sheet per discipline: the body (rack grid or games race), the goal presets and the
+       total's wording are built from sheets.js by renderSheetBody(). -->
   <div class="modal" id="matchModal" hidden aria-modal="true" role="dialog" aria-labelledby="matchTitle">
     <div class="modal-scrim" data-action="close-match"></div>
     <div class="modal-card">
@@ -173,43 +175,68 @@
               <label class="line">PLAYER A: <input type="text" data-field="pAname" autocomplete="off" /></label>
               <div class="goalbox">
                 <div class="goalttl">PLAYER A GOAL</div>
-                <div class="goals">
-                  <label><input type="radio" name="goalA" value="25" checked /><span>25</span></label>
-                  <label><input type="radio" name="goalA" value="50" /><span>50</span></label>
-                  <label class="other"><input type="radio" name="goalA" value="other" /><span>OTHER</span>
-                    <input type="number" inputmode="numeric" pattern="[0-9]*" min="1" max="999" step="1" data-field="goalAOther" aria-label="Other goal for Player A" />
-                  </label>
-                </div>
+                <div class="goals" data-goals="A"><!-- goals come from the discipline, see renderGoals --></div>
               </div>
             </div>
             <div class="pcard">
               <label class="line">PLAYER B: <input type="text" data-field="pBname" autocomplete="off" /></label>
               <div class="goalbox">
                 <div class="goalttl">PLAYER B GOAL</div>
-                <div class="goals">
-                  <label><input type="radio" name="goalB" value="25" checked /><span>25</span></label>
-                  <label><input type="radio" name="goalB" value="50" /><span>50</span></label>
-                  <label class="other"><input type="radio" name="goalB" value="other" /><span>OTHER</span>
-                    <input type="number" inputmode="numeric" pattern="[0-9]*" min="1" max="999" step="1" data-field="goalBOther" aria-label="Other goal for Player B" />
-                  </label>
-                </div>
+                <div class="goals" data-goals="B"><!-- goals come from the discipline, see renderGoals --></div>
               </div>
             </div>
           </section>
 
           <section class="racks" id="racks"><!-- populated by app.js --></section>
 
-          <section class="totals">
+          <!-- Games-won body: shown instead of the rack grid for the race disciplines. -->
+          <section class="race counter-body" id="race" hidden>
+            <div class="counter-grid">
+              <div class="counter-side" data-side="A">
+                <div class="counter-label">Player A</div>
+                <div class="counter-name" id="raceANm">&mdash;</div>
+                <div class="counter-controls">
+                  <button type="button" class="counter-btn" data-race-dec="A" aria-label="Decrement Player A">&minus;</button>
+                  <div class="counter-num" id="raceAScore">0</div>
+                  <button type="button" class="counter-btn" data-race-inc="A" aria-label="Increment Player A">+</button>
+                </div>
+                <div class="counter-jumps" data-race-jumps="A">
+                  <button type="button" class="counter-jump" data-race-jump="A" data-delta="5">+5</button>
+                  <button type="button" class="counter-jump" data-race-jump="A" data-delta="10">+10</button>
+                  <button type="button" class="counter-jump" data-race-jump="A" data-delta="-5">&minus;5</button>
+                </div>
+              </div>
+              <div class="counter-vs">vs</div>
+              <div class="counter-side" data-side="B">
+                <div class="counter-label">Player B</div>
+                <div class="counter-name" id="raceBNm">&mdash;</div>
+                <div class="counter-controls">
+                  <button type="button" class="counter-btn" data-race-dec="B" aria-label="Decrement Player B">&minus;</button>
+                  <div class="counter-num" id="raceBScore">0</div>
+                  <button type="button" class="counter-btn" data-race-inc="B" aria-label="Increment Player B">+</button>
+                </div>
+                <div class="counter-jumps" data-race-jumps="B">
+                  <button type="button" class="counter-jump" data-race-jump="B" data-delta="5">+5</button>
+                  <button type="button" class="counter-jump" data-race-jump="B" data-delta="10">+10</button>
+                  <button type="button" class="counter-jump" data-race-jump="B" data-delta="-5">&minus;5</button>
+                </div>
+              </div>
+            </div>
+            <div class="counter-target" id="raceTarget">Race to 7</div>
+            <p class="hint">Tap +/&minus; to record games won. The winner is selected for you at the race target &mdash; change it in the winner box below if you need to.</p>
+          </section>
+
+          <section class="totals" id="sheetTotals">
             <div class="tcard">
               <h3>PLAYER A TOTALS</h3>
               <div class="trow">
-                <label class="final">FINAL GAME TOTAL<input type="number" data-field="finalA" readonly /></label>
+                <label class="final"><span data-final-label>FINAL GAME TOTAL</span><input type="number" data-field="finalA" readonly /></label>
               </div>
             </div>
             <div class="tcard">
               <h3>PLAYER B TOTALS</h3>
               <div class="trow">
-                <label class="final">FINAL GAME TOTAL<input type="number" data-field="finalB" readonly /></label>
+                <label class="final"><span data-final-label>FINAL GAME TOTAL</span><input type="number" data-field="finalB" readonly /></label>
               </div>
             </div>
           </section>
@@ -235,67 +262,6 @@
         <div class="spacer"></div>
         <button type="button" data-action="close-match" class="ghost">Cancel</button>
         <button type="button" data-action="save-match" class="primary">Save Result</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- =============================== SIMPLE COUNTER SCORE SHEET (8/9/10-ball) =============================== -->
-  <div class="modal" id="counterModal" hidden aria-modal="true" role="dialog" aria-labelledby="counterTitle">
-    <div class="modal-scrim" data-action="close-counter"></div>
-    <div class="modal-card modal-card-md">
-      <div class="modal-hdr">
-        <div>
-          <div class="modal-eyebrow" id="counterEyebrow">Match</div>
-          <h2 id="counterTitle">A vs B</h2>
-        </div>
-        <button type="button" class="iconbtn" data-action="close-counter" aria-label="Close">&times;</button>
-      </div>
-      <div class="modal-body counter-body">
-        <div class="counter-grid">
-          <div class="counter-side" data-side="A">
-            <div class="counter-label">Player A</div>
-            <div class="counter-name" id="counterANm">&mdash;</div>
-            <div class="counter-controls">
-              <button type="button" class="counter-btn" data-counter-dec="A" aria-label="Decrement Player A">&minus;</button>
-              <div class="counter-num" id="counterAScore">0</div>
-              <button type="button" class="counter-btn" data-counter-inc="A" aria-label="Increment Player A">+</button>
-            </div>
-            <div class="counter-jumps" data-counter-jumps="A" hidden>
-              <button type="button" class="counter-jump" data-counter-jump="A" data-delta="5">+5</button>
-              <button type="button" class="counter-jump" data-counter-jump="A" data-delta="10">+10</button>
-              <button type="button" class="counter-jump" data-counter-jump="A" data-delta="-5">&minus;5</button>
-            </div>
-            <label class="counter-check">
-              <input type="radio" name="counterWinner" value="A" /> Declare winner
-            </label>
-          </div>
-          <div class="counter-vs">vs</div>
-          <div class="counter-side" data-side="B">
-            <div class="counter-label">Player B</div>
-            <div class="counter-name" id="counterBNm">&mdash;</div>
-            <div class="counter-controls">
-              <button type="button" class="counter-btn" data-counter-dec="B" aria-label="Decrement Player B">&minus;</button>
-              <div class="counter-num" id="counterBScore">0</div>
-              <button type="button" class="counter-btn" data-counter-inc="B" aria-label="Increment Player B">+</button>
-            </div>
-            <div class="counter-jumps" data-counter-jumps="B" hidden>
-              <button type="button" class="counter-jump" data-counter-jump="B" data-delta="5">+5</button>
-              <button type="button" class="counter-jump" data-counter-jump="B" data-delta="10">+10</button>
-              <button type="button" class="counter-jump" data-counter-jump="B" data-delta="-5">&minus;5</button>
-            </div>
-            <label class="counter-check">
-              <input type="radio" name="counterWinner" value="B" /> Declare winner
-            </label>
-          </div>
-        </div>
-        <div class="counter-target" id="counterTarget">Race to 7</div>
-        <p class="hint">Tap +/&minus; to record games won. Winner auto-selects once a player hits the race target. You can also override manually.</p>
-      </div>
-      <div class="modal-actions">
-        <button type="button" data-action="clear-counter" class="ghost">Clear</button>
-        <div class="spacer"></div>
-        <button type="button" data-action="close-counter" class="ghost">Cancel</button>
-        <button type="button" data-action="save-counter" class="primary">Save Result</button>
       </div>
     </div>
   </div>
@@ -395,6 +361,7 @@
 
   <script src="bracket.js"></script>
   <script src="tables.js"></script>
+  <script src="sheets.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

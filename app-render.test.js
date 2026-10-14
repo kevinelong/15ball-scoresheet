@@ -109,7 +109,11 @@ function loadApp(label, buildTournament) {
   sandbox.window = sandbox;
   sandbox.globalThis = sandbox;
   const ctx = vm.createContext(sandbox);
+  // The script order index.html uses: bracket.js, tables.js, sheets.js, then app.js.
+  // sheets.js matters here because opening a match now builds its sheet body from the
+  // discipline's definition (`window.Sheets`).
   vm.runInContext(fs.readFileSync(path.join(__dirname, "bracket.js"), "utf8"), ctx, { filename: "bracket.js" });
+  vm.runInContext(fs.readFileSync(path.join(__dirname, "sheets.js"), "utf8"), ctx, { filename: "sheets.js" });
   const tournament = buildTournament(sandbox.BracketEngine);
   ls.setItem("fifteenBall.app.v3", JSON.stringify({ v: 3, activeId: tournament.id, tournaments: [tournament] }));
   vm.runInContext(fs.readFileSync(path.join(__dirname, "app.js"), "utf8"), ctx, { filename: "app.js" });

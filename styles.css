@@ -109,6 +109,13 @@ body {
 
 .racks { margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
 
+/* The games-won body sits in the same flow as the rack grid it replaces. */
+.race { margin-top: 12px; }
+
+/* A section the sheet hides has to beat its own display rule: .racks is flex and
+   .totals is grid, and neither loses to the bare hidden attribute on its own. */
+.racks[hidden], .race[hidden], .totals[hidden], .goalbox[hidden] { display: none; }
+
 .rack {
   border: 1.5px solid var(--line-strong);
   border-radius: 8px;

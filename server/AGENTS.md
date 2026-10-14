@@ -72,6 +72,29 @@ Next up (decisions, not gaps):
 - The console has no "clear review" control yet — the endpoint and the client method exist
   and are tested; the button (placement, confirmation, wording) is a UI decision.
 
+### Per-discipline score sheets — ported forward (branch `per-discipline-sheets-v2`, 2026-10-14)
+
+`per-discipline-sheets` (3 unpublished commits, cut before the single-elim and review-flag
+rounds) held the only per-discipline sheet work, and its `app.js`/`index.html` predated
+them. The wanted parts were ported onto today's `main` as new commits on
+`per-discipline-sheets-v2`; the old branch was left untouched (not pushed, not deleted).
+
+- **`sheets.js`** — one spec per discipline (rack geometry, column labels, goal presets,
+  final label, and how the discipline is measured) with a DEFS/ALIASES id map that resolves
+  both the console's own ids (`fifteenBall`, `14_1`, `onepocket`, `banks`) and the server's
+  canonical ones (`15ball_rotation`, `straight_14_1`, `one_pocket`, `bank_pool`). This is a
+  **live bug fix**: a server-imported tournament carries a canonical game id, which the
+  old `gameOf()` fell back on, so it silently opened the 15-Ball sheet.
+- **14.1 gets a real sheet** — 14 balls per rack, 8 racks, `RUNNING TOTAL`,
+  `FINAL MATCH TOTAL`, goals 75/100 — and the race disciplines get a games tally inside the
+  same sheet chrome instead of the second counter modal (`#counterModal` is gone).
+- **Docs**: 14.1's paper sheet and plain-English rules PDF plus the two Python builders
+  under `docs/` (the paper sheet is the QR target the in-app sheet points at), and
+  `DECISIONS/021-per-game-sheets.md`. `.gitattributes` marks `*.pdf` binary so
+  `core.autocrlf` cannot corrupt a generated PDF's xref offsets on checkout.
+
+No server behaviour changed this turn, so nothing new is pending on a service restart.
+
 ## Deployment (Kevin's, not the implementing agent's)
 
 **A pushed commit is not a deployed one.** The live service picks changes up when Kevin
@@ -93,5 +116,6 @@ pulls and restarts it: `cd /home/kevin/15ball-scoresheet && git pull` + service 
   with what changed and what is next, and leave `OPEN-QUESTIONS.md` current: a resolved
   decision reads as resolved, with the date and what was chosen.
 - Say explicitly when a turn changes what a running deployment must pick up (see above).
-- `per-discipline-sheets` stays untouched (3 unpublished commits — Kevin's call).
+- `per-discipline-sheets` stays untouched (3 unpublished commits) — its wanted parts were
+  ported forward to `per-discipline-sheets-v2`, but the old branch is not pushed or deleted.
 

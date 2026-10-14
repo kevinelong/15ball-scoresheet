@@ -1,6 +1,6 @@
 # Columbia Cue Club Tournament — Double-Elimination Bracket + 15-Ball Rotation Score Sheet
 
-Online tournament manager for 15-Ball Rotation. Enter a participant list, seed by Fargo rating, build a full double-elimination bracket, and click any match to open the paper-style 15-Ball Rotation score sheet as a modal. Ball totals flow back into the bracket as the match score, winners advance automatically, and everything persists in the browser or exports as JSON.
+Online tournament manager for seven pool disciplines. Enter a participant list, seed by Fargo rating, build a full double-elimination bracket, and click any match to open the paper-style score sheet for that tournament's game as a modal — a rack grid for the ball-marked disciplines (15-Ball Rotation, Straight Pool 14.1), a games tally inside the same sheet chrome for the race disciplines (8/9/10-Ball, One Pocket, Bank Pool). Totals flow back into the bracket as the match score, winners advance automatically, and everything persists in the browser or exports as JSON.
 
 Zero dependencies — three JS/CSS/HTML files, no build step.
 
@@ -10,7 +10,7 @@ At its core this project exists to **make running a real pool tournament effortl
 
 It ships in two layers that share one bracket model:
 
-- **Static app (this folder)** — zero-dependency, offline, single-device double-elimination bracket + printable 15-Ball Rotation score sheets. Runs anywhere static; nothing leaves the device.
+- **Static app (this folder)** — zero-dependency, offline, single-device double-elimination bracket + printable per-discipline score sheets. Runs anywhere static; nothing leaves the device.
 - **Live cloud edition (`server/` + `live.html`)** — a multi-user backend and mobile console: magic-link sign-in, server-persisted double-elimination tournaments across several disciplines, real-time updates over SSE, role-gated setup, **open scoring links + QR** so anyone in the room can score from their phone, **SMS "your match is ready at table N"** alerts, Challonge sync, and a transparent **OBS overlay** (`overlay-live.html`) for streaming.
 
 **Design philosophy:** remove every point of friction between "we're holding a tournament" and "it's running" — no installs, no accounts to score, short links/QR instead of typing, and the software fading into the background so the room just plays.
@@ -27,13 +27,15 @@ It ships in two layers that share one bracket model:
 - Champion banner when the last match is decided
 - **Load Sept 7 Signups** shortcut fills the roster from the current Labor Day Showdown 2026 registration list
 
-### 15-Ball Rotation match score sheet (per match, modal)
-- 4 racks × 2 players × 15 balls each — click balls to record them pocketed
+### Match score sheet (per match, modal — one sheet per discipline)
+- The sheet's body comes from the tournament's game (`sheets.js`): **15-Ball Rotation** marks
+  15 ball faces over 4 racks (GAME SUBTOTAL), **Straight Pool 14.1** marks 14 plain circles
+  over 8 racks (RUNNING TOTAL, FINAL MATCH TOTAL, goals 75/100), and the race disciplines
+  (8/9/10-Ball, One Pocket, Bank Pool) get a games tally in the same sheet chrome
 - Live per-rack totals, running totals, and final totals
 - Fouls per rack, aggregated per player
-- Player names pre-populated from the bracket slot
-- Winner selection advances the bracket automatically on save
-- Race-to target from tournament setup pre-fills both players' goals
+- Player names pre-populated from the bracket slot; goal presets pre-checked from the setup
+- Winner selection advances the bracket automatically on save (auto-selected at the target)
 
 ### Persistence & sharing
 - Auto-saves the entire tournament (bracket + every match sheet) to browser storage
@@ -71,6 +73,7 @@ code they cover:
 
 ```bash
 node bracket.test.js        # bracket engine: single-elim spec, scale pinning, refusals
+node sheets.test.js         # per-discipline sheet specs: id resolution, rack geometry, goals
 node roster.test.js         # roster parsing
 node tables.test.js         # table naming/parsing (25 tests)
 node migration.test.js      # storage-key + legacy-state migration

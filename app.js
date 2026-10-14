@@ -10,7 +10,9 @@
   "use strict";
 
   // ---------- constants ----------
-  const RACKS = 4;
+  // Rack count, balls per rack, column labels, goal presets and whether the sheet marks
+  // balls at all now come from the game's sheet definition in sheets.js — nothing here is
+  // 15-ball-specific any more. See renderSheetBody().
   const STRIPES = [9, 10, 11, 12, 13, 14, 15];
   const EIGHT = [8];
   // Storage schema: v3 (pre-tables) is auto-migrated to v4 (with tables[]).
@@ -70,17 +72,20 @@
     return "t_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 6);
   }
 
-  // Curated game catalog. sheetType: "fifteenBall" = existing rack grid; "counter" = simple games-won/points counter.
+  // Curated game catalog. The *sheet* for a game — rack geometry, column labels, goal
+  // presets, and whether the match is marked by balls or by games won — lives in sheets.js.
   const GAMES = {
-    fifteenBall:{ id: "fifteenBall",name: "15-Ball Rotation",         sheetType: "fifteenBall", defaultRaceTo: 25, raceLabel: "Points to win", raceHint: "Points target per match — a multiple of 25 (25 / 50 / 100 / 150), as in Straight Pool.",                  scoringHint: "1 point per ball pocketed; a completed rack totals 15." },
-    "8ball":    { id: "8ball",    name: "8-Ball",                    sheetType: "counter", defaultRaceTo: 7,   raceLabel: "Race to",       raceHint: "Games needed to win the match (typical: 5 / 7 / 9).",           scoringHint: "Games won \u2014 first to the race target." },
-    "9ball":    { id: "9ball",    name: "9-Ball",                    sheetType: "counter", defaultRaceTo: 7,   raceLabel: "Race to",       raceHint: "Games needed to win the match (typical: 7 / 9 / 11).",          scoringHint: "Games won \u2014 first to the race target." },
-    "10ball":   { id: "10ball",   name: "10-Ball",                   sheetType: "counter", defaultRaceTo: 7,   raceLabel: "Race to",       raceHint: "Games needed to win the match (typical: 7 / 9).",              scoringHint: "Games won \u2014 first to the race target." },
-    "onepocket":{ id: "onepocket",name: "One Pocket",                sheetType: "counter", defaultRaceTo: 3,   raceLabel: "Race to",       raceHint: "Balls-in-pocket to win the match (typical: 3 / 4).",            scoringHint: "Games won \u2014 first to the race target of pocketed-in-your-pocket wins." },
-    "14_1":     { id: "14_1",     name: "Straight Pool (14.1 Continuous)", sheetType: "counter", defaultRaceTo: 100, raceLabel: "Points to",     raceHint: "Point target per match (typical: 75 / 100 / 125 / 150).",       scoringHint: "Continuous points \u2014 first to the point target." },
-    "banks":    { id: "banks",    name: "Bank Pool",                 sheetType: "counter", defaultRaceTo: 5,   raceLabel: "Race to",       raceHint: "Banked-ball games to win the match (typical: 3 / 5).",          scoringHint: "Banked wins \u2014 first to the race target." }
+    fifteenBall:{ id: "fifteenBall",name: "15-Ball Rotation",         defaultRaceTo: 25, raceLabel: "Points to win", raceHint: "Points target per match — a multiple of 25 (25 / 50 / 100 / 150), as in Straight Pool.",                  scoringHint: "1 point per ball pocketed; a completed rack totals 15." },
+    "8ball":    { id: "8ball",    name: "8-Ball",                    defaultRaceTo: 7,   raceLabel: "Race to",       raceHint: "Games needed to win the match (typical: 5 / 7 / 9).",           scoringHint: "Games won \u2014 first to the race target." },
+    "9ball":    { id: "9ball",    name: "9-Ball",                    defaultRaceTo: 7,   raceLabel: "Race to",       raceHint: "Games needed to win the match (typical: 7 / 9 / 11).",          scoringHint: "Games won \u2014 first to the race target." },
+    "10ball":   { id: "10ball",   name: "10-Ball",                   defaultRaceTo: 7,   raceLabel: "Race to",       raceHint: "Games needed to win the match (typical: 7 / 9).",              scoringHint: "Games won \u2014 first to the race target." },
+    "onepocket":{ id: "onepocket",name: "One Pocket",                defaultRaceTo: 3,   raceLabel: "Race to",       raceHint: "Balls-in-pocket to win the match (typical: 3 / 4).",            scoringHint: "Games won \u2014 first to the race target of pocketed-in-your-pocket wins." },
+    "14_1":     { id: "14_1",     name: "Straight Pool (14.1 Continuous)", defaultRaceTo: 100, raceLabel: "Points to",     raceHint: "Point target per match (typical: 75 / 100 / 125 / 150).",       scoringHint: "Continuous points \u2014 first to the point target." },
+    "banks":    { id: "banks",    name: "Bank Pool",                 defaultRaceTo: 5,   raceLabel: "Race to",       raceHint: "Banked-ball games to win the match (typical: 3 / 5).",          scoringHint: "Banked wins \u2014 first to the race target." }
   };
   function gameOf(t) { return GAMES[t?.game] || GAMES.fifteenBall; }
+  /** The sheet definition for a tournament's game (see sheets.js). */
+  function sheetOf(t) { return window.Sheets.spec(t && t.game); }
 
   // Bracket format vocabulary. "single" is a single *final* inside a
   // double-elimination bracket; "single_elim" is real single elimination.
@@ -427,10 +432,10 @@
   // ============================================================
   // Score sheet (per match) DOM setup
   // ============================================================
-  function renderRacks() {
+  function renderRacks(spec) {
     const container = $("#racks");
     container.innerHTML = "";
-    for (let r = 1; r <= RACKS; r++) {
+    for (let r = 1; r <= spec.racks; r++) {
       const rack = document.createElement("section");
       rack.className = "rack";
       rack.dataset.rack = String(r);
@@ -443,8 +448,8 @@
           </div>` : ``}
         <div class="rack-body">
           <div class="racknum">${r}</div>
-          ${renderSide(r, "A")}
-          ${renderSide(r, "B")}
+          ${renderSide(r, "A", spec)}
+          ${renderSide(r, "B", spec)}
         </div>`;
       container.appendChild(rack);
     }
@@ -466,46 +471,48 @@
         }
         el.classList.toggle("on");
         el.setAttribute("aria-pressed", el.classList.contains("on"));
-        recomputeSheet();
+        recomputeSheet(spec);
       });
       el.addEventListener("keydown", (ev) => {
         if (ev.key === " " || ev.key === "Enter") { ev.preventDefault(); el.click(); }
       });
     });
     $$("input[data-foul]", container).forEach((el) => {
-      el.addEventListener("input", recomputeSheet);
+      el.addEventListener("input", () => recomputeSheet(spec));
     });
   }
 
-  function renderSide(rack, side) {
+  function renderSide(rack, side, spec) {
+    const balls = [];
+    for (let n = 1; n <= spec.ballsPerRack; n++) { balls.push(ballBtn(rack, side, n, spec)); }
     return `
       <div class="side ${side === "B" ? "rightside" : ""}">
-        <div class="balls">
-          ${[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15].map((n) => ballBtn(rack, side, n)).join("")}
-        </div>
+        <div class="balls">${balls.join("")}</div>
         <div class="rackstats">
-          <label>Balls Made<input type="number" min="0" max="15" readonly
+          <label>${spec.columns[0]}<input type="number" min="0" max="${spec.ballsPerRack}" readonly
                               data-total data-rack="${rack}" data-side="${side}" /></label>
-          <label>Fouls<input type="number" inputmode="numeric" pattern="[0-9]*" min="0" step="1" enterkeyhint="done"
+          <label>${spec.columns[1]}<input type="number" inputmode="numeric" pattern="[0-9]*" min="0" step="1" enterkeyhint="done"
                               data-foul data-rack="${rack}" data-side="${side}" /></label>
-          <label class="racknet">Rack Total<input type="number" readonly
+          <label class="racknet">${spec.columns[2]}<input type="number" readonly
                                      data-racknet data-rack="${rack}" data-side="${side}" /></label>
-          <label class="running">Game Subtotal<input type="number" readonly
+          <label class="running">${spec.columns[3]}<input type="number" readonly
                                      data-running data-rack="${rack}" data-side="${side}" /></label>
         </div>
       </div>`;
   }
 
-  function ballBtn(rack, side, n) {
-    const cls = ballKind(n) === "stripe" ? "ball stripe" : "ball";
+  function ballBtn(rack, side, n, spec) {
+    // Pool-ball faces only where the ball's number is the point value (15-ball rotation).
+    // Straight pool marks a count, so its circles are plain.
+    const cls = spec.ballFaces && ballKind(n) === "stripe" ? "ball stripe" : "ball";
     return `<button type="button" class="${cls}" data-rack="${rack}" data-side="${side}" data-num="${n}"
                     aria-pressed="false" aria-label="Rack ${rack} Player ${side} ball ${n}">${n}</button>`;
   }
 
-  function recomputeSheet() {
+  function recomputeSheet(spec) {
     ["A", "B"].forEach((side) => {
       let running = 0;
-      for (let r = 1; r <= RACKS; r++) {
+      for (let r = 1; r <= spec.racks; r++) {
         const on = $$(`#sheet .ball.on[data-rack="${r}"][data-side="${side}"]`).length;
         const foulEl = $(`#sheet input[data-foul][data-rack="${r}"][data-side="${side}"]`);
         const rackFouls = parseInt(foulEl && foulEl.value, 10) || 0;
@@ -535,22 +542,25 @@
     }
   }
 
-  function collectSheet() {
+  function collectSheet(spec) {
+    const rack = spec.kind === window.Sheets.RACK;
     const s = {
+      _kind: spec.kind,
       pAname: $(`#sheet input[data-field="pAname"]`).value,
       pBname: $(`#sheet input[data-field="pBname"]`).value,
-      goalA: ($(`#sheet input[name="goalA"]:checked`) || {}).value || "25",
-      goalAOther: $(`#sheet input[data-field="goalAOther"]`).value,
-      goalB: ($(`#sheet input[name="goalB"]:checked`) || {}).value || "25",
-      goalBOther: $(`#sheet input[data-field="goalBOther"]`).value,
+      goalA: ($(`#sheet input[name="goalA"]:checked`) || {}).value || "",
+      goalAOther: ($(`#sheet input[data-field="goalAOther"]`) || {}).value || "",
+      goalB: ($(`#sheet input[name="goalB"]:checked`) || {}).value || "",
+      goalBOther: ($(`#sheet input[data-field="goalBOther"]`) || {}).value || "",
       sigA: $(`#sheet input[data-field="sigA"]`).value,
       sigB: $(`#sheet input[data-field="sigB"]`).value,
       winner: ($(`#sheet input[name="winner"]:checked`) || {}).value || "",
-      finalA: parseInt($(`#sheet input[data-field="finalA"]`).value, 10) || 0,
-      finalB: parseInt($(`#sheet input[data-field="finalB"]`).value, 10) || 0,
+      finalA: rack ? (parseInt($(`#sheet input[data-field="finalA"]`).value, 10) || 0) : raceGet("A"),
+      finalB: rack ? (parseInt($(`#sheet input[data-field="finalB"]`).value, 10) || 0) : raceGet("B"),
       racks: []
     };
-    for (let r = 1; r <= RACKS; r++) {
+    if (!rack) { return s; }
+    for (let r = 1; r <= spec.racks; r++) {
       const e = { rack: r, A: {}, B: {} };
       ["A", "B"].forEach((side) => {
         e[side].balls = $$(`#sheet .ball.on[data-rack="${r}"][data-side="${side}"]`)
@@ -563,7 +573,9 @@
     return s;
   }
 
-  function applySheet(sheet, matchInfo) {
+  function applySheet(sheet, matchInfo, spec) {
+    spec = spec || sheetOf(activeT());
+    const rack = spec.kind === window.Sheets.RACK;
     $$("#sheet .ball.on").forEach((b) => { b.classList.remove("on"); b.setAttribute("aria-pressed", "false"); });
     $$("#sheet input[data-foul]").forEach((i) => { i.value = ""; });
     $$("#sheet input[data-field]").forEach((i) => { if (!i.readOnly) i.value = ""; });
@@ -573,24 +585,39 @@
     const nameB = matchInfo && matchInfo.playerB ? matchInfo.playerB.name : "";
     $(`#sheet input[data-field="pAname"]`).value = sheet && sheet.pAname ? sheet.pAname : nameA;
     $(`#sheet input[data-field="pBname"]`).value = sheet && sheet.pBname ? sheet.pBname : nameB;
+    // The games-won body shows the names itself, and its target in the tournament's words.
+    if ($("#raceANm")) { $("#raceANm").textContent = $(`#sheet input[data-field="pAname"]`).value || "Player A"; }
+    if ($("#raceBNm")) { $("#raceBNm").textContent = $(`#sheet input[data-field="pBname"]`).value || "Player B"; }
+
+    if (!rack) {
+      raceSet("A", sheet && Number.isInteger(sheet.finalA) ? sheet.finalA : 0);
+      raceSet("B", sheet && Number.isInteger(sheet.finalB) ? sheet.finalB : 0);
+      if (sheet && sheet.sigA) { $(`#sheet input[data-field="sigA"]`).value = sheet.sigA; }
+      if (sheet && sheet.sigB) { $(`#sheet input[data-field="sigB"]`).value = sheet.sigB; }
+      if (sheet && sheet.winner) {
+        const w = $(`#sheet input[name="winner"][value="${sheet.winner}"]`);
+        if (w) { w.checked = true; }
+      }
+      return;
+    }
 
     const t = activeT();
-    const raceTo = t ? t.raceTo : 25;
-    const goalVal = String(raceTo);
-    const isPreset = ["25", "50"].includes(goalVal);
+    const goals = window.Sheets.goals(t && t.game);
+    const goalVal = String(t ? t.raceTo : goals[0]);
+    const isPreset = goals.map(String).includes(goalVal);
     ["A", "B"].forEach((side) => {
       if (isPreset) {
         const r = $(`#sheet input[name="goal${side}"][value="${goalVal}"]`);
-        if (r) r.checked = true;
+        if (r) { r.checked = true; }
       } else {
         const other = $(`#sheet input[name="goal${side}"][value="other"]`);
-        if (other) other.checked = true;
+        if (other) { other.checked = true; }
         const oInput = $(`#sheet input[data-field="goal${side}Other"]`);
-        if (oInput) oInput.value = goalVal;
+        if (oInput) { oInput.value = goalVal; }
       }
     });
 
-    if (!sheet) { recomputeSheet(); return; }
+    if (!sheet) { recomputeSheet(spec); return; }
 
     if (sheet.sigA) $(`#sheet input[data-field="sigA"]`).value = sheet.sigA;
     if (sheet.sigB) $(`#sheet input[data-field="sigB"]`).value = sheet.sigB;
@@ -618,7 +645,7 @@
         if (foulEl) foulEl.value = entry[side]?.fouls || "";
       });
     });
-    recomputeSheet();
+    recomputeSheet(spec);
   }
 
   // ============================================================
@@ -804,126 +831,89 @@
   function openMatch(matchId) {
     const t = activeT();
     if (!t) return;
-    const g = gameOf(t);
-    if (g.sheetType === "counter") { openCounterModal(matchId); return; }
-    activeMatchId = matchId;
     const match = t.bracket.matches[matchId];
+    if (!match || !match.slots[0] || !match.slots[1]) return;
+    activeMatchId = matchId;
     const info = { matchId, playerA: match.slots[0], playerB: match.slots[1] };
+    const spec = renderSheetBody(t);
     $("#matchEyebrow").textContent = matchLabel(match);
     $("#matchTitle").textContent = `${match.slots[0].name}  vs.  ${match.slots[1].name}`;
-    applySheet(t.sheets[matchId] || null, info);
+    applySheet(t.sheets[matchId] || null, info, spec);
     $("#matchModal").hidden = false;
     document.body.style.overflow = "hidden";
   }
+
+  /**
+   * Build the sheet's body for this tournament's game: a rack grid for the ball-marked
+   * disciplines, a games tally for the rest. Everything a sheet needs to differ by
+   * discipline comes from sheets.js, so this is the only place that branches.
+   */
+  function renderSheetBody(t) {
+    const spec = sheetOf(t);
+    const rack = spec.kind === window.Sheets.RACK;
+    $("#sheetGameTitle").textContent = gameOf(t).name;
+    $("#racks").hidden = !rack;
+    $("#race").hidden = rack;
+    $("#sheetTotals").hidden = !rack;
+    $$("#sheet [data-final-label]").forEach((el) => { el.textContent = spec.finalLabel || ""; });
+    // A goal box belongs to a ball-marked sheet; a race's target is the tournament's.
+    $$("#sheet .goalbox").forEach((el) => { el.hidden = !rack; });
+    if (rack) {
+      renderGoals("A", t.game);
+      renderGoals("B", t.game);
+      renderRacks(spec);
+    } else {
+      renderRace(t, gameOf(t));
+    }
+    return spec;
+  }
+
+  /** Goal checkboxes for one side, in the discipline's own usual targets. */
+  function renderGoals(side, game) {
+    const box = $(`#sheet [data-goals="${side}"]`);
+    if (!box) return;
+    const presets = window.Sheets.goals(game);
+    const radio = (value, label, checked) =>
+      `<label><input type="radio" name="goal${side}" value="${value}"${checked ? " checked" : ""} />` +
+      `<span>${label}</span></label>`;
+    box.innerHTML = presets.map((g, i) => radio(String(g), String(g), i === 0)).join("") +
+      `<label class="other"><input type="radio" name="goal${side}" value="other" /><span>OTHER</span>` +
+      `<input type="number" inputmode="numeric" pattern="[0-9]*" min="1" max="999" step="1" ` +
+      `data-field="goal${side}Other" aria-label="Other goal for Player ${side}" /></label>`;
+  }
+
+  /** The games-won body: a tally per side against the tournament's race target. */
+  function renderRace(t, g) {
+    $("#raceTarget").textContent = `${g.raceLabel} ${t.raceTo}`;
+    raceSet("A", 0);
+    raceSet("B", 0);
+  }
+
+  function raceGet(side) {
+    return parseInt($(`#race${side}Score`).textContent, 10) || 0;
+  }
+  function raceSet(side, n) {
+    const v = Math.max(0, Math.min(999, n | 0));
+    $(`#race${side}Score`).textContent = String(v);
+    // Auto-select the winner the moment a side reaches the race target.
+    const t = activeT();
+    if (!t) return;
+    const race = t.raceTo || gameOf(t).defaultRaceTo;
+    const other = side === "A" ? raceGet("B") : raceGet("A");
+    if (race > 0 && v >= race && v > other &&
+        !$$(`#sheet input[name="winner"]`).some((r) => r.checked)) {
+      const rb = $(`#sheet input[name="winner"][value="${side}"]`);
+      if (rb) rb.checked = true;
+    }
+  }
+  function raceInc(side) { raceSet(side, raceGet(side) + 1); }
+  function raceDec(side) { raceSet(side, raceGet(side) - 1); }
 
   function matchLabel(match) {
     const t = activeT();
     const g = gameOf(t);
     const round = roundTitle(match.bracket, match.round, t.bracket);
     return `${t.name} \u2022 ${round} \u2022 ${match.id} \u2022 ${g.raceLabel} ${t.raceTo}`;
-  }
-
-  // ============================================================
-  // Counter modal (games-won sheet for 8/9/10-ball etc.)
-  // ============================================================
-  let activeCounterMatchId = null;
-  function openCounterModal(matchId) {
-    const t = activeT();
-    if (!t) return;
-    const match = t.bracket.matches[matchId];
-    if (!match || !match.slots[0] || !match.slots[1]) return;
-    activeCounterMatchId = matchId;
-    const g = gameOf(t);
-    $("#counterEyebrow").textContent = matchLabel(match);
-    $("#counterTitle").textContent = `${match.slots[0].name}  vs.  ${match.slots[1].name}`;
-    $("#counterANm").textContent = match.slots[0].name;
-    $("#counterBNm").textContent = match.slots[1].name;
-    $("#counterTarget").textContent = `${g.raceLabel} ${t.raceTo}`;
-    // Show +5 / +10 quick-add buttons for point-style games (Straight Pool / 15-Ball-Rotation-style targets).
-    const pointsMode = (t.raceTo || g.defaultRaceTo) >= 50;
-    $$("[data-counter-jumps]").forEach((el) => { el.hidden = !pointsMode; });
-    const existing = t.sheets[matchId] || null;
-    const a = existing && Number.isInteger(existing.finalA) ? existing.finalA : 0;
-    const b = existing && Number.isInteger(existing.finalB) ? existing.finalB : 0;
-    counterSet("A", a);
-    counterSet("B", b);
-    $$("input[name=\"counterWinner\"]").forEach((r) => {
-      r.checked = existing && existing.winner === r.value;
-    });
-    $("#counterModal").hidden = false;
-    document.body.style.overflow = "hidden";
-  }
-  function closeCounterModal() {
-    $("#counterModal").hidden = true;
-    document.body.style.overflow = "";
-    activeCounterMatchId = null;
-  }
-  function counterGet(side) {
-    return parseInt($(`#counter${side}Score`).textContent, 10) || 0;
-  }
-  function counterSet(side, n) {
-    const v = Math.max(0, Math.min(999, n | 0));
-    $(`#counter${side}Score`).textContent = String(v);
-    // Auto-select winner when a side reaches the race target
-    const t = activeT();
-    if (!t) return;
-    const race = t.raceTo || gameOf(t).defaultRaceTo;
-    const other = side === "A" ? counterGet("B") : counterGet("A");
-    if (v >= race && v > other) {
-      const rb = $(`input[name="counterWinner"][value="${side}"]`);
-      if (rb && !$$("input[name=\"counterWinner\"]").some((r) => r.checked)) rb.checked = true;
-    }
-  }
-  function counterInc(side) { counterSet(side, counterGet(side) + 1); }
-  function counterDec(side) { counterSet(side, counterGet(side) - 1); }
-  function saveCounterMatch() {
-    if (!activeCounterMatchId) return;
-    const t = activeT();
-    if (!t) return;
-    const winner = ($$("input[name=\"counterWinner\"]").find((r) => r.checked) || {}).value || null;
-    const finalA = counterGet("A");
-    const finalB = counterGet("B");
-    const sheet = {
-      _kind: "counter",
-      game: t.game,
-      matchId: activeCounterMatchId,
-      finalA, finalB,
-      winner: winner
-    };
-    if (!winner) {
-      if (!confirm("No winner is selected. Save this counter sheet as in-progress (bracket won't advance)?")) return;
-      t.sheets[activeCounterMatchId] = sheet;
-      persist();
-      renderBracket();
-      toast("Saved (no winner set)");
-      return;
-    }
-    t.sheets[activeCounterMatchId] = sheet;
-    const winnerSlot = winner === "A" ? 0 : 1;
-    window.BracketEngine.recordWinner(t.bracket, activeCounterMatchId, winnerSlot, { score: `${finalA}-${finalB}` });
-    persist();
-    renderBracket();
-    closeCounterModal();
-    toast("Result recorded");
-  }
-  function clearCounterMatch() {
-    if (!activeCounterMatchId) return;
-    const t = activeT();
-    if (!t) return;
-    if (!confirm("Clear this match? Also removes the winner from the bracket.")) return;
-    delete t.sheets[activeCounterMatchId];
-    const m = t.bracket.matches[activeCounterMatchId];
-    if (m && m.winner !== null) {
-      m.winner = null;
-      m.score = null;
-      rebuildFromParticipants();
-    }
-    counterSet("A", 0);
-    counterSet("B", 0);
-    $$("input[name=\"counterWinner\"]").forEach((r) => { r.checked = false; });
-    persist();
-    renderBracket();
-    toast("Cleared");
   }
 
   // ============================================================
@@ -998,7 +988,7 @@
     if (!activeMatchId) return;
     const t = activeT();
     if (!t) return;
-    const sheet = collectSheet();
+    const sheet = collectSheet(sheetOf(t));
     if (!sheet.winner) {
       if (!confirm("No winner is selected on this sheet. Save it as an in-progress match anyway (bracket won't advance)?")) return;
       t.sheets[activeMatchId] = sheet;
@@ -1029,7 +1019,7 @@
       m.score = null;
       rebuildFromParticipants();
     }
-    applySheet(null, { matchId: activeMatchId, playerA: m.slots[0], playerB: m.slots[1] });
+    applySheet(null, { matchId: activeMatchId, playerA: m.slots[0], playerB: m.slots[1] }, sheetOf(t));
     persist();
     renderBracket();
     toast("Cleared");
@@ -1154,17 +1144,17 @@
       const n = Math.max(1, Math.min(64, parseInt($("#tTableCount").value, 10) || DEFAULT_TABLE_COUNT));
       $("#tTableNaming").placeholder = window.Tables ? window.Tables.namingPlaceholder(n) : `1-${n}`;
     });
-    // Counter increment/decrement + jump buttons (delegated)
+    // Games-won tally inside the sheet (delegated): the +/- buttons and the quick jumps.
     document.body.addEventListener("click", (ev) => {
-      const inc = ev.target.closest("[data-counter-inc]");
-      if (inc) { counterInc(inc.dataset.counterInc); return; }
-      const dec = ev.target.closest("[data-counter-dec]");
-      if (dec) { counterDec(dec.dataset.counterDec); return; }
-      const jump = ev.target.closest("[data-counter-jump]");
+      const inc = ev.target.closest("[data-race-inc]");
+      if (inc) { raceInc(inc.dataset.raceInc); return; }
+      const dec = ev.target.closest("[data-race-dec]");
+      if (dec) { raceDec(dec.dataset.raceDec); return; }
+      const jump = ev.target.closest("[data-race-jump]");
       if (jump) {
-        const side = jump.dataset.counterJump;
+        const side = jump.dataset.raceJump;
         const delta = parseInt(jump.dataset.delta, 10) || 0;
-        counterSet(side, counterGet(side) + delta);
+        raceSet(side, raceGet(side) + delta);
         return;
       }
     });
@@ -1188,7 +1178,6 @@
     document.addEventListener("keydown", (ev) => {
       if (ev.key === "Escape") {
         if (!$("#matchModal").hidden) closeMatch();
-        else if (!$("#counterModal").hidden) closeCounterModal();
         else if (!$("#exportModal").hidden) closeExportMenu();
         else if (!$("#lateEntryModal").hidden) closeLateEntry();
       }
@@ -1264,11 +1253,6 @@
       case "export-matches-csv": { const t = activeT(); if (t) { exportMatchesCsv(t); closeExportMenu(); } break; }
       case "push-challonge": alert("Push-to-Challonge requires the Cue Club backend. See RESEARCH.md and the /server directory for the Go service that provides this."); break;
 
-      // ---- counter modal (games-won sheet)
-      case "close-counter": closeCounterModal(); break;
-      case "save-counter": saveCounterMatch(); break;
-      case "clear-counter": clearCounterMatch(); break;
-
       // ---- bracket
       case "add-late-entry": openLateEntry(); break;
       case "close-late-entry": closeLateEntry(); break;
@@ -1293,7 +1277,7 @@
   // Init
   // ============================================================
   document.addEventListener("DOMContentLoaded", () => {
-    renderRacks();
+    // The sheet's body is built per match, from the tournament's game (renderSheetBody).
     wireUp();
     loadPersisted();
     if (app.activeId && activeT()) {
