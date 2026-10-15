@@ -199,4 +199,8 @@ page that prints, and the controls.
   balls with 1 foul → RACK TOTAL 2, FINAL 2; the queue page shows the four Round 1 sheets, and
   printing them records v1 on all four, moves them to Recently printed and — after a rename —
   offers `Reprint (v2)` and prints a sheet whose captured markup carries
-  `REPRINT - v3 - 2026-10-15T18:57:48.915Z`.
+  `REPRINT - v3 - 2026-10-15T18:57:48.915Z`. A downstream sheet whose pairing has gone away — a
+  printed sheet on a match whose slot an upstream correction cleared and nothing has refilled yet —
+  is listed as `pairing not set · waiting on both players · nothing to print yet`, with **no** print
+  control, is left out of the Ready-to-print count, and is not printed even when named with `&m=`: a
+  sheet with no names on it never reaches paper.
