@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Columbia Cue Club &mdash; Print queue</title>
+<meta name="description" content="The printed-sheet queue for one tournament: what is ready to print, what a later result has made stale, and the paper sheets themselves. ColumbiaCueClub.com." />
+<link rel="stylesheet" href="styles.css" />
+<link rel="stylesheet" href="print.css" />
+</head>
+<body class="printpage">
+  <!-- The queue page's own chrome. Every element with the `no-print` class is hidden by
+       print.css at print time: paper gets the sheets, not the queue that made them.
+       The toolbar is print.js's: the tournament name, the print actions and the way back. -->
+  <div class="toolbar no-print" id="toolbar">
+    <span class="qname" id="tournamentName">Print queue</span>
+    <button type="button" id="printSelected" disabled>Print</button>
+    <button type="button" id="printRoundOne" hidden>Print all Round 1 sheets</button>
+    <a class="qback" href="index.html">&larr; Back to bracket</a>
+  </div>
+
+  <!-- A plain message when the stored document, the tournament or the URL cannot be read.
+       Populated by print.js; it is chrome, so it never prints. -->
+  <section class="notice no-print" id="notice" hidden></section>
+
+  <!-- The live queue in decision 018's three sections (ready / recently printed /
+       voided chip). Populated by print.js from SheetQueue.queue(). -->
+  <section class="queue no-print" id="queue"></section>
+
+  <!-- One paper-style sheet per selected entry. Populated by print.js; this is the only
+       part of the page that reaches paper, one sheet per page. -->
+  <section class="sheets" id="sheets"></section>
+
+<!-- bracket.js owns the per-match sheet lifecycle (window.BracketEngine), which
+     sheet-queue.js builds the queue on: it must come first. -->
+<script src="bracket.js"></script>
+<script src="sheets.js"></script>
+<script src="sheet-queue.js"></script>
+<script src="print.js"></script>
+</body>
+</html>

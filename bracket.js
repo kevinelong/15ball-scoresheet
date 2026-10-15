@@ -116,10 +116,12 @@
           // (so v1 is the first print, v2 the first reprint, etc.).
           // sheetPlayersSnapshot captures the names printed on the last
           // issued sheet so we can tell when a downstream sheet has gone
-          // stale after a winner edit.
+          // stale after a winner edit. sheetRaceTo is the target that sheet
+          // printed with, for the same reason (the paper names the race).
           sheetIssuedAt: null,
           sheetIssueVersion: 0,
-          sheetPlayersSnapshot: null
+          sheetPlayersSnapshot: null,
+          sheetRaceTo: null
         };
         if (round === 1) {
           match.slots[0] = slots[(m - 1) * 2];
@@ -242,7 +244,8 @@
     matches["GF1"] = {
       id: "GF1", round: wRounds + 1, bracket: "GF", slots: [null, null],
       winner: null, score: null,
-      feedsWinnerTo: null, feedsLoserTo: null, resolvedAutoBye: false
+      feedsWinnerTo: null, feedsLoserTo: null, resolvedAutoBye: false,
+      sheetIssuedAt: null, sheetIssueVersion: 0, sheetPlayersSnapshot: null, sheetRaceTo: null
     };
     if (wFinalId) matches[wFinalId].feedsWinnerTo = { matchId: "GF1", slot: 0 };
     if (lFinalId) matches[lFinalId].feedsWinnerTo = { matchId: "GF1", slot: 1 };
@@ -251,7 +254,8 @@
         id: "GF2", round: wRounds + 2, bracket: "GF", slots: [null, null],
         winner: null, score: null,
         feedsWinnerTo: null, feedsLoserTo: null, resolvedAutoBye: false,
-        conditional: true   // Only played if L-champ wins GF1.
+        conditional: true,  // Only played if L-champ wins GF1.
+        sheetIssuedAt: null, sheetIssueVersion: 0, sheetPlayersSnapshot: null, sheetRaceTo: null
       };
     }
 
@@ -307,17 +311,29 @@
   }
 
   // A previously-issued sheet is stale when the names now sitting in the
-  // match's slots differ from the snapshot captured at issue time.
-  function sheetIsStale(match) {
+  // match's slots differ from the snapshot captured at issue time, or — when
+  // the caller knows it — when the tournament's race target is no longer the
+  // one the sheet was printed with. The target is on the paper too (decision
+  // 023 prints it), so a target that changed makes the old paper wrong in
+  // exactly the way an edited winner does.
+  function sheetIsStale(match, raceTo) {
     if (!match || !match.sheetIssuedAt) return false;
     if (!isMatchReady(match)) return false;
     const snap = match.sheetPlayersSnapshot || [null, null];
-    return snap[0] !== match.slots[0].name || snap[1] !== match.slots[1].name;
+    if (snap[0] !== match.slots[0].name || snap[1] !== match.slots[1].name) return true;
+    if (arguments.length > 1) {
+      const was = typeof match.sheetRaceTo === "number" ? match.sheetRaceTo : null;
+      const now = typeof raceTo === "number" ? raceTo : null;
+      if (was !== now) return true;
+    }
+    return false;
   }
 
   // Mark a match as having had its sheet printed (or re-printed). Callers
   // pass an optional `now` for deterministic tests; production uses Date.now.
-  function markSheetIssued(match, now) {
+  // `raceTo` is the target the sheet printed with, kept so a later change to
+  // it can be told apart from a reprint of the same sheet.
+  function markSheetIssued(match, now, raceTo) {
     if (!match) return match;
     match.sheetIssueVersion = (match.sheetIssueVersion || 0) + 1;
     match.sheetIssuedAt = typeof now === "number" ? now : Date.now();
@@ -325,6 +341,7 @@
       match.slots[0] ? match.slots[0].name : null,
       match.slots[1] ? match.slots[1].name : null
     ];
+    match.sheetRaceTo = typeof raceTo === "number" ? raceTo : null;
     return match;
   }
 

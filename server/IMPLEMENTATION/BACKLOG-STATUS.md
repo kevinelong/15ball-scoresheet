@@ -183,3 +183,36 @@ Legend: [ ] todo · [~] in progress · [x] done+deployed.
       press — with all six guards falsified (remove threshold / dominance / pointer gate /
       one-step flag / click cancel / half test → the matching assertion fails). Frontend only.
 
+
+- [x] Slice T — the printed-sheet queue (decision 018, unbuilt since 2026-08-16). The desk gets
+      pre-filled paper: bracket.js has carried the per-match lifecycle since the deck landed
+      (`sheetIssuedAt` / `sheetIssueVersion` / `sheetPlayersSnapshot`, `isMatchReady`,
+      `sheetIsStale`, `markSheetIssued`, and `markSheetStaleIfIssued` wired into
+      `clearDownstream` — the auto-void-on-edit), and this round built the queue on top:
+      `sheet-queue.js` (new, pure) is the state (pending | ready | printed | stale, the issue
+      record, Round 1's batch, the voided arithmetic, the print URL, and the two merges that
+      keep the console and the print page from overwriting each other's records), `print.html` /
+      `print.js` / `print.css` (new) are the queue page — Ready to print, Recently printed
+      (collapsed, newest first, 20), the voided chip, and one paper sheet per page at
+      `@page { size: letter; margin: 0.5in }` — and `app.js` carries a control per match card
+      (`Sheet`, or amber `Reprint (vN)`) plus `Print all Round 1 sheets (N)`. Four things the
+      design predated: the sheet body comes from `Sheets.spec` per discipline and its target from
+      the tournament's `raceTo` (023); a changed target now voids the paper (`sheetRaceTo` in the
+      snapshot); the Round 1 batch prints only what still needs paper, because every issue is a
+      version; and the voided audit is the chip the design allowed. **Two gaps, marked in 018**:
+      the table number prints blank — the data exists as the server's `matches.table_ref` (Slice
+      J), but `print.html` builds from this console's localStorage, which has no assignment; and
+      the queue's printed/voided markers are per browser (023 stores the sheets themselves on the
+      server, so a played match's sheet is retrievable). Tests: `sheet-queue.test.js` (new, 74
+      assertions, including the three bracket-propagation cases 018 demands — Round 1 ready at
+      build, saving R1M1+R1M2 making SF1 ready, editing a saved winner making its downstream
+      sheet a reprint with the version bumped by one — plus the console's own rebuild path) and
+      `app-render.test.js` (+5: the ready control, the amber reprint at the version it will
+      print as, a current sheet offering nothing, a save keeping a record the print page wrote,
+      a rebuild keeping what it did not rebuild). Falsified guard by guard; observed live in
+      headless Chromium against the repo root (9-ball tally: four ±1 controls, zero jump
+      controls, seven taps → 7 + winner, an eighth tap still 7; 14.1: 8 racks × 14 circles,
+      RUNNING TOTAL, FINAL MATCH TOTAL, 3 balls + 1 foul → RACK TOTAL 2 / FINAL 2; the queue
+      recording v1 on the four Round 1 sheets and, after a rename, printing a sheet stamped
+      `REPRINT - v3 - 2026-10-15T18:57:48.915Z`). Docs: `DECISIONS/018` (implemented),
+      `DECISIONS/021` (the published-PDF pairing rule + the printed sheet's table).

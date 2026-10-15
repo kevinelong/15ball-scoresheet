@@ -85,7 +85,7 @@ function slotRows(card) {
 
 // loadApp builds a tournament with the real bracket engine, seeds it into localStorage,
 // loads app.js and fires DOMContentLoaded — the same path the browser takes.
-function loadApp(label, buildTournament) {
+function loadApp(label, buildTournament, opts) {
   const els = new Map();
   const created = [];
   const docListeners = {};
@@ -122,17 +122,24 @@ function loadApp(label, buildTournament) {
   };
   sandbox.window = sandbox;
   sandbox.globalThis = sandbox;
+  // A test that needs the debounced persist() to have run can pass its own timers here
+  // (the queue's cross-page merge happens on save, and a real 200ms debounce is not
+  // something a synchronous test can wait for).
+  if (opts) Object.assign(sandbox, opts);
   // The swipe gesture needs a panel box: 400px wide at the origin, so a gesture starting left
   // of x=200 is Player A's half and one starting right of it is Player B's.
   const swipePanel = getEl("#race");
   swipePanel.getBoundingClientRect = () => ({ left: 0, top: 0, width: PANEL_WIDTH, height: 600 });
   swipePanel.setPointerCapture = () => {};
   const ctx = vm.createContext(sandbox);
-  // The script order index.html uses: bracket.js, tables.js, sheets.js, then app.js.
-  // sheets.js matters here because opening a match now builds its sheet body from the
-  // discipline's definition (`window.Sheets`).
+  // The script order index.html uses: bracket.js, tables.js, sheets.js, sheet-queue.js, then
+  // app.js. sheets.js matters here because opening a match now builds its sheet body from the
+  // discipline's definition (`window.Sheets`); sheet-queue.js because the bracket page carries
+  // decision 018's printed-sheet queue (`window.SheetQueue`, over bracket.js's own
+  // sheetIssuedAt / sheetIssueVersion / sheetPlayersSnapshot lifecycle).
   vm.runInContext(fs.readFileSync(path.join(__dirname, "bracket.js"), "utf8"), ctx, { filename: "bracket.js" });
   vm.runInContext(fs.readFileSync(path.join(__dirname, "sheets.js"), "utf8"), ctx, { filename: "sheets.js" });
+  vm.runInContext(fs.readFileSync(path.join(__dirname, "sheet-queue.js"), "utf8"), ctx, { filename: "sheet-queue.js" });
   const tournament = buildTournament(sandbox.BracketEngine);
   ls.setItem("fifteenBall.app.v3", JSON.stringify({ v: 3, activeId: tournament.id, tournaments: [tournament] }));
   vm.runInContext(fs.readFileSync(path.join(__dirname, "app.js"), "utf8"), ctx, { filename: "app.js" });
@@ -547,6 +554,107 @@ test("the score sheet says the console saves on this device, and the save toast 
   assert.ok(toast.indexOf("this device") !== -1, `the save toast must say where the sheet goes: ${toast}`);
   assert.ok(toast.indexOf("no server link") !== -1, `the save toast must say there is no server link: ${toast}`);
   assert.ok(toast.indexOf("Result recorded") === -1, `the old over-claiming toast is gone: ${toast}`);
+});
+
+// ---------- decision 018: the printed-sheet queue on the bracket page ----------
+// One control per match card plus Round 1's batch. The state behind both lives on the match
+// itself and is covered by sheet-queue.test.js; what is asserted here is what the console
+// renders and the two writes it has to get right — the printed records another page wrote,
+// and a rebuild that must not lose the paper already handed out.
+
+// sheetControl returns the printed-sheet control a card rendered, or null when it has none.
+function sheetControl(created, matchId) {
+  const card = lastCard(created, matchId);
+  return (card._kids || []).find((k) => k.className === "sheetbtn" || k.className === "sheetbtn stale") || null;
+}
+
+// printedMatch stamps a match as printed, the way the print page would have.
+function printedMatch(match, snapshot, raceTo) {
+  match.sheetIssuedAt = Date.parse(PRINTED_AT);
+  match.sheetIssueVersion = 1;
+  match.sheetPlayersSnapshot = snapshot;
+  match.sheetRaceTo = raceTo;
+  return match;
+}
+// pairing is the two names a match actually holds (seeding decides who meets whom).
+function pairing(match) { return match.slots.map((s) => s.name); }
+const PRINTED_AT = "2026-10-15T14:00:00.000Z";
+// nowTimers runs the console's debounced save inline, so a test can read storage back.
+const NOW_TIMERS = { setTimeout: (fn) => { fn(); return 0; } };
+
+test("a ready match offers its sheet, and the batch counts the first round", () => {
+  const app = loadApp("queue-ready", (B) =>
+    tourney("t_qready", "single_elim", B.build(players, { format: "single_elim" })));
+
+  const btn = sheetControl(app.created, "W1M1");
+  assert.ok(btn, "a ready match must offer its sheet");
+  assert.ok(btn.textContent.indexOf("Sheet") !== -1 && btn.textContent.indexOf("Reprint") === -1,
+    `the first sheet is not a reprint: ${btn.textContent}`);
+  assert.strictEqual(btn.dataset.match, "W1M1", "the control names its match");
+
+  const batch = app.getEl("#printRound1Btn");
+  assert.strictEqual(batch.hidden, false, "Round 1's batch is offered while it has sheets to print");
+  assert.ok(batch.textContent.indexOf("Print all Round 1 sheets") !== -1 && batch.textContent.indexOf("(2)") !== -1,
+    `the batch says how many are left: ${batch.textContent}`);
+  assert.strictEqual(sheetControl(app.created, "W2M1"), null, "a match waiting on two winners offers nothing");
+});
+
+test("a sheet the bracket moved under offers the reprint it needs, at the version it will print as", () => {
+  const app = loadApp("queue-stale", (B) => {
+    const bracket = B.build(players, { format: "single_elim" });
+    printedMatch(bracket.matches.W1M1, ["Someone else", bracket.matches.W1M1.slots[1].name], 25);
+    return tourney("t_qstale", "single_elim", bracket);
+  });
+
+  const btn = sheetControl(app.created, "W1M1");
+  assert.ok(btn && btn.className === "sheetbtn stale", `a stale sheet is an amber reprint: ${btn && btn.className}`);
+  assert.ok(btn.textContent.indexOf("Reprint (v2)") !== -1,
+    `the reprint names the version it will print as: ${btn.textContent}`);
+  assert.ok(app.getEl("#printRound1Btn").textContent.indexOf("(2)") !== -1,
+    "a stale sheet is still one to print");
+});
+
+test("a sheet that is still current offers no control, and stops counting", () => {
+  const app = loadApp("queue-current", (B) => {
+    const bracket = B.build(players, { format: "single_elim" });
+    printedMatch(bracket.matches.W1M1, pairing(bracket.matches.W1M1), 25);
+    return tourney("t_qcurrent", "single_elim", bracket);
+  });
+
+  assert.strictEqual(sheetControl(app.created, "W1M1"), null, "nothing to print for a current sheet");
+  assert.ok(app.getEl("#printRound1Btn").textContent.indexOf("(1)") !== -1,
+    `one of the two first-round sheets is left: ${app.getEl("#printRound1Btn").textContent}`);
+});
+
+test("a save keeps the sheets the print page printed while this page was open", () => {
+  const app = loadApp("queue-adopt", (B) =>
+    tourney("t_qadopt", "single_elim", B.build(players, { format: "single_elim" })), NOW_TIMERS);
+
+  // Another tab's print page printed W1M1 after this page loaded: the stored copy is the one
+  // that knows, and a save here must not write over it.
+  const doc = JSON.parse(app.ls.getItem("fifteenBall.app.v3"));
+  printedMatch(doc.tournaments[0].bracket.matches.W1M1, pairing(doc.tournaments[0].bracket.matches.W1M1), 25);
+  app.ls.setItem("fifteenBall.app.v3", JSON.stringify(doc));
+
+  app.action("save-tournament");
+  const after = JSON.parse(app.ls.getItem("fifteenBall.app.v3"));
+  assert.strictEqual(after.tournaments[0].bracket.matches.W1M1.sheetIssueVersion, 1,
+    "the save must not un-print the sheet the queue page printed");
+});
+
+test("a rebuilt bracket keeps the printed sheets of the matches that survive", () => {
+  const app = loadApp("queue-carry", (B) => {
+    const bracket = B.build(players, { format: "single_elim" });
+    B.recordWinner(bracket, "W1M1", 0, { score: "25-10" });
+    printedMatch(bracket.matches.W1M1, pairing(bracket.matches.W1M1), 25);
+    return tourney("t_qcarry", "single_elim", bracket, { W1M1: { winner: "A", finalA: 25, finalB: 10 } });
+  }, NOW_TIMERS);
+
+  app.clickCard("W1M1");
+  app.action("clear-match");           // clears the result and rebuilds the bracket
+  const after = JSON.parse(app.ls.getItem("fifteenBall.app.v3"));
+  assert.strictEqual(after.tournaments[0].bracket.matches.W1M1.sheetIssueVersion, 1,
+    "a rebuild must keep the record of the sheet already handed out");
 });
 
 console.log(`\n${passed} passed, ${failed} failed.`);

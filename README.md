@@ -59,6 +59,25 @@ It ships in two layers that share one bracket model:
   repeats it, so a local save can never read as "recorded" somewhere. Submitting a sheet to a
   server tournament is the live console's job (see *Server*, below)
 
+### Printed-sheet queue (`print.html`, decision 018)
+- The desk gets pre-filled paper: a ready match offers a **Sheet** control on its bracket card,
+  a sheet the bracket has moved under offers an amber **Reprint (v2)**, and the bracket page
+  carries **Print all Round 1 sheets (N)** while the first round still needs paper
+- `print.html?t=<tournamentId>` is the live queue — **Ready to print**, **Recently printed**
+  (collapsed, newest first, last 20, with who and when), and the **voided** count (each reprint
+  supersedes the paper copy it replaces) — plus the sheets themselves, one per printed page, at
+  `@page { size: letter; margin: 0.5in }`
+- The sheet is drawn from the same `sheets.js` spec as the in-app one: a rack grid with the
+  discipline's own columns and total wording, or a games tally, with the tournament's target
+  printed on it. A reprint carries **`REPRINT - v{N} - {timestamp}`** at the very top
+- The queue lives with the bracket in browser storage (`sheet-queue.js` is the pure state over
+  bracket.js's own `sheetIssuedAt` / `sheetIssueVersion` / `sheetPlayersSnapshot` / `sheetRaceTo`
+  lifecycle, so a match's record is part of the bracket that persists), and the two pages merge
+  each other's records rather than overwriting them
+- **The table number prints as a blank line** (`Table ________ · R1 · Match 1`): this console
+  has no match-to-table assignment to fill it from. The server does (`matches.tableRef`), which
+  is where a pre-filled table number would come from — see `server/DECISIONS/018`
+
 ### Persistence & sharing
 - Auto-saves the entire tournament (bracket + every match sheet) to browser storage
 - **Export JSON / Import JSON** for archiving or moving between devices
@@ -77,6 +96,23 @@ open index.html    # or just double-click
 ```
 
 Then browse to `http://localhost:8000/`.
+
+The **print queue** is at `/print.html?t=<tournamentId>`; the bracket page links to it with the
+id filled in (a tournament id is in the exported JSON, or in the URL of a share link).
+
+### Branches
+
+`main` is the only branch. Six branches that had been left behind in this clone
+(`docs-state-handoff`, `per-discipline-sheets-v2`, `match-review-flag`, `sheet-stack`,
+`single-elim-merge`, `test-coverage-hardening`) were checked with `git rev-list --count main..<b>`
+— zero commits not in `main` in every case — and deleted on 2026-10-15; the same refs still exist
+on `origin` and can be deleted there with `git push origin --delete <name>` when Kevin wants them
+gone. A seventh, `per-discipline-sheets`, was three commits ahead of an older `main` and was
+deleted at the same time after checking that its content is in `main` (`git cherry` finds two of
+the three commits patch-identical; the third's port is `e0463a8`, reworked by `101d7ee`, and every
+file of that branch exists in `main`, several of them newer). Its tip `d94b44c` is preserved in
+`C:/Users/kevin/score/verify/per-discipline-sheets.bundle` in the score-app repository
+(`git bundle verify` lists it), so nothing was lost.
 
 ## Deploying
 
@@ -97,6 +133,7 @@ code they cover:
 node bracket.test.js        # bracket engine: single-elim spec, scale pinning, refusals
 node sheets.test.js         # per-discipline sheet specs: id resolution, rack geometry, goals
 node sheet-payload.test.js  # the saved sheet record: shape, instruments, the phone's payload
+node sheet-queue.test.js    # the printed-sheet queue: ready/stale, versions, Round 1, voided
 node overlay-bracket.test.js # OBS bracket overlay: win/loss only, never a score
 node roster.test.js         # roster parsing
 node tables.test.js         # table naming/parsing (25 tests)
@@ -197,6 +234,9 @@ roster.test.js     # roster tests
 migration.test.js  # storage-key + legacy-state migration tests
 sheet-payload.js   # the score sheet as a record (the result payload + its reader)
 sheet-payload.test.js  # the record's shape, its two instruments, the phone's payload
+sheet-queue.js     # the printed-sheet queue's state, over bracket.js's sheet lifecycle
+sheet-queue.test.js    # the queue: states, versions, Round 1's batch, voided, the two merges
+print.html / print.js / print.css  # the printed-sheet queue page + the paper sheets (018)
 overlay-bracket.test.js # OBS bracket overlay: win/loss only
 app-render.test.js     # console render tests (formats, grand final, sheet replay)
 live-console.test.js   # cloud console render + SSE tests

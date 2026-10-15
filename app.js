@@ -160,9 +160,30 @@
     persistTimer = setTimeout(() => {
       const t = activeT();
       if (t) t.updatedAt = Date.now();
+      adoptIssueRecords();
       try { store.set(STORAGE_KEY, JSON.stringify(app)); }
       catch (e) { /* ignore */ }
     }, delay == null ? 200 : delay);
+  }
+
+  /**
+   * The printed-sheet records another page wrote while this one was open — print.html marks
+   * sheets as the desk prints them, and both pages write the one storage key. The records
+   * live on the bracket's own match objects, so this copy's are the older ones: take the
+   * newer before saving, or the next save here would un-print every sheet in the queue.
+   */
+  function adoptIssueRecords() {
+    if (!window.SheetQueue) return 0;
+    let stored = null;
+    try { stored = JSON.parse(store.get(STORAGE_KEY) || "null"); } catch (e) { return 0; }
+    if (!stored || !Array.isArray(stored.tournaments)) return 0;
+    let taken = 0;
+    stored.tournaments.forEach((s) => {
+      const mine = app.tournaments.find((x) => x.id === s.id);
+      if (!mine || !mine.bracket || !s.bracket || !s.bracket.matches) return;
+      taken += window.SheetQueue.adopt(mine.bracket.matches, s.bracket.matches);
+    });
+    return taken;
   }
 
   function loadPersisted() {
@@ -723,6 +744,17 @@
     const g = gameOf(t);
     $("#statusText").textContent = `${g.name} \u00b7 ${t.participants.length} players \u00b7 ${played} of ${total} matches decided \u00b7 ${formatLabel(t.format)} \u00b7 ${g.raceLabel} ${t.raceTo}`;
 
+    // The batch the desk prints first (decision 018): Round 1 while it still has a sheet to
+    // print. The count is what is left, so the button says how much of it that is.
+    const r1Open = window.SheetQueue
+      ? window.SheetQueue.roundOne(t).filter((e) => e.state !== "printed").length
+      : 0;
+    const r1Btn = $("#printRound1Btn");
+    if (r1Btn) {
+      r1Btn.hidden = r1Open === 0;
+      r1Btn.textContent = `\uD83D\uDDA8 Print all Round 1 sheets (${r1Open})`;
+    }
+
     const banner = $("#champBanner");
     if (t.bracket.champion) {
       banner.hidden = false;
@@ -818,7 +850,39 @@
     if (playable) {
       card.addEventListener("click", () => openMatch(match.id));
     }
+    appendSheetControl(card, match);
     return card;
+  }
+
+  /**
+   * The printed-sheet control on a match card (decision 018): "Sheet" when the match has
+   * both players and no paper yet, an amber "Reprint (vN)" naming the version the reprint
+   * will carry when the bracket has changed under the sheet that was printed. A sheet that
+   * is still current gets no control — it is in the queue page's "Recently printed" — and
+   * neither has a match whose players are not both known.
+   */
+  function appendSheetControl(card, match) {
+    const t = activeT();
+    if (!window.SheetQueue || !t) return;
+    const state = window.SheetQueue.state(match, t);
+    if (state !== "ready" && state !== "stale") return;
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = state === "stale" ? "sheetbtn stale" : "sheetbtn";
+    btn.dataset.match = match.id;
+    const version = state === "stale" ? window.SheetQueue.issue(match).version + 1 : 1;
+    btn.textContent = state === "stale"
+      ? `\uD83D\uDDA8 Reprint (v${version})`
+      : "\uD83D\uDDA8 Sheet";
+    btn.title = state === "stale"
+      ? "The players or the target changed after this sheet was printed, so print it again"
+      : "Print this match's pre-filled paper sheet";
+    btn.addEventListener("click", (ev) => {
+      // The card's own click opens the score sheet, and this button sits inside the card.
+      ev.stopPropagation();
+      openPrintPage(t, { matchId: match.id });
+    });
+    card.appendChild(btn);
   }
 
   function escapeHtml(s) {
@@ -1057,6 +1121,24 @@
     toast("Downloaded matches CSV");
   }
 
+  /** The printed-sheet queue page's URL: this tournament, one match, or the Round 1 batch. */
+  function printPageUrl(t, opts) {
+    if (window.SheetQueue) return window.SheetQueue.uri(t, opts || {});
+    let url = `print.html?t=${encodeURIComponent(t.id)}`;
+    if (opts && opts.matchId) url += `&m=${encodeURIComponent(opts.matchId)}`;
+    if (opts && opts.roundOne) url += "&round=1";
+    return url;
+  }
+
+  /** Open the queue page in its own tab (decision 018), so the bracket stays where it was. */
+  function openPrintPage(t, opts) {
+    if (!t) return;
+    const url = printPageUrl(t, opts);
+    if (typeof window.open === "function") { window.open(url, "_blank", "noopener"); return; }
+    // A popup blocker's fallback, and the only path a headless page has.
+    if (window.location) window.location.href = url;
+  }
+
   function closeMatch() {
     $("#matchModal").hidden = true;
     document.body.style.overflow = "";
@@ -1134,7 +1216,9 @@
     if (GAMES[chosenGame]) t.game = chosenGame;
     t.format = $("#tFormat").value || "single";
     t.raceTo = parseInt($("#tRaceTo").value, 10) || gameOf(t).defaultRaceTo;
+    const prevBracket = t.bracket;
     t.bracket = window.BracketEngine.build(list, { format: t.format });
+    carrySheetIssues(prevBracket, t.bracket);
     t.sheets = {};
     applyTournamentToSetup();
     persist();
@@ -1143,11 +1227,22 @@
     toast("Bracket built");
   }
 
+  /**
+   * A rebuilt bracket keeps a match's id, so it keeps the printed sheet's record too: the
+   * paper in the desk's hand is still that match's sheet, and a pairing that changed under it
+   * becomes the reprint the queue then asks for (decision 018).
+   */
+  function carrySheetIssues(prev, next) {
+    if (window.SheetQueue) window.SheetQueue.carry(prev, next);
+  }
+
   function rebuildFromParticipants() {
     const t = activeT();
     if (!t || !t.participants.length) return;
     const prevSheets = Object.assign({}, t.sheets);
+    const prevBracket = t.bracket;
     t.bracket = window.BracketEngine.build(t.participants, { format: t.format });
+    carrySheetIssues(prevBracket, t.bracket);
     t.sheets = {};
     Object.keys(prevSheets).forEach((mid) => {
       if (t.bracket.matches[mid]) t.sheets[mid] = prevSheets[mid];
@@ -1334,6 +1429,7 @@
       case "close-late-entry": closeLateEntry(); break;
       case "confirm-late-entry": confirmLateEntry(); break;
       case "print-bracket": window.print(); break;
+      case "print-round1": openPrintPage(activeT(), { roundOne: true }); break;
       case "reset-bracket": {
         const t = activeT(); if (!t) return;
         if (!confirm("Reset the bracket? Rebuilds from the current participant list and clears all scores.")) return;

@@ -614,6 +614,18 @@ body { padding: 0; }
 .match-card.decided { background: #fbfcff; }
 .match-card.pending { opacity: .55; cursor: default; pointer-events: none; }
 .match-card.pending:hover { transform: none; box-shadow: none; border-color: var(--line-strong); }
+
+/* The printed-sheet control on a match card (decision 018): the plain one is a sheet that
+   has not been printed yet, the amber one a reprint the bracket has made necessary. */
+.sheetbtn {
+  margin-top: 6px; width: 100%; padding: 4px 6px; font-size: 11px; font-weight: 700;
+  letter-spacing: .3px; background: #fff; color: var(--navy);
+  border: 1.5px solid var(--line-strong); border-radius: 6px; cursor: pointer;
+}
+.sheetbtn:hover { background: var(--navy); color: #fff; border-color: var(--navy); }
+.sheetbtn.stale { border-color: #b8860b; background: #fff8e6; color: #8a6100; }
+.sheetbtn.stale:hover { background: #b8860b; color: #fff; border-color: #b8860b; }
+@media print { .sheetbtn { display: none !important; } }
 .match-id {
   position: absolute; top: 3px; right: 6px; font-size: 9px; color: var(--muted);
   letter-spacing: 1px; font-weight: 700;

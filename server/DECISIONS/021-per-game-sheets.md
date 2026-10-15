@@ -2,7 +2,8 @@
 
 **Status:** Implemented (2026-10-12); ported onto `main` and its controls reworked 2026-10-14 —
 see "How a discipline is measured is data" and "No quick-add control" under Rules. Frontend only;
-no server change.
+no server change. Its spec table is now what the *printed* sheet is built from too (2026-10-15,
+decision 018 — see "The printed sheet" at the end).
 
 **Owner surface:** frontend (`index.html`, `app.js`, `styles.css`, new `sheets.js` + `sheets.test.js`).
 
@@ -84,7 +85,38 @@ The per-discipline facts live in one small module, `sheets.js`, as data:
   the ones it always had — this is a regression surface, covered below).
 - Adding disciplines the server does not accept. The server's list is fixed at create:
   `15ball_rotation`, `8ball`, `9ball`, `10ball`, `straight_14_1`, `bank_pool`, `one_pocket`.
-- Per-discipline *printed* sheets (message 018's print queue) — separate feature, still unbuilt.
+- Per-discipline *printed* sheets (message 018's print queue) — built 2026-10-15; see below and
+  `018-printable-sheets.md`.
+
+## Published PDFs — the sheet and its rules go together
+
+Each paper sheet carries a QR to its own discipline's rules, so a PDF pair is only correct when
+both halves are live: **`docs/<discipline>-paper-sheet.pdf` and `docs/<discipline>-rules.pdf` are
+published together or not at all.** The 14.1 sheet's QR is hard-coded to
+`https://kevinelong.github.io/15ball-scoresheet/docs/141-rules.pdf` (`RULES_PDF_URL` in
+`docs/_scoresheet_141_draw.py`, read by `docs/build_141_paper_sheet.py`), which 404s — on a sheet
+already in a player's hand, with no way to tell — until that file is on GitHub Pages. The 15-Ball
+pair is the same rule with `docs/15ball-rules.pdf`.
+
+GitHub Pages serves this repository's `main` branch at the site root
+(`gh api repos/kevinelong/15ball-scoresheet/pages` → `source: { branch: "main", path: "/" }`), so
+"published" means *committed to `main` and pushed*, nothing else — there is no separate publish
+step and no `gh-pages` branch. As of 2026-10-15 both 14.1 files are on `main` and both resolve on
+the live site (`docs/141-rules.pdf` and `docs/141-paper-sheet.pdf` → HTTP 200), so the 14.1 QR is
+good; a change to either PDF must land with the other in the same push.
+
+Background worth keeping: the QR is drawn by `draw_qr`, which raises rather than printing a
+placeholder when `qrcode` is not installed — the 15-Ball pair in this repository still carries
+placeholder squares from a build machine without it, so a 15-Ball sheet rebuilt today would print
+a QR-shaped box that scans as nothing.
+
+## The printed sheet (decision 018, built 2026-10-15)
+
+The in-app sheet above is the *screen* sheet. The **paper** the desk hands out is `print.html`
+(decision 018), and it takes its body from this same `sheets.js`: a rack grid for the ball-measured
+disciplines with their own columns and total wording, a games tally for the race ones, and the
+target printed from the tournament's race. Adding a discipline to `DEFS` here therefore changes
+the printed sheet too — the two cannot drift, which is the reason the spec table is data.
 
 ## Test coverage required
 

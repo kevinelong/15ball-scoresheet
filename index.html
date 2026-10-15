@@ -139,6 +139,10 @@
         <div>
           <button type="button" data-action="add-late-entry" class="primary" title="Add a player to the running bracket">+ Add Late Entry</button>
           <button type="button" data-action="print-bracket">Print Bracket</button>
+          <!-- Decision 018's batch: pre-filled paper sheets for the whole first round,
+               shown while Round 1 still has a sheet to print (app.js -> renderBracket). -->
+          <button type="button" id="printRound1Btn" data-action="print-round1" hidden
+                  title="Pre-filled paper sheets for the whole first round">&#128424; Print all Round 1 sheets</button>
           <button type="button" data-action="reset-bracket" class="danger">Reset Bracket</button>
         </div>
       </div>
@@ -357,6 +361,7 @@
   <script src="bracket.js"></script>
   <script src="tables.js"></script>
   <script src="sheets.js"></script>
+  <script src="sheet-queue.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

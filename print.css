@@ -1,0 +1,227 @@
+/* The printed-sheet queue page (decision 018).
+ *
+ * One document does two jobs: the live queue (screen only - every piece of it carries
+ * the `no-print` class) and the paper sheets themselves, which are the only thing that
+ * reaches paper. Lengths here are in points, not pixels, so the on-screen preview and
+ * the printed page agree about how much sheet fits on a page.
+ *
+ * The sheet's visual language (title bar, HOW TO SCORE strip, rules summary, rack grid,
+ * signatures, brand) is the paper sheet's from docs/_scoresheet_draw.py, redrawn in
+ * HTML/CSS instead of reportlab.
+ */
+
+/* Letter, half an inch all round: the geometry the paper sheets in docs/ are drawn at. */
+@page { size: letter; margin: 0.5in; }
+
+.printpage { padding-bottom: 96px; }   /* clears the fixed toolbar at the bottom */
+
+/* ============================================================
+   The queue (screen only)
+   ============================================================ */
+
+/* The toolbar itself is styles.css's shared chrome; only the print page's own bits of it
+   are styled here. */
+.qname { align-self: center; font-weight: 700; letter-spacing: 1px; color: var(--navy); }
+.qback {
+  align-self: center; color: var(--navy); font-weight: 700;
+  font-size: 12px; letter-spacing: 1.2px; text-decoration: none;
+}
+.qback:hover { color: var(--red); }
+
+.queue { max-width: 900px; margin: 0 auto 18px; padding: 0 12px; }
+
+.qsec {
+  background: #fff; border: 1px solid var(--line-strong); border-radius: 12px;
+  padding: 12px 14px; margin-bottom: 12px; box-shadow: var(--shadow);
+}
+.qsec > h2, .qsec > summary {
+  margin: 0 0 8px; font-size: 13px; letter-spacing: 1.4px; text-transform: uppercase;
+  color: var(--navy); font-weight: 800;
+}
+.qsec > summary { cursor: pointer; }
+.qsec > summary:focus-visible { outline: 2px solid var(--red); outline-offset: 2px; }
+
+/* The voided count is an audit number, not an action: amber where the counts are red. */
+.pill.voided { background: #fef3c7; color: #92400e; }
+.pill-wait { background: var(--line); color: var(--navy); }
+
+.qlist { list-style: none; margin: 0; padding: 0; }
+.qlrow {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 8px 0; border-top: 1px solid var(--line);
+}
+.qlrow:first-child { border-top: 0; }
+.qlmain { flex: 1 1 220px; font-size: 14px; }
+.qlmeta { color: var(--muted); font-size: 12px; letter-spacing: .4px; }
+.qlwhen { color: var(--muted); font-size: 12px; white-space: nowrap; }
+.qlver { font-size: 11px; font-weight: 700; color: var(--navy); border: 1px solid var(--line-strong); border-radius: 4px; padding: 1px 6px; }
+/* A stale sheet is the one thing here the desk must not miss. */
+.qlflag {
+  display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 4px;
+  background: #fef3c7; color: #92400e; font-weight: 700; letter-spacing: .4px;
+}
+.qlrow.stale { background: #fffbeb; }
+/* A sheet whose pairing went away: the desk's copy is void, but there is nothing to print. */
+.qlrow.blocked { opacity: .65; }
+.qlrow.blocked .qlmain { font-style: italic; }
+
+.qprint {
+  border: 1.5px solid var(--navy); background: #fff; color: var(--navy);
+  padding: 6px 12px; font-weight: 700; font-size: 12px; letter-spacing: 1.2px;
+  border-radius: 6px; cursor: pointer;
+}
+.qprint:hover { background: var(--navy); color: #fff; }
+.qprint.stale { border-color: #92400e; color: #92400e; }
+.qprint.stale:hover { background: #92400e; color: #fff; }
+
+.qnone, .qnote { color: var(--muted); font-size: 13px; margin: 6px 0 0; }
+
+.notice {
+  max-width: 720px; margin: 30px auto; padding: 20px 22px;
+  background: #fff; border: 1px solid var(--line-strong); border-radius: 12px;
+  box-shadow: var(--shadow);
+}
+.notice h2 { margin: 0 0 8px; color: var(--navy); font-size: 18px; }
+.notice p { margin: 0 0 8px; color: var(--ink); font-size: 14px; line-height: 1.5; }
+.notice code { background: #f1f5f9; padding: 1px 5px; border-radius: 4px; }
+
+/* ============================================================
+   The paper sheet
+   ============================================================ */
+
+.sheets { max-width: 880px; margin: 0 auto; }
+
+.psheet {
+  background: #fff; color: #000;
+  border: 2.5pt solid var(--red); border-radius: 6pt;
+  padding: 8pt 9pt; margin: 0 auto 18px;
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 8pt; line-height: 1.22;
+  box-shadow: 0 10px 24px rgba(20, 35, 71, .12);
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+  /* One sheet per printed page: every sheet but the last breaks after itself. */
+  break-after: page;
+  page-break-after: always;
+}
+#sheets > .psheet:last-child { break-after: auto; page-break-after: auto; }
+
+.psheet i, .psheet em { font-style: normal; }
+
+/* 018's reprint stamp: the desk has to be able to tell this paper from the copy it
+   replaces, at a glance, on a grayscale printer. */
+.psreprint {
+  background: var(--red); color: #fff; text-align: center;
+  font-weight: 800; font-size: 9pt; letter-spacing: .8pt;
+  padding: 2.5pt 4pt; margin: 0 0 6pt;
+}
+
+.pshead { text-align: center; border-bottom: 1pt solid #000; padding-bottom: 4pt; }
+.pstitle { font-size: 13pt; font-weight: 800; letter-spacing: .4pt; }
+.psgame { font-size: 9pt; font-weight: 700; letter-spacing: 1.6pt; text-transform: uppercase; }
+.pspill {
+  display: inline-block; margin-top: 3pt; padding: 2pt 7pt;
+  border: 0.8pt solid #000; border-radius: 999pt;
+  font-size: 7.5pt; font-weight: 700; letter-spacing: .3pt;
+}
+
+/* ---- HOW TO SCORE strip ---- */
+.pshowto { border: 0.6pt solid #000; padding: 3pt 5pt; margin-top: 4pt; }
+.pshowtot { font-size: 7pt; font-weight: 800; letter-spacing: .5pt; }
+.pshowto ol {
+  list-style: none; margin: 2pt 0 0; padding: 0;
+  display: grid; grid-template-columns: 1fr 1fr; gap: 0 10pt;
+  font-size: 6.4pt;
+}
+.pshowto li { counter-increment: howto; }
+.pshowto li::before { content: counter(howto) ". "; font-weight: 800; }
+.pshowto ol { counter-reset: howto; }
+.pshowtonote { margin-top: 2pt; font-size: 6pt; text-align: right; }
+
+/* ---- rules summary ---- */
+.psrules { border: 0.6pt solid #000; padding: 3pt 5pt; margin-top: 3pt; }
+.psrulest { font-size: 7pt; font-weight: 800; letter-spacing: .4pt; }
+.psrules ul { margin: 2pt 0 0; padding-left: 10pt; font-size: 6.4pt; }
+
+/* ---- players ---- */
+.psplayers { display: flex; gap: 6pt; margin-top: 4pt; }
+.pcard { flex: 1 1 0; border: 0.8pt solid #000; padding: 3pt 4pt; }
+.psline { font-size: 8pt; font-weight: 700; }
+.psline strong { font-weight: 800; }
+.psgoal { margin-top: 2pt; }
+.psgoalt { font-size: 6pt; font-weight: 700; letter-spacing: .4pt; }
+.psgoals { display: flex; gap: 8pt; align-items: center; font-size: 7.5pt; font-weight: 700; }
+.psgoals label { display: flex; align-items: center; gap: 2pt; }
+.psgoals input { width: 7pt; height: 7pt; margin: 0; }
+.psotherbox { display: inline-block; width: 26pt; border-bottom: 0.8pt solid #000; height: 8pt; }
+.psracetarget { font-size: 10pt; font-weight: 800; letter-spacing: .4pt; }
+
+/* ---- rack grid (ball-measured disciplines) ---- */
+.psracks { margin-top: 5pt; border: 0.8pt solid #000; }
+.psrackhdr {
+  display: flex; gap: 4pt; padding: 1.5pt 0;
+  border-bottom: 0.8pt solid #000; font-size: 6.6pt; font-weight: 800;
+  letter-spacing: .4pt; text-align: center;
+}
+.psrack {
+  display: flex; gap: 4pt; padding: 2pt 1pt; min-height: 29pt;
+  border-bottom: 0.6pt solid #000;
+}
+.psrackn { flex: 0 0 26pt; text-align: center; font-size: 10pt; font-weight: 800; align-self: center; }
+.psrackhdr .psrackn { font-size: 6.6pt; }
+.psside { flex: 1 1 0; min-width: 0; text-align: center; }
+.psrack .psside { text-align: left; }
+.psballs { display: flex; flex-wrap: wrap; gap: 2pt; }
+.psball {
+  width: 11pt; height: 11pt; border: 0.8pt solid #000; border-radius: 50%;
+  font-size: 5.6pt; font-weight: 700; line-height: 10pt; text-align: center;
+}
+.psball.stripe { border-width: 1.6pt; }
+.psstats { display: flex; gap: 3pt; margin-top: 1.5pt; }
+.psstat { flex: 1 1 0; font-size: 5.4pt; letter-spacing: .2pt; }
+.psstat span { display: block; white-space: nowrap; overflow: hidden; }
+.psstat .psblank { display: block; height: 9pt; border: 0.6pt solid #000; }
+
+.psfinals { display: flex; gap: 6pt; padding: 3pt 4pt; border-top: 0.8pt solid #000; }
+.psfinalcell { flex: 1 1 0; text-align: center; }
+.psfinalt { display: block; font-size: 6.6pt; font-weight: 800; letter-spacing: .4pt; }
+.psfinalcell .psside { display: block; font-size: 6pt; margin-top: 1pt; }
+.psfinals .psblank { display: block; height: 14pt; border: 0.8pt solid #000; margin-top: 1.5pt; }
+
+/* ---- games tally (wins-measured disciplines) ---- */
+.pstally { margin-top: 5pt; border: 0.8pt solid #000; padding: 4pt 6pt; }
+.pstallyhdr { font-size: 8pt; font-weight: 800; letter-spacing: 1pt; text-align: center; }
+.pstallyrow { display: flex; align-items: center; gap: 6pt; margin-top: 5pt; }
+.psnm { flex: 0 0 84pt; font-size: 8pt; font-weight: 700; }
+.psgames { display: flex; flex-wrap: wrap; gap: 3pt; flex: 1 1 0; }
+.psgame {
+  width: 15pt; height: 15pt; border: 0.8pt solid #000; text-align: center;
+  font-size: 6.4pt; line-height: 14pt;
+}
+
+/* ---- winner + signatures + brand ---- */
+.pswin { display: flex; gap: 8pt; margin-top: 5pt; align-items: flex-end; }
+.pswinner { flex: 1 1 0; font-size: 7.5pt; font-weight: 800; letter-spacing: .4pt; }
+.pswinner .psblank { display: inline-block; width: 62%; border-bottom: 0.8pt solid #000; height: 10pt; }
+.pssigs { flex: 1 1 0; font-size: 6.6pt; font-weight: 700; letter-spacing: .3pt; }
+.pssigt { display: block; }
+.pssig { display: block; margin-top: 2pt; white-space: nowrap; }
+.pssig i { display: inline-block; width: 96pt; border-bottom: 0.8pt solid #000; height: 9pt; }
+.psbrand {
+  margin-top: 4pt; padding-top: 3pt; border-top: 0.6pt solid #000;
+  text-align: center; font-size: 7pt; font-weight: 800; letter-spacing: 1.6pt;
+}
+
+/* ============================================================
+   Paper
+   ============================================================ */
+
+@media print {
+  body { background: #fff; padding: 0; }
+  /* Every piece of chrome carries `no-print`, so paper gets the sheets and nothing else. */
+  .no-print { display: none !important; }
+  a { color: inherit; text-decoration: none; }
+  .sheets { max-width: none; }
+  .psheet { margin: 0; box-shadow: none; border-radius: 0; }
+  .psball, .psgame, .psstat .psblank, .psfinals .psblank { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
