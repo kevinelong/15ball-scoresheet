@@ -782,9 +782,7 @@
 
   function sheetStep(side, delta) {
     var s = state.sheet; if (!s || s.isRack || !s.tally) return;
-    var v = s.tally[side] + delta;
-    if (v < 0) v = 0;
-    if (v > s.raceTo) v = s.raceTo;            // a step must not pass the target
+    var v = s.tally[side] + delta;             // the goal selects the winner, not a ceiling
     s.tally[side] = v;
     autoWinner(s);
     renderSheet();
@@ -826,7 +824,14 @@
     var s = state.sheet;
     if (!s || s.mode !== 'edit') return;
     if (s.busy) return;                                   // one submit per sheet
-    if (!s.winner) return toast('Pick a winner');         // an unmatched loser must not be submitted
+    if (!s.winner) {
+      // Submitting without a pick takes the player ahead; a level score still needs the
+      // desk's call. The live model has one shared race target, so there is no handicap.
+      var f = finalsOf(s);
+      if (f.A > f.B) s.winner = 'A';
+      else if (f.B > f.A) s.winner = 'B';
+    }
+    if (!s.winner) return toast('Pick a winner');         // tied: an unmatched loser must not be submitted
     var mid = s.mid;
     var winnerEntrantId = s.winner === 'A' ? s.a : s.b;
     var loserEntrantId = s.winner === 'A' ? s.b : s.a;

@@ -125,7 +125,7 @@ the printed sheet too — the two cannot drift, which is the reason the spec tab
   and 25/50, exactly two disciplines mark balls, `goals()` returns a copy, `measure` and the rendered
   body agree for every discipline, every discipline declares its jump controls and none offers one.
 - `app-render.test.js`: no dialog offers a `+5`/`+10`/`−5` control, for any discipline, and a
-  win-measured race cannot exceed its target by a step (nor by a stray jump).
+  win-measured race's goal selects the winner but does not cap a step (nor does a stray jump score).
 - Existing suites must stay green: `node bracket.test.js`, `roster.test.js`, `tables.test.js`,
   `migration.test.js`.
 

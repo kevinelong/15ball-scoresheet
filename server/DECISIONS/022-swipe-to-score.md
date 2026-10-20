@@ -21,13 +21,17 @@ The tally (`#race`, the games-won body) carries the same gesture, as an accelera
 - **Threshold and direction**: `|dy| >= 48` CSS px (the app's 48dp) and vertical-dominant
   (`|dy| > |dx|`), taken from the press — so a finger that keeps travelling does not step again,
   and one gesture is one step.
-- **Side**: the half of the panel the gesture *started* in (left = Player A, right = Player B),
-  read from the panel's own bounding box. The midpoint belongs to B.
+- **Side**: the player card the gesture *started* on (`.counter-side[data-side]`). The tally
+  stays side by side on mobile (the `<=620px` variant keeps two columns and puts the score
+  above the `+`/`-` pair, like the Android scorer), so the card is unambiguous. When the
+  start lands outside a card, fall back to the cards' geometry (`x` when side by side, `y`
+  when stacked), then to the panel midpoint (left = Player A, right = Player B; midpoint is B).
 - **Taken from the child**: once the threshold is crossed the panel keeps the pointer
   (`setPointerCapture`) and swallows the following click in the capture phase, so a drag that
   begins on `+` scores exactly once.
-- **Touch and pen only** (`pointerType === "touch" | "pen"`): a vertical mouse drag must keep
-  scrolling the page, and a mouse user has the buttons.
+- **Touch and pen only on the sheet** (`pointerType === "touch" | "pen"`): the sheet scrolls
+  its modal, so a vertical mouse drag must keep scrolling it. Score mode, which never
+  scrolls, also takes the mouse (decision 023).
 - **An accelerator, never the only way to score**: the gesture calls the same
   `raceInc`/`raceDec` the ± buttons call, the buttons stay the accessible and desktop path, and
   the race hint names the gesture rather than replacing them. The tally is the only body with a
@@ -50,8 +54,8 @@ The tally (`#race`, the games-won body) carries the same gesture, as an accelera
 
 ## Test coverage required
 
-`app-render.test.js` drives real pointer events at the panel: one step per gesture however far
-the finger travels, the half test (including the midpoint), a downward drag and its zero floor,
+`app-render.test.js` drives real pointer events at the panel: one step per gesture however far the
+finger travels, the half test (including the midpoint), a downward drag into negative territory,
 a drag shorter than the threshold, a mostly-horizontal drag, a non-vertical-dominant diagonal,
 a mouse drag, and a drag that starts on the increment button scoring exactly once.
 

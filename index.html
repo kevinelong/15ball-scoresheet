@@ -162,7 +162,10 @@
           <div class="modal-eyebrow" id="matchEyebrow">Match</div>
           <h2 id="matchTitle">A vs B</h2>
         </div>
-        <button type="button" class="iconbtn" data-action="close-match" aria-label="Close">&times;</button>
+        <div class="modal-hdr-actions">
+          <button type="button" class="sheet-back" data-action="sheet-to-score" id="sheetBackToScoreBtn" hidden>Back to Score Mode</button>
+          <button type="button" class="iconbtn" data-action="close-match" aria-label="Close">&times;</button>
+        </div>
       </div>
 
       <div class="modal-body">
@@ -221,8 +224,8 @@
                 </div>
               </div>
             </div>
-            <div class="counter-target" id="raceTarget">Race to 7</div>
-            <p class="hint">Tap +/&minus; to record games won &mdash; or, on a touch screen, flick up/down on a player's half. The winner is selected for you at the race target &mdash; change it in the winner box below if you need to.</p>
+            <div class="counter-target" id="raceTarget">Goal 7</div>
+            <p class="hint">Tap +/&minus; to record games won &mdash; or, on a touch screen, flick up/down on a player's half. The goal selects the winner but does not cap the tally &mdash; a run may finish past it, and a correction may go below zero. Change the winner in the box below if you need to.</p>
           </section>
 
           <section class="totals" id="sheetTotals">
@@ -259,8 +262,41 @@
       <div class="modal-actions">
         <button type="button" data-action="clear-match" class="ghost">Clear</button>
         <div class="spacer"></div>
-        <button type="button" data-action="close-match" class="ghost">Cancel</button>
-        <button type="button" data-action="save-match" class="primary">Save Result</button>
+        <button type="button" data-action="close-match" class="ghost" id="closeMatchBtn">Cancel</button>
+        <button type="button" data-action="save-match" class="primary" id="saveMatchBtn">Save Result</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =============================== SCORE MODE ===============================
+       A fixed, non-scrolling two-half tally: the whole half is the swipe target, and the
+       arrows above/below the score take the same step. Names live in the halves. -->
+  <div class="score-mode" id="scoreMode" hidden aria-modal="true" role="dialog" aria-label="Score mode">
+    <div class="sm-halves">
+      <div class="sm-side" data-side="A">
+        <div class="sm-name" id="smANm">Player A</div>
+        <button type="button" class="sm-btn sm-plus" data-sm-inc="A" aria-label="Add a game to Player A"><svg class="sm-icon" viewBox="0 0 100 100" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="M50 10 L90 84 L10 84 Z M45 46 H55 V53 H61 V63 H55 V70 H45 V63 H39 V53 H45 Z"/></svg></button>
+        <button type="button" class="sm-score" id="smAScore" data-sm-inc="A" aria-live="polite" aria-label="Add a game to Player A">0</button>
+        <button type="button" class="sm-btn sm-minus" data-sm-dec="A" aria-label="Remove a game from Player A"><svg class="sm-icon" viewBox="0 0 100 100" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="M50 90 L10 16 L90 16 Z M36 50 H64 V60 H36 Z"/></svg></button>
+      </div>
+      <div class="sm-side" data-side="B">
+        <div class="sm-name" id="smBNm">Player B</div>
+        <button type="button" class="sm-btn sm-plus" data-sm-inc="B" aria-label="Add a game to Player B"><svg class="sm-icon" viewBox="0 0 100 100" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="M50 10 L90 84 L10 84 Z M45 46 H55 V53 H61 V63 H55 V70 H45 V63 H39 V53 H45 Z"/></svg></button>
+        <button type="button" class="sm-score" id="smBScore" data-sm-inc="B" aria-live="polite" aria-label="Add a game to Player B">0</button>
+        <button type="button" class="sm-btn sm-minus" data-sm-dec="B" aria-label="Remove a game from Player B"><svg class="sm-icon" viewBox="0 0 100 100" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="M50 90 L10 16 L90 16 Z M36 50 H64 V60 H36 Z"/></svg></button>
+      </div>
+    </div>
+    <div class="sm-bar">
+      <div class="sm-bar-left">
+        <button type="button" class="ghost" data-action="score-mode-sheet">View Score Sheet</button>
+      </div>
+      <div class="sm-center">
+        <span class="sm-target" id="smTarget">Goal 7</span>
+        <button type="button" class="sm-winner" id="smWinner" data-action="score-mode-winner">No winner</button>
+      </div>
+      <div class="sm-bar-right">
+        <button type="button" class="ghost" data-action="score-mode-exit">Done</button>
+        <button type="button" class="primary" data-action="score-mode-save">Save result</button>
       </div>
     </div>
   </div>

@@ -65,12 +65,12 @@
     return "solid";
   }
 
-  function toast(msg) {
+  function toast(msg, ms) {
     const el = $("#toast");
     el.textContent = msg;
     el.classList.add("show");
     clearTimeout(toast._t);
-    toast._t = setTimeout(() => el.classList.remove("show"), 1800);
+    toast._t = setTimeout(() => el.classList.remove("show"), ms || 1800);
   }
 
   function newId() {
@@ -111,6 +111,10 @@
   // ============================================================
   let app = { v: 3, tournaments: [], activeId: null };
   let activeMatchId = null;
+  let winnerAuto = false;      // the current winner came from the goal rule, not the desk
+  let progressTimer = null;    // debounced in-progress sheet save
+
+  const SM_HINT_KEY = "fifteenBall.smHintSeen";
 
   function activeT() {
     if (!app.activeId) return null;
@@ -155,15 +159,16 @@
   // Persistence
   // ============================================================
   let persistTimer = null;
+  function writeStore() {
+    const t = activeT();
+    if (t) t.updatedAt = Date.now();
+    adoptIssueRecords();
+    try { store.set(STORAGE_KEY, JSON.stringify(app)); }
+    catch (e) { /* ignore */ }
+  }
   function persist(delay) {
     clearTimeout(persistTimer);
-    persistTimer = setTimeout(() => {
-      const t = activeT();
-      if (t) t.updatedAt = Date.now();
-      adoptIssueRecords();
-      try { store.set(STORAGE_KEY, JSON.stringify(app)); }
-      catch (e) { /* ignore */ }
-    }, delay == null ? 200 : delay);
+    persistTimer = setTimeout(writeStore, delay == null ? 200 : delay);
   }
 
   /**
@@ -555,16 +560,33 @@
       if (finalEl) finalEl.value = running;
     });
     const t = activeT();
-    const target = t ? t.raceTo : 25;
+    const ga = goalOf("A"), gb = goalOf("B");
+    // A handicap (different goals) cannot be decided from the totals alone, so the desk
+    // chooses. Equal goals keep the live auto-select, against that shared goal.
+    const handicap = ga > 0 && gb > 0 && ga !== gb;
+    const target = ga > 0 && ga === gb ? ga : (t ? t.raceTo : 25);
     const finalA = parseInt($(`#sheet input[data-field="finalA"]`).value, 10) || 0;
     const finalB = parseInt($(`#sheet input[data-field="finalB"]`).value, 10) || 0;
-    const winnerRadios = $$(`#sheet input[name="winner"]`);
-    if (winnerRadios.length && target > 0 && !winnerRadios.some((r) => r.checked)) {
-      if (finalA >= target && finalA > finalB) {
-        winnerRadios.find((r) => r.value === "A").checked = true;
-      } else if (finalB >= target && finalB > finalA) {
-        winnerRadios.find((r) => r.value === "B").checked = true;
-      }
+    reconcileRackWinner(handicap, target, finalA, finalB);
+    persistInProgress();
+  }
+
+  /** The rack-sheet counterpart of reconcileWinner: the same rule on the point goal. */
+  function reconcileRackWinner(handicap, target, finalA, finalB) {
+    const autoFor = () => {
+      if (handicap || target <= 0) return "";
+      if (finalA >= target && finalA > finalB) return "A";
+      if (finalB >= target && finalB > finalA) return "B";
+      return "";
+    };
+    const current = checkedWinner();
+    if (winnerAuto && current) {
+      const valid = autoFor();
+      if (valid !== current) { setWinnerRadio(valid); winnerAuto = !!valid; }
+    }
+    if (!checkedWinner()) {
+      const next = autoFor();
+      if (next) { setWinnerRadio(next); winnerAuto = true; }
     }
   }
 
@@ -581,7 +603,7 @@
       goalBOther: ($(`#sheet input[data-field="goalBOther"]`) || {}).value || "",
       sigA: $(`#sheet input[data-field="sigA"]`).value,
       sigB: $(`#sheet input[data-field="sigB"]`).value,
-      winner: ($(`#sheet input[name="winner"]:checked`) || {}).value || "",
+      winner: checkedWinner(),
       finalA: rack ? (parseInt($(`#sheet input[data-field="finalA"]`).value, 10) || 0) : raceGet("A"),
       finalB: rack ? (parseInt($(`#sheet input[data-field="finalB"]`).value, 10) || 0) : raceGet("B"),
       racks: []
@@ -600,11 +622,49 @@
     return s;
   }
 
+  /** True when a sheet has anything worth resuming (a score, a mark, or a winner). */
+  function sheetHasContent(sheet) {
+    if (!sheet) return false;
+    if (sheet.winner) return true;
+    if (sheet.finalA || sheet.finalB) return true;
+    return (sheet.racks || []).some((r) =>
+      (r.A?.balls?.length || 0) + (r.B?.balls?.length || 0) +
+      (r.A?.fouls || 0) + (r.B?.fouls || 0) > 0);
+  }
+
+  /** Flush the in-progress tally now (leaving the match, closing, or a hard stop). */
+  function saveProgressNow() {
+    clearTimeout(progressTimer);
+    progressTimer = null;
+    const t = activeT();
+    if (!t || !activeMatchId) return;
+    const sheet = collectSheet(t.game);
+    if (!sheetHasContent(sheet)) return;
+    t.sheets[activeMatchId] = sheet;
+    writeStore();
+  }
+
+  /** Debounced autosave: a refresh or Done must not lose the tally. */
+  function persistInProgress() {
+    clearTimeout(progressTimer);
+    progressTimer = setTimeout(() => {
+      progressTimer = null;
+      const t = activeT();
+      if (!t || !activeMatchId) return;
+      const sheet = collectSheet(t.game);
+      if (!sheetHasContent(sheet)) return;
+      t.sheets[activeMatchId] = sheet;
+      persist();
+    }, 250);
+  }
+
   function applySheet(sheet, matchInfo, game) {
     const active = activeT();
     game = game || (active && active.game);
     const spec = sheetOf(game);
     const rack = window.Sheets.isRack(game);
+    // A restored winner is the desk's (or the saved state's) choice; never auto-clear it.
+    winnerAuto = false;
     $$("#sheet .ball.on").forEach((b) => { b.classList.remove("on"); b.setAttribute("aria-pressed", "false"); });
     $$("#sheet input[data-foul]").forEach((i) => { i.value = ""; });
     $$("#sheet input[data-field]").forEach((i) => { if (!i.readOnly) i.value = ""; });
@@ -905,6 +965,13 @@
     $("#matchEyebrow").textContent = matchLabel(match);
     $("#matchTitle").textContent = `${match.slots[0].name}  vs.  ${match.slots[1].name}`;
     applySheet(t.sheets[matchId] || null, info, t.game);
+    // A games-won match opens on its scoring surface; the paper sheet is one tap away.
+    if (!window.Sheets.isRack(t.game)) {
+      $("#matchModal").hidden = true;
+      document.body.style.overflow = "";
+      openScoreMode();
+      return;
+    }
     $("#matchModal").hidden = false;
     document.body.style.overflow = "hidden";
   }
@@ -922,6 +989,14 @@
     $("#racks").hidden = !rack;
     $("#race").hidden = rack;
     $("#sheetTotals").hidden = !rack;
+    // A race's sheet is a detail view: score mode owns its Save, and Back returns there.
+    // A ball-marked sheet is the scoring surface itself, so it keeps Save and Cancel.
+    const back = $("#sheetBackToScoreBtn");
+    if (back) back.hidden = rack;
+    const cancel = $("#closeMatchBtn");
+    if (cancel) cancel.hidden = !rack;
+    const save = $("#saveMatchBtn");
+    if (save) save.hidden = !rack;
     $$("#sheet [data-final-label]").forEach((el) => { el.textContent = spec.finalLabel || ""; });
     // A goal box belongs to a ball-marked sheet; a race's target is the tournament's.
     $$("#sheet .goalbox").forEach((el) => { el.hidden = !rack; });
@@ -949,9 +1024,9 @@
       `data-field="goal${side}Other" aria-label="Other goal for Player ${side}" /></label>`;
   }
 
-  /** The games-won body: a tally per side against the tournament's race target. */
+  /** The games-won body: a tally per side against the tournament's goal. */
   function renderRace(t, g) {
-    $("#raceTarget").textContent = `${g.raceLabel} ${t.raceTo}`;
+    $("#raceTarget").textContent = `Goal ${t.raceTo}`;
     raceSet("A", 0);
     raceSet("B", 0);
   }
@@ -959,27 +1034,66 @@
   function raceGet(side) {
     return parseInt($(`#race${side}Score`).textContent, 10) || 0;
   }
-  /** The tournament's race target, or 0 when it has none to speak of. */
+  /** The tournament's goal, or 0 when it has none to speak of. */
   function raceTarget(t) {
     return (t && (t.raceTo || gameOf(t).defaultRaceTo)) || 0;
+  }
+
+  function checkedWinner() {
+    const a = $(`#sheet input[name="winner"][value="A"]`);
+    const b = $(`#sheet input[name="winner"][value="B"]`);
+    if (a && a.checked === true) return "A";
+    if (b && b.checked === true) return "B";
+    const checked = $(`#sheet input[name="winner"]:checked`);
+    return checked && (checked.value === "A" || checked.value === "B") ? checked.value : "";
+  }
+
+  function setWinnerRadio(side) {
+    ["A", "B"].forEach((s) => {
+      const r = $(`#sheet input[name="winner"][value="${s}"]`);
+      if (r) r.checked = side === s;
+    });
+  }
+
+  /** Which side the goal rule would pick right now, or "" when it picks none. */
+  function autoWinnerFor(race) {
+    if (race <= 0) return "";
+    const a = raceGet("A"), b = raceGet("B");
+    if (a >= race && a > b) return "A";
+    if (b >= race && b > a) return "B";
+    return "";
+  }
+
+  /**
+   * Keep an auto-selected winner honest: an automatic pick is cleared (or moved to the
+   * other side) when a correction means it no longer holds. A manual pick is never touched.
+   */
+  function reconcileWinner(race) {
+    const current = checkedWinner();
+    if (winnerAuto && current) {
+      const valid = autoWinnerFor(race);
+      if (valid !== current) { setWinnerRadio(valid); winnerAuto = !!valid; }
+    }
+    if (!checkedWinner()) {
+      const next = autoWinnerFor(race);
+      if (next) { setWinnerRadio(next); winnerAuto = true; }
+    }
   }
 
   function raceSet(side, n) {
     const t = activeT();
     const race = raceTarget(t);
-    // A race is won *at* its target, so a step can never carry the tally past it: nothing
-    // here can take a race to 7 to 8, let alone to 15 (the jumps that could are gone — see
-    // sheets.js -> quickAdd). Only a target we do not know is uncapped.
-    const v = Math.max(0, Math.min(race > 0 ? race : 999, n | 0));
+    // The goal selects the winner; it is not a ceiling. A run may finish past it (14.1 and
+    // 15-ball players complete the run after reaching the goal), and a tally may also go
+    // below zero, so the desk can correct an over-count.
+    const v = n | 0;
     $(`#race${side}Score`).textContent = String(v);
-    // Auto-select the winner the moment a side reaches the race target.
-    if (!t) return;
-    const other = side === "A" ? raceGet("B") : raceGet("A");
-    if (v >= race && v > other &&
-        !$$(`#sheet input[name="winner"]`).some((r) => r.checked)) {
-      const rb = $(`#sheet input[name="winner"][value="${side}"]`);
-      if (rb) rb.checked = true;
+    if (t) {
+      reconcileWinner(race);
+      persistInProgress();
     }
+    const sm = $("#scoreMode");
+    if (sm && !sm.hidden) syncScoreMode();
   }
   function raceInc(side) { raceSet(side, raceGet(side) + 1); }
   function raceDec(side) { raceSet(side, raceGet(side) - 1); }
@@ -993,7 +1107,12 @@
   // keep scrolling the page.
   const SWIPE_MIN_TRAVEL = 48;   // CSS px, the 48dp threshold the app uses
 
-  function isSwipePointer(ev) { return ev.pointerType === "touch" || ev.pointerType === "pen"; }
+  // Touch and pen everywhere; score mode also takes the mouse because it never scrolls,
+  // while the sheet keeps the mouse free to scroll its modal.
+  function isSwipePointer(ev, allowMouse) {
+    return ev.pointerType === "touch" || ev.pointerType === "pen" ||
+      (allowMouse && ev.pointerType === "mouse");
+  }
 
   /** One short buzz where the platform offers one, silently where it does not. */
   function hapticTap() {
@@ -1001,18 +1120,56 @@
     try { navigator.vibrate(10); } catch (e) { /* no haptics, no complaint */ }
   }
 
-  function wireSwipe(panel) {
+  /**
+   * Which player's half a gesture started in. The tally is side by side on desktop and
+   * stacked at <=620px, so the x midpoint is only correct for one of them: prefer the
+   * `.counter-side` card under the finger, then the cards' own geometry, then the panel
+   * midpoint. This keeps the gesture attached to a player in both layouts.
+   */
+  function sideAt(panel, ev) {
+    const target = ev.target;
+    const card = target && typeof target.closest === "function"
+      ? target.closest("[data-side]")
+      : null;
+    if (card && card.dataset && (card.dataset.side === "A" || card.dataset.side === "B")) {
+      return card.dataset.side;
+    }
+    // Score mode attaches the gesture to one half, so the panel itself names the side.
+    const own = panel.dataset && panel.dataset.side;
+    if (own === "A" || own === "B") return own;
+    const canQuery = typeof panel.querySelector === "function";
+    const a = canQuery ? panel.querySelector('[data-side="A"]') : null;
+    const b = canQuery ? panel.querySelector('[data-side="B"]') : null;
+    if (a && b && typeof a.getBoundingClientRect === "function" && typeof b.getBoundingClientRect === "function") {
+      const ra = a.getBoundingClientRect();
+      const rb = b.getBoundingClientRect();
+      const stacked = ra.bottom <= rb.top + 1 || rb.bottom <= ra.top + 1;
+      if (stacked) {
+        const aFirst = ra.top <= rb.top;
+        const mid = (Math.max(ra.top, rb.top) + Math.min(ra.bottom, rb.bottom)) / 2;
+        return (ev.clientY <= mid) === aFirst ? "A" : "B";
+      }
+      const aLeft = ra.left <= rb.left;
+      const mid = aLeft ? (ra.right + rb.left) / 2 : (rb.right + ra.left) / 2;
+      return (ev.clientX <= mid) === aLeft ? "A" : "B";
+    }
+    const rect = panel.getBoundingClientRect();
+    return ev.clientX < rect.left + rect.width / 2 ? "A" : "B";
+  }
+
+  function wireSwipe(panel, allowMouse) {
     if (!panel) return;
     let id = null;                          // the pointer that owns the gesture in flight
-    let startX = 0, startY = 0;
+    let startX = 0, startY = 0, startSide = "A";
     let taken = false;                      // this gesture has already been reported
     let swallow = false;                    // the press it started on is cancelled, not scored
 
     panel.addEventListener("pointerdown", (ev) => {
-      if (id !== null || !isSwipePointer(ev)) return;
+      if (id !== null || !isSwipePointer(ev, allowMouse)) return;
       id = ev.pointerId;
       startX = ev.clientX;
       startY = ev.clientY;
+      startSide = sideAt(panel, ev);        // read the start layout once, where the finger landed
       taken = false;
       swallow = false;
     });
@@ -1020,6 +1177,9 @@
       if (ev.pointerId !== id || taken) return;
       const dy = ev.clientY - startY;
       const dx = Math.abs(ev.clientX - startX);
+      // A drag past a small slop is not a tap: cancel the release click even when it is
+      // too short to score, so a 20px wobble on the score or + cannot add a game.
+      if (Math.abs(dy) > 8 || dx > 8) swallow = true;
       if (Math.abs(dy) < SWIPE_MIN_TRAVEL || Math.abs(dy) <= dx) return;
       taken = true;
       swallow = true;
@@ -1030,10 +1190,10 @@
       if (panel.setPointerCapture) {
         try { panel.setPointerCapture(ev.pointerId); } catch (e) { /* already gone */ }
       }
-      const rect = panel.getBoundingClientRect();
-      const side = startX < rect.left + rect.width / 2 ? "A" : "B";
-      // The same step the buttons take: the gesture is a shortcut, never the only way to score.
-      if (dy < 0) raceInc(side); else raceDec(side);
+      // The side the gesture started on (in the layout it started in), not the side of
+      // wherever the finger has travelled to. The same step the buttons take: the gesture
+      // is a shortcut, never the only way to score.
+      if (dy < 0) raceInc(startSide); else raceDec(startSide);
       hapticTap();
     });
     const end = (ev) => {
@@ -1140,32 +1300,181 @@
   }
 
   function closeMatch() {
+    saveProgressNow();
+    closeScoreMode();
     $("#matchModal").hidden = true;
     document.body.style.overflow = "";
     activeMatchId = null;
   }
 
+  /** The numeric goal a rack sheet's side declares, or 0 when it has none. */
+  function goalOf(side) {
+    const checked = $(`#sheet input[name="goal${side}"]:checked`);
+    const value = checked && checked.value;
+    if (value === "other") {
+      const other = $(`#sheet input[data-field="goal${side}Other"]`);
+      return parseInt(other && other.value, 10) || 0;
+    }
+    return parseInt(value, 10) || 0;
+  }
+
+  /**
+   * The winner a saved sheet implies when the desk has not picked one. A player who has
+   * reached their goal while the other has not is the result, handicap or not. Otherwise
+   * the player ahead wins — unless the score is level, or a handicap (different goals)
+   * makes "ahead" meaningless; there the desk still chooses.
+   */
+  function impliedWinner(sheet, game) {
+    let ga = 0, gb = 0;
+    if (window.Sheets.isRack(game)) {
+      ga = goalOf("A");
+      gb = goalOf("B");
+    }
+    const reachedA = ga > 0 && sheet.finalA >= ga;
+    const reachedB = gb > 0 && sheet.finalB >= gb;
+    if (reachedA && !reachedB) return "A";
+    if (reachedB && !reachedA) return "B";
+    if (sheet.finalA === sheet.finalB) return "";
+    if (ga > 0 && gb > 0 && ga !== gb) return "";
+    return sheet.finalA > sheet.finalB ? "A" : "B";
+  }
+
   function saveMatch() {
-    if (!activeMatchId) return;
+    if (!activeMatchId) return false;
     const t = activeT();
-    if (!t) return;
+    if (!t) return false;
+    clearTimeout(progressTimer);
+    progressTimer = null;
     const sheet = collectSheet(t.game);
+    let inferred = false;
     if (!sheet.winner) {
-      if (!confirm("No winner is selected on this sheet. Save it as an in-progress match anyway (bracket won't advance)?")) return;
-      t.sheets[activeMatchId] = sheet;
-      persist();
-      renderBracket();
-      toast("Saved on this device (no winner set) — this console has no server link, so the sheet stays in this browser.");
-      return;
+      const implied = impliedWinner(sheet, t.game);
+      if (implied) {
+        sheet.winner = implied;
+        inferred = true;
+        const radio = $(`#sheet input[name="winner"][value="${implied}"]`);
+        if (radio) radio.checked = true;
+      } else {
+        const why = sheet.finalA === sheet.finalB
+          ? "The scores are tied"
+          : "The players have different goals";
+        if (!confirm(`${why}; no winner can be assumed. Save it as an in-progress match anyway (bracket won't advance)?`)) return false;
+        t.sheets[activeMatchId] = sheet;
+        writeStore();
+        renderBracket();
+        toast("Saved on this device (no winner set) — this console has no server link, so the sheet stays in this browser.");
+        return true;
+      }
     }
     t.sheets[activeMatchId] = sheet;
     const winnerSlot = sheet.winner === "A" ? 0 : 1;
     const scoreSummary = `${sheet.finalA}-${sheet.finalB}`;
     window.BracketEngine.recordWinner(t.bracket, activeMatchId, winnerSlot, { score: scoreSummary });
-    persist();
+    writeStore();
     renderBracket();
     closeMatch();
-    toast(DEVICE_SAVE_NOTE);
+    toast(inferred ? `${DEVICE_SAVE_NOTE} Winner taken from the score.` : DEVICE_SAVE_NOTE);
+    return true;
+  }
+
+  // ============================================================
+  // Score mode: the full-screen, two-half tally (the Android scoreboard's shape)
+  // ============================================================
+  // Each half is a vertical column — name, + arrow, score, - arrow — and the whole half is
+  // a swipe target. The overlay is fixed and non-scrolling; the browser's own fullscreen
+  // remains available, but the app does not commandeer it on open. It reads and writes the
+  // same tally as the sheet and autosaves the in-progress sheet, so leaving loses nothing.
+
+  function bump(el) {
+    if (!el || !el.classList) return;
+    el.classList.remove("bump");
+    void el.offsetWidth;       // restart the animation
+    el.classList.add("bump");
+    clearTimeout(el._bumpT);
+    el._bumpT = setTimeout(() => el.classList.remove("bump"), 180);
+  }
+
+  function syncScoreMode() {
+    const a = $("#smAScore"), b = $("#smBScore");
+    if (a) {
+      const v = String(raceGet("A"));
+      if (a.textContent !== v) bump(a);
+      a.textContent = v;
+      a.setAttribute("aria-label", `Player A score ${v} — add a game`);
+    }
+    if (b) {
+      const v = String(raceGet("B"));
+      if (b.textContent !== v) bump(b);
+      b.textContent = v;
+      b.setAttribute("aria-label", `Player B score ${v} — add a game`);
+    }
+    const chip = $("#smWinner");
+    if (chip) {
+      const side = checkedWinner();
+      const name = side === "A" ? ($("#raceANm").textContent || "Player A")
+        : side === "B" ? ($("#raceBNm").textContent || "Player B") : "";
+      chip.textContent = side ? `Winner: ${name}` : "No winner";
+      if (side) chip.classList.add("set"); else chip.classList.remove("set");
+    }
+  }
+
+  function openScoreMode() {
+    if (!activeMatchId || $("#race").hidden) return;
+    const overlay = $("#scoreMode");
+    if (!overlay) return;
+    if ($("#smANm")) $("#smANm").textContent = $("#raceANm").textContent || "Player A";
+    if ($("#smBNm")) $("#smBNm").textContent = $("#raceBNm").textContent || "Player B";
+    if ($("#smTarget")) $("#smTarget").textContent = $("#raceTarget").textContent || "";
+    syncScoreMode();
+    overlay.hidden = false;
+    document.body.classList.add("score-mode-open");
+    if (document.documentElement) document.documentElement.classList.add("score-mode-open");
+    if (store.get(SM_HINT_KEY) !== "1") {
+      store.set(SM_HINT_KEY, "1");
+      toast("Swipe up or down on a player's half — or tap the arrows", 5000);
+    }
+  }
+
+  function closeScoreMode() {
+    const overlay = $("#scoreMode");
+    if (overlay) overlay.hidden = true;
+    document.body.classList.remove("score-mode-open");
+    if (document.documentElement) document.documentElement.classList.remove("score-mode-open");
+  }
+
+  function scoreModeStep(side, delta) {
+    if (side !== "A" && side !== "B") return;
+    if (delta > 0) raceInc(side); else raceDec(side);
+    syncScoreMode();
+  }
+
+  /** The winner chip: no winner -> A -> B -> no winner, always a manual pick. */
+  function cycleScoreWinner() {
+    const current = checkedWinner();
+    const next = current === "" ? "A" : current === "A" ? "B" : "";
+    setWinnerRadio(next);
+    winnerAuto = false;       // the desk chose it; the goal rule must not override
+    syncScoreMode();
+    persistInProgress();
+  }
+
+  function scoreModeSave() {
+    if (!activeMatchId) return;
+    if (saveMatch()) closeScoreMode();
+  }
+
+  /** Score mode -> the paper/detail sheet. */
+  function scoreModeToSheet() {
+    closeScoreMode();
+    $("#matchModal").hidden = false;
+    document.body.style.overflow = "hidden";
+  }
+
+  /** The sheet -> back to score mode (its prominent close). */
+  function sheetToScoreMode() {
+    $("#matchModal").hidden = true;
+    document.body.style.overflow = "";
+    openScoreMode();
   }
 
   function clearMatch() {
@@ -1173,6 +1482,9 @@
     const t = activeT();
     if (!t) return;
     if (!confirm("Clear this match sheet? Also removes the winner from the bracket.")) return;
+    clearTimeout(progressTimer);
+    progressTimer = null;
+    winnerAuto = false;
     delete t.sheets[activeMatchId];
     const m = t.bracket.matches[activeMatchId];
     if (m && m.winner !== null) {
@@ -1329,6 +1641,22 @@
     });
     // The tally's swipe gesture (hidden with the tally for the ball-marked disciplines).
     wireSwipe($("#race"));
+    // Score mode: each half is its own swipe panel; the arrow buttons take the same step.
+    document.body.addEventListener("click", (ev) => {
+      const inc = ev.target.closest("[data-sm-inc]");
+      if (inc) { scoreModeStep(inc.dataset.smInc, 1); return; }
+      const dec = ev.target.closest("[data-sm-dec]");
+      if (dec) { scoreModeStep(dec.dataset.smDec, -1); return; }
+    });
+    $$("#scoreMode .sm-side").forEach((el) => wireSwipe(el, true));
+    // A desk pick is manual: the goal rule must never clear or override it.
+    $$(`#sheet input[name="winner"]`).forEach((r) => {
+      r.addEventListener("change", () => {
+        winnerAuto = false;
+        syncScoreMode();
+        persistInProgress();
+      });
+    });
     document.body.addEventListener("click", (ev) => {
       const el = ev.target.closest("[data-action]");
       if (!el) return;
@@ -1346,9 +1674,22 @@
       importTournamentFromFile(file, () => { renderHome(); });
       ev.target.value = "";
     });
+    // The debounced autosave must survive a reload/close: localStorage writes are
+    // synchronous, so flushing on the way out is safe.
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden") saveProgressNow();
+    });
+    if (typeof window !== "undefined" && window.addEventListener) {
+      window.addEventListener("pagehide", saveProgressNow);
+    }
     document.addEventListener("keydown", (ev) => {
       if (ev.key === "Escape") {
-        if (!$("#matchModal").hidden) closeMatch();
+        const t = activeT();
+        if (!$("#scoreMode").hidden) closeMatch();               // Done
+        else if (!$("#matchModal").hidden) {
+          if (t && !window.Sheets.isRack(t.game)) sheetToScoreMode();
+          else closeMatch();
+        }
         else if (!$("#exportModal").hidden) closeExportMenu();
         else if (!$("#lateEntryModal").hidden) closeLateEntry();
       }
@@ -1438,10 +1779,21 @@
         break;
       }
 
-      // ---- match modal
-      case "close-match": closeMatch(); break;
-      case "save-match": saveMatch(); break;
+      // ---- match modal / score mode
+      case "close-match": {
+        const t = activeT();
+        // A race sheet's close returns to the scoring surface; Done closes the match.
+        if (t && !window.Sheets.isRack(t.game)) { sheetToScoreMode(); break; }
+        closeMatch();
+        break;
+      }
+      case "sheet-to-score": sheetToScoreMode(); break;
+      case "save-match": saveMatch(); break;          // ball-marked sheets
       case "clear-match": clearMatch(); break;
+      case "score-mode-sheet": scoreModeToSheet(); break;
+      case "score-mode-save": scoreModeSave(); break;
+      case "score-mode-winner": cycleScoreWinner(); break;
+      case "score-mode-exit": closeMatch(); break;    // Done
     }
   }
 

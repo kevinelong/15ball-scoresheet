@@ -401,6 +401,28 @@ const draftTournament = { id: "t1", slug: "race-cup", name: "Race Cup", game: "9
     eq(c.calls.submitResult.length, 1, "two taps, one submit: " + c.calls.submitResult.length);
   });
 
+  await test("console: a negative tally is a legal score", async () => {
+    const c = loadConsole({ tournament: nineTournament, entrants, matches: nineScheduled });
+    await settle();
+    c.click(findButton(c.app(), (a) => a["data-action"] === "sheet" && a["data-w"] === "e1"));
+    c.click({ "data-action": "sheet-step", "data-side": "B", "data-delta": "-1" });
+    c.click({ "data-action": "sheet-save" });
+    await settle();
+    eq(c.calls.submitResult.length, 1, "one submit");
+    eq(c.calls.submitResult[0].body.score.finals.b, -1, "the record carries the negative tally");
+  });
+
+  await test("console: a run may finish past the goal", async () => {
+    const c = loadConsole({ tournament: nineTournament, entrants, matches: nineScheduled });
+    await settle();
+    c.click(findButton(c.app(), (a) => a["data-action"] === "sheet" && a["data-w"] === "e1"));
+    for (let i = 0; i < 13; i++) c.click({ "data-action": "sheet-step", "data-side": "A", "data-delta": "1" });
+    c.click({ "data-action": "sheet-save" });
+    await settle();
+    eq(c.calls.submitResult.length, 1, "one submit");
+    eq(c.calls.submitResult[0].body.score.finals.a, 13, "the tally passes the 11-ball goal");
+  });
+
   await test("console: a rack discipline's record carries per-rack ball and foul detail", async () => {
     const c = loadConsole({ tournament: rotationTournament, entrants, matches: rotationScheduled });
     await settle();

@@ -126,8 +126,9 @@ function loadApp(label, buildTournament, opts) {
   // (the queue's cross-page merge happens on save, and a real 200ms debounce is not
   // something a synchronous test can wait for).
   if (opts) Object.assign(sandbox, opts);
-  // The swipe gesture needs a panel box: 400px wide at the origin, so a gesture starting left
-  // of x=200 is Player A's half and one starting right of it is Player B's.
+  // The swipe gesture's geometry fallback needs a panel box: 400px wide at the origin, so a
+  // gesture starting left of x=200 is Player A's half and one starting right of it is B's.
+  // (Events that carry a .counter-side target use the card instead — see sideAt.)
   const swipePanel = getEl("#race");
   swipePanel.getBoundingClientRect = () => ({ left: 0, top: 0, width: PANEL_WIDTH, height: 600 });
   swipePanel.setPointerCapture = () => {};
@@ -226,9 +227,9 @@ const PANEL_MID = PANEL_WIDTH / 2;
 const SWIPE_MIN = 48;
 
 // raceApp opens the tally for a 9-ball race to 7 — the sheet the step and swipe paths share.
-function raceApp(label) {
+function raceApp(label, opts) {
   const app = loadApp(label, (B) => tourney("t_" + label, "single_elim",
-    B.build(players, { format: "single_elim" }), null, { game: "9ball", raceTo: 7 }));
+    B.build(players, { format: "single_elim" }), null, { game: "9ball", raceTo: 7 }), opts);
   app.clickCard("W1M1");
   return app;
 }
@@ -340,8 +341,8 @@ test("no dialog offers a +5 / +10 / -5 quick add, for any discipline", () => {
     "nor a +5 / +10 / -5 label");
 });
 
-test("a win-measured race cannot exceed its target by a step, and a stray jump scores nothing", () => {
-  // 9-ball: a games-won discipline, race to 7.
+test("a win-measured race's goal selects the winner but does not cap a step; a stray jump scores nothing", () => {
+  // 9-ball: a games-won discipline, goal 7.
   const app = raceApp("race");
   assert.strictEqual(app.getEl("#raceAScore").textContent, "0", "fixture: the tally opens at 0");
 
@@ -350,15 +351,15 @@ test("a win-measured race cannot exceed its target by a step, and a stray jump s
     "a quick add is not a control this discipline offers, so it must not move the tally");
 
   for (let i = 0; i < 9; i++) app.raceInc("A");
-  assert.strictEqual(app.getEl("#raceAScore").textContent, "7",
-    "a race to 7 is won at 7: a step must not carry the tally past the target");
+  assert.strictEqual(app.getEl("#raceAScore").textContent, "9",
+    "the tally passes the goal: a run may finish over it");
   assert.strictEqual(app.getEl('#sheet input[name="winner"][value="A"]').checked, true,
-    "hitting the target still auto-selects the winner");
+    "hitting the goal still auto-selects the winner");
 
   app.raceDec("A");
-  assert.strictEqual(app.getEl("#raceAScore").textContent, "6", "and a step back still works");
+  assert.strictEqual(app.getEl("#raceAScore").textContent, "8", "and a step back still works");
   app.raceInc("A");
-  assert.strictEqual(app.getEl("#raceAScore").textContent, "7", "back up to the target, not past it");
+  assert.strictEqual(app.getEl("#raceAScore").textContent, "9", "back up, still uncapped");
 });
 
 // ---------- the swipe gesture (ported from the Android app's SwipePanel) ----------
@@ -388,14 +389,38 @@ test("the half is the panel's half: the midpoint belongs to Player B", () => {
   assert.strictEqual(app.getEl("#raceBScore").textContent, "1", "the midpoint itself is B");
 });
 
-test("a downward drag steps back, and stops at zero", () => {
+test("a stacked mobile tally follows the card the finger started on, not the x half", () => {
+  const app = raceApp("stacked");
+  // At <=620px the two cards stack (A above B), so both span the full width. The old
+  // x-midpoint rule called a swipe on the left half of B's card a point for A.
+  const card = (side) => {
+    const el = { dataset: { side } };
+    el.closest = (sel) => (sel === "[data-side]" || sel === ".counter-side[data-side]") ? el : null;
+    return el;
+  };
+  app.pointer("pointerdown", { clientX: 40, clientY: 500, target: card("B") });
+  app.pointer("pointermove", { clientX: 40, clientY: 500 - SWIPE_MIN, target: card("B") });
+  app.pointer("pointerup", { clientX: 40, clientY: 500 - SWIPE_MIN, target: card("B") });
+  assert.strictEqual(app.getEl("#raceBScore").textContent, "1",
+    "a swipe on B's card scores B even though x is in the left half");
+  assert.strictEqual(app.getEl("#raceAScore").textContent, "0", "and not A");
+
+  app.pointer("pointerdown", { clientX: 360, clientY: 100, target: card("A") });
+  app.pointer("pointermove", { clientX: 360, clientY: 100 - SWIPE_MIN, target: card("A") });
+  app.pointer("pointerup", { clientX: 360, clientY: 100 - SWIPE_MIN, target: card("A") });
+  assert.strictEqual(app.getEl("#raceAScore").textContent, "1",
+    "a swipe on A's card scores A even though x is in the right half");
+  assert.strictEqual(app.getEl("#raceBScore").textContent, "1", "B is unchanged");
+});
+
+test("a downward drag steps back, and negative scores are allowed", () => {
   const app = raceApp("down");
   app.swipe(100, 300, 300 - SWIPE_MIN);
   assert.strictEqual(app.getEl("#raceAScore").textContent, "1", "fixture: one step up");
   app.swipe(100, 100, 100 + SWIPE_MIN);
   assert.strictEqual(app.getEl("#raceAScore").textContent, "0", "a finger down steps back");
   app.swipe(100, 100, 100 + 200);
-  assert.strictEqual(app.getEl("#raceAScore").textContent, "0", "and the tally cannot go below zero");
+  assert.strictEqual(app.getEl("#raceAScore").textContent, "-1", "and the tally may go below zero");
 });
 
 test("a drag shorter than the threshold does nothing", () => {
@@ -437,6 +462,174 @@ test("a drag that starts on the increment button scores exactly once", () => {
   assert.strictEqual(app.clickThroughPanel({ raceInc: "A" }), false,
     "the press the drag started on is cancelled, not also scored");
   assert.strictEqual(app.getEl("#raceAScore").textContent, "2", "so the button does not score a second time");
+});
+
+// ---------- submitting without a declared winner ----------
+// The save's own rule: the player ahead is the result, unless the scores are level or a
+// handicap gives the sides different goals (where "ahead" cannot decide the match).
+const immediate = { setTimeout: (fn) => { fn(); return 0; } };
+function savedTournament(app, id) {
+  const raw = JSON.parse(app.ls.getItem("fifteenBall.app.v3"));
+  return raw.tournaments.find((t) => t.id === id);
+}
+
+test("a race saved without a winner takes the player ahead", () => {
+  const app = raceApp("ahead", immediate);
+  app.raceInc("A"); app.raceInc("A"); app.raceInc("B");   // 2-1
+  app.action("save-match");
+  const t = savedTournament(app, "t_ahead");
+  assert.strictEqual(t.sheets.W1M1.winner, "A", "the leader is assumed");
+  assert.strictEqual(t.bracket.matches.W1M1.winner, 0, "and the bracket advances A");
+});
+
+test("a tied race saved without a winner stays in progress", () => {
+  const app = raceApp("tied", immediate);
+  app.raceInc("A"); app.raceInc("B");                     // 1-1
+  app.action("save-match");
+  const t = savedTournament(app, "t_tied");
+  assert.strictEqual(t.sheets.W1M1.winner, "", "a level score assumes nothing");
+  assert.strictEqual(t.bracket.matches.W1M1.winner, null, "so the bracket does not advance");
+});
+
+test("a handicap with different goals never assumes the leader", () => {
+  const app = loadApp("handicap", (B) =>
+    tourney("t_handicap", "single_elim", B.build(players, { format: "single_elim" })), immediate);
+  app.clickCard("W1M1");
+  assert.strictEqual(app.getEl("#sheetBackToScoreBtn").hidden, true, "a ball-marked sheet has no back-to-score");
+  assert.strictEqual(app.getEl("#saveMatchBtn").hidden, false, "it keeps its own Save");
+  // A's goal 25, B's 50; B is ahead 30-20 and neither has reached their goal.
+  app.getEl('#sheet input[data-field="finalA"]').value = "20";
+  app.getEl('#sheet input[data-field="finalB"]').value = "30";
+  app.getEl('#sheet input[name="goalA"]:checked').value = "25";
+  app.getEl('#sheet input[name="goalB"]:checked').value = "50";
+  app.action("save-match");
+  const t = savedTournament(app, "t_handicap");
+  assert.strictEqual(t.sheets.W1M1.winner, "", "different goals assume nothing");
+  assert.strictEqual(t.bracket.matches.W1M1.winner, null, "and the bracket does not advance");
+});
+
+test("a handicap yields the player who reached their goal and the other did not", () => {
+  const app = loadApp("handicap-reached", (B) =>
+    tourney("t_hreached", "single_elim", B.build(players, { format: "single_elim" })), immediate);
+  app.clickCard("W1M1");
+  // A's goal 25 and it is reached (30); B's goal 50 and 40 is short of it, though ahead.
+  app.getEl('#sheet input[data-field="finalA"]').value = "30";
+  app.getEl('#sheet input[data-field="finalB"]').value = "40";
+  app.getEl('#sheet input[name="goalA"]:checked').value = "25";
+  app.getEl('#sheet input[name="goalB"]:checked').value = "50";
+  app.action("save-match");
+  const t = savedTournament(app, "t_hreached");
+  assert.strictEqual(t.sheets.W1M1.winner, "A", "the side that reached its own goal is the winner");
+  assert.strictEqual(t.bracket.matches.W1M1.winner, 0, "and the bracket advances A");
+});
+
+test("a level-goal rack sheet saved without a winner takes the player ahead", () => {
+  const app = loadApp("level", (B) =>
+    tourney("t_level", "single_elim", B.build(players, { format: "single_elim" })), immediate);
+  app.clickCard("W1M1");
+  app.getEl('#sheet input[data-field="finalA"]').value = "30";
+  app.getEl('#sheet input[data-field="finalB"]').value = "20";
+  app.getEl('#sheet input[name="goalA"]:checked').value = "25";
+  app.getEl('#sheet input[name="goalB"]:checked').value = "25";
+  app.action("save-match");
+  const t = savedTournament(app, "t_level");
+  assert.strictEqual(t.sheets.W1M1.winner, "A", "equal goals: the leader is assumed");
+  assert.strictEqual(t.bracket.matches.W1M1.winner, 0, "and the bracket advances A");
+});
+
+// ---------- score mode: the full-screen two-half tally ----------
+test("a race opens in score mode; the arrows step its tally", () => {
+  const app = raceApp("sm");
+  assert.strictEqual(app.getEl("#scoreMode").hidden, false, "score mode is the default for a race");
+  assert.strictEqual(app.getEl("#matchModal").hidden, true, "the sheet stays closed");
+  app.raceInc("A");
+  assert.strictEqual(app.getEl("#smAScore").textContent, "1", "the score is mirrored");
+  app.delegatedClick({ smInc: "A" });
+  assert.strictEqual(app.getEl("#raceAScore").textContent, "2", "the arrow steps the sheet's tally");
+  assert.strictEqual(app.getEl("#smAScore").textContent, "2", "and the overlay follows");
+  app.delegatedClick({ smDec: "B" });
+  assert.strictEqual(app.getEl("#smBScore").textContent, "-1", "a decrement from zero goes negative");
+  app.action("score-mode-exit");
+  assert.strictEqual(app.getEl("#scoreMode").hidden, true, "Done closes score mode");
+  assert.strictEqual(app.getEl("#matchModal").hidden, true, "and the match with it");
+});
+
+test("the score number is itself an increment control", () => {
+  const html = fs.readFileSync(path.join(__dirname, "index.html"), "utf8");
+  ["A", "B"].forEach((side) => {
+    const m = new RegExp('<button[^>]*id="sm' + side + 'Score"[^>]*>').exec(html);
+    assert.ok(m, `#sm${side}Score should be a button`);
+    assert.ok(m[0].indexOf(`data-sm-inc="${side}"`) !== -1,
+      `tapping the ${side} score adds a game`);
+  });
+});
+
+test("the goal auto-selects a winner, and a correction clears the auto pick", () => {
+  const app = raceApp("wchip");
+  for (let i = 0; i < 7; i++) app.raceInc("A");
+  assert.ok(app.getEl("#smWinner").textContent.indexOf("Winner:") === 0,
+    "the chip names the auto winner");
+  assert.strictEqual(app.getEl('#sheet input[name="winner"][value="A"]').checked, true);
+  app.raceDec("A"); // 6-0: neither side qualifies any more
+  assert.strictEqual(app.getEl("#smWinner").textContent, "No winner",
+    "a correction clears the automatic pick");
+  assert.strictEqual(app.getEl('#sheet input[name="winner"][value="A"]').checked, false);
+});
+
+test("a manual winner is never cleared by a correction", () => {
+  const app = raceApp("wmanual");
+  for (let i = 0; i < 7; i++) app.raceInc("A");
+  app.action("score-mode-winner");            // A -> B, manual
+  assert.ok(app.getEl("#smWinner").textContent.indexOf("Winner:") === 0);
+  app.raceDec("A");                           // A drops below the goal
+  assert.ok(app.getEl("#smWinner").textContent.indexOf("Winner:") === 0,
+    "the desk's pick stays");
+  assert.strictEqual(app.getEl('#sheet input[name="winner"][value="B"]').checked, true);
+});
+
+test("a short drag cancels its release click instead of scoring", () => {
+  const app = raceApp("slop");
+  app.pointer("pointerdown", { clientX: 100, clientY: 300 });
+  app.pointer("pointermove", { clientX: 100, clientY: 280 });   // 20px, below the 48px step
+  app.pointer("pointerup", { clientX: 100, clientY: 280 });
+  assert.strictEqual(app.clickThroughPanel({ raceInc: "A" }), false,
+    "the drag cancels the click on the control");
+  assert.strictEqual(app.getEl("#raceAScore").textContent, "0",
+    "and no step is scored");
+});
+
+test("an in-progress tally autosaves and resumes after Done", () => {
+  const app = raceApp("resume", immediate);
+  app.raceInc("A");
+  app.raceInc("A");
+  const saved = savedTournament(app, "t_resume");
+  assert.strictEqual(saved.sheets.W1M1.finalA, 2, "the in-progress sheet is saved");
+  assert.strictEqual(saved.bracket.matches.W1M1.winner, null,
+    "the bracket does not advance until the result is saved");
+  app.action("score-mode-exit");             // Done flushes and closes
+  app.clickCard("W1M1");                     // reopen the same match
+  assert.strictEqual(app.getEl("#raceAScore").textContent, "2", "the tally resumes");
+  assert.strictEqual(app.getEl("#smAScore").textContent, "2");
+});
+
+test("the score bar names the goal, not the race", () => {
+  const app = raceApp("goal");
+  assert.strictEqual(app.getEl("#smTarget").textContent, "Goal 7");
+  assert.strictEqual(app.getEl("#raceTarget").textContent, "Goal 7");
+});
+
+test("View Score Sheet opens the sheet; its prominent Back returns to score mode", () => {
+  const app = raceApp("flow");
+  assert.strictEqual(app.getEl("#scoreMode").hidden, false, "default: score mode");
+  app.action("score-mode-sheet");
+  assert.strictEqual(app.getEl("#matchModal").hidden, false, "View Score Sheet opens the sheet");
+  assert.strictEqual(app.getEl("#scoreMode").hidden, true, "score mode hides");
+  assert.strictEqual(app.getEl("#saveMatchBtn").hidden, true, "a race sheet has no Save");
+  assert.strictEqual(app.getEl("#closeMatchBtn").hidden, true, "Cancel is replaced by Back");
+  assert.strictEqual(app.getEl("#sheetBackToScoreBtn").hidden, false, "the prominent Back is shown");
+  app.action("sheet-to-score");
+  assert.strictEqual(app.getEl("#matchModal").hidden, true, "Back hides the sheet");
+  assert.strictEqual(app.getEl("#scoreMode").hidden, false, "and returns to score mode");
 });
 
 // ---------- the bracket card: win/loss only ----------

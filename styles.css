@@ -441,7 +441,7 @@ body {
   opacity: 0;
   transition: transform 180ms ease, opacity 180ms ease;
   pointer-events: none;
-  z-index: 30;
+  z-index: 1100;
   box-shadow: var(--shadow);
 }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
@@ -524,10 +524,11 @@ body { padding: 0; }
   margin: 0 0 10px; font-size: 12px; letter-spacing: 2px; color: var(--navy);
   border-bottom: 2px solid var(--red); padding-bottom: 6px;
 }
-.setup .col { display: flex; flex-direction: column; gap: 8px; }
-.setup .field { display: flex; flex-direction: column; gap: 3px; font-size: 12px; letter-spacing: 1px; color: var(--muted); }
+.setup .col { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.setup .field { display: flex; flex-direction: column; gap: 3px; font-size: 12px; letter-spacing: 1px; color: var(--muted); min-width: 0; }
 .setup .field span { font-weight: 700; color: var(--navy); }
 .setup .field input, .setup .field select {
+  width: 100%; min-width: 0;
   padding: 6px 8px; font-size: 14px; border: 1.4px solid var(--line);
   border-radius: 5px; background: #fff; color: var(--ink);
 }
@@ -689,6 +690,13 @@ body { padding: 0; }
   color: var(--muted); cursor: pointer; padding: 4px 10px;
 }
 .iconbtn:hover { color: var(--red); }
+.modal-hdr-actions { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+.modal-hdr .sheet-back {
+  background: var(--red); color: #fff; border: 1.5px solid var(--red);
+  border-radius: 6px; padding: 7px 10px; font-size: 11px; letter-spacing: 0.8px;
+  font-weight: 700; cursor: pointer; white-space: nowrap;
+}
+.modal-hdr .sheet-back:hover { background: var(--red-dark); border-color: var(--red-dark); }
 .modal-body .sheet { max-width: 100%; margin: 0; }
 /* This console has no backend: the sheet a save produces stays in this browser. */
 .device-note {
@@ -868,8 +876,126 @@ body { padding: 0; }
 }
 
 @media (max-width: 620px) {
-  .counter-grid { grid-template-columns: 1fr; }
+  /* Two players side by side, like the Android scorer: each half is a vertical column
+     (label, name, tally, then the +/- pair) rather than the desktop's - score + row.
+     The gesture still follows the card it starts on (app.js -> sideAt). */
+  .counter-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
   .counter-vs { display: none; }
+  .counter-body { padding: 14px 10px; }
+  .counter-side { padding: 10px 8px; }
+  .counter-label { font-size: 10px; letter-spacing: 1px; margin-bottom: 2px; }
+  .counter-name {
+    font-size: 15px; line-height: 1.2; min-height: 0; margin-bottom: 8px;
+  }
+  .counter-controls { flex-wrap: wrap; gap: 6px; }
+  .counter-num { order: -1; flex: 0 0 100%; font-size: 44px; line-height: 1.1; }
+  .counter-btn { flex: 1 1 0; width: auto; height: 44px; border-radius: 10px; }
+}
+
+/* =============================== SCORE MODE ===============================
+   Full-screen, non-scrolling tally. Palette from the Android scorer: panels at half
+   saturation (home white-on-green 4.6:1, away mustard-on-tomato 4.0:1), action tiles at
+   75% (green +, red -), utilities neutral. Each half is a vertical column and the whole
+   half is the swipe target (app.js -> wireSwipe). */
+.score-mode {
+  position: fixed; inset: 0; z-index: 1000;
+  box-sizing: border-box; display: flex; flex-direction: column;
+  height: 100vh; height: 100dvh;
+  background: #0e1013; color: #fff;
+  overflow: hidden; overscroll-behavior: none; touch-action: pan-x;
+  user-select: none; -webkit-user-select: none;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left);
+}
+.score-mode[hidden] { display: none; }
+.sm-halves { flex: 1 1 auto; display: grid; grid-template-columns: 1fr 1fr; min-height: 0; }
+.sm-side {
+  display: flex; flex-direction: column; align-items: stretch; justify-content: space-between;
+  gap: 10px; padding: 14px 10px; min-width: 0; min-height: 0;
+  touch-action: pan-x;
+}
+.sm-side[data-side="A"] { background: #4b805f; color: #fff; }
+/* B darkened from #99635b so the 15px name clears 4.5:1 (4.8:1 with #ffe8a4). */
+.sm-side[data-side="B"] { background: #8a574f; color: #ffe8a4; }
+.sm-name {
+  flex: 0 0 auto; text-align: center; font-family: "Playfair Display", Georgia, serif;
+  font-size: clamp(15px, 3.4vw, 24px); font-weight: 700; line-height: 1.2;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.sm-btn {
+  flex: 0 0 auto; width: 100%;
+  /* Double the old 64px control: 16vh, floored at 112px (double the old phone 56px). */
+  height: 16vh; min-height: 112px; max-height: 160px;
+  border-radius: 14px; border: 1px solid rgba(255, 255, 255, 0.22); color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; touch-action: pan-x;
+}
+.sm-plus { background: #1b6b39; }
+.sm-minus { background: #852e21; }
+/* The chevron carries the +/− as a true cutout (evenodd), so the symbol is the button
+   background showing through — the taller control is one readable glyph. */
+.sm-icon { display: block; height: 68%; max-height: 105px; width: auto; max-width: 80%; }
+.sm-score {
+  flex: 1 1 auto; min-height: 0; width: 100%; padding: 0; border: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: transparent; color: inherit; cursor: pointer;
+  font-family: "Playfair Display", Georgia, serif; font-weight: 700;
+  font-size: clamp(72px, 20vh, 180px); line-height: 1; font-variant-numeric: tabular-nums;
+  -webkit-tap-highlight-color: transparent;
+}
+.sm-btn, .sm-score { transition: transform 80ms ease, filter 80ms ease; }
+.sm-btn:active, .sm-score:active { filter: brightness(1.12); transform: scale(0.985); }
+@keyframes sm-bump { 0% { transform: scale(1.07); } 100% { transform: scale(1); } }
+.sm-score.bump { animation: sm-bump 180ms ease-out; }
+.sm-bar {
+  flex: 0 0 auto;
+  display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px;
+  padding: 8px 12px max(8px, env(safe-area-inset-bottom));
+  background: #121820; color: #e6edf3;
+}
+.sm-bar-left { justify-self: start; display: flex; gap: 8px; min-width: 0; }
+.sm-bar-right { justify-self: end; display: flex; gap: 8px; min-width: 0; }
+.sm-center {
+  justify-self: center; display: flex; flex-direction: column; align-items: center;
+  gap: 1px; min-width: 0; max-width: 100%;
+}
+.sm-target {
+  text-align: center; font-size: 12px; letter-spacing: 1px;
+  text-transform: uppercase; color: #9fb3c8; white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; max-width: 100%;
+}
+.sm-bar .sm-winner {
+  border: 0; background: transparent; color: #9fb3c8; cursor: pointer;
+  font: inherit; font-size: 10px; letter-spacing: 0.3px; line-height: 1.2;
+  padding: 1px 4px; min-height: 22px; max-width: 100%;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.sm-bar .sm-winner.set { color: #94deaf; }
+.sm-bar button {
+  min-height: 44px; display: inline-flex; align-items: center; justify-content: center;
+  padding: 8px 12px; border-radius: 8px; font: inherit; font-weight: 700;
+  font-size: 12px; letter-spacing: 0.5px; cursor: pointer; white-space: nowrap;
+}
+.sm-bar button:active { filter: brightness(1.15); }
+.sm-bar .ghost { background: transparent; color: #e6edf3; border: 1px solid rgba(255, 255, 255, 0.35); }
+.sm-bar .primary { background: #1b6b39; color: #fff; border: 1px solid #1b6b39; }
+html.score-mode-open, body.score-mode-open { overflow: hidden; }
+
+@media (max-height: 520px) {
+  /* Landscape/short: keep both halves usable instead of letting the doubled controls
+     squeeze the score out of the viewport. */
+  .sm-btn { height: 80px; min-height: 80px; max-height: 96px; }
+  .sm-score { font-size: clamp(56px, 18vh, 110px); }
+}
+
+@media (max-width: 420px) {
+  .sm-side { padding: 10px 6px; gap: 8px; }
+  .sm-btn { border-radius: 12px; }
+  .sm-bar { gap: 5px; padding: 6px 8px max(6px, env(safe-area-inset-bottom)); }
+  .sm-bar button { padding: 6px 6px; font-size: 10px; letter-spacing: 0.3px; }
+  .sm-bar .sm-winner { font-size: 9px; min-height: 20px; }
+  .sm-target { font-size: 10px; letter-spacing: 0.3px; }
+  .modal-hdr h2 { font-size: 17px; }
+  .modal-hdr .sheet-back { font-size: 10px; padding: 6px 8px; }
 }
 
 /* =============================== EXPORT MODAL =============================== */
