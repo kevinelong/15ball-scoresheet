@@ -758,7 +758,9 @@ test("the score sheet says the console saves on this device, and the save toast 
 // sheetControl returns the printed-sheet control a card rendered, or null when it has none.
 function sheetControl(created, matchId) {
   const card = lastCard(created, matchId);
-  return (card._kids || []).find((k) => k.className === "sheetbtn" || k.className === "sheetbtn stale") || null;
+  const footer = (card._kids || []).find((k) => k.className === "card-footer");
+  return ((footer ? footer._kids : card._kids) || [])
+    .find((k) => k.className === "sheetbtn" || k.className === "sheetbtn stale") || null;
 }
 
 // printedMatch stamps a match as printed, the way the print page would have.
@@ -781,7 +783,7 @@ test("a ready match offers its sheet, and the batch counts the first round", () 
 
   const btn = sheetControl(app.created, "W1M1");
   assert.ok(btn, "a ready match must offer its sheet");
-  assert.ok(btn.textContent.indexOf("Sheet") !== -1 && btn.textContent.indexOf("Reprint") === -1,
+  assert.ok(btn.textContent.toLowerCase().indexOf("print sheet") !== -1 && btn.textContent.indexOf("Reprint") === -1,
     `the first sheet is not a reprint: ${btn.textContent}`);
   assert.strictEqual(btn.dataset.match, "W1M1", "the control names its match");
 
@@ -790,6 +792,21 @@ test("a ready match offers its sheet, and the batch counts the first round", () 
   assert.ok(batch.textContent.indexOf("Print all Round 1 sheets") !== -1 && batch.textContent.indexOf("(2)") !== -1,
     `the batch says how many are left: ${batch.textContent}`);
   assert.strictEqual(sheetControl(app.created, "W2M1"), null, "a match waiting on two winners offers nothing");
+});
+
+test("a playable card says tap to score and keeps printing separate", () => {
+  const app = loadApp("cardhint", (B) =>
+    tourney("t_cardhint", "single_elim", B.build(players, { format: "single_elim" })));
+  const card = lastCard(app.created, "W1M1");
+  const footer = (card._kids || []).find((k) => k.className === "card-footer");
+  assert.ok(footer, "the card has a footer");
+  const open = (footer._kids || []).find((k) => k.className === "card-open");
+  assert.ok(open, "the score affordance is present");
+  assert.ok(open.textContent.toLowerCase().indexOf("score") !== -1,
+    `the open affordance says ${open.textContent}`);
+  const print = (footer._kids || []).find((k) => k.className && k.className.indexOf("sheetbtn") === 0);
+  assert.ok(print, "the print control is separate");
+  assert.ok(/print/i.test(print.textContent), `the print control says ${print.textContent}`);
 });
 
 test("a sheet the bracket moved under offers the reprint it needs, at the version it will print as", () => {

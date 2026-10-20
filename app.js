@@ -907,10 +907,22 @@
       card.appendChild(row);
     });
 
+    const footer = document.createElement("div");
+    footer.className = "card-footer";
     if (playable) {
+      // The whole card opens scoring; this real button is the keyboard/AT path and the
+      // visible affordance (the print control below is a different action).
+      const open = document.createElement("button");
+      open.type = "button";
+      open.className = "card-open";
+      open.textContent = decided ? "Tap to edit" : "Tap to score";
+      open.title = decided ? "Open the recorded score" : "Open this match in score mode";
+      open.addEventListener("click", (ev) => { ev.stopPropagation(); openMatch(match.id); });
+      footer.appendChild(open);
       card.addEventListener("click", () => openMatch(match.id));
     }
-    appendSheetControl(card, match);
+    const hasPrint = appendSheetControl(card, match, footer);
+    if (playable || hasPrint) card.appendChild(footer);
     return card;
   }
 
@@ -921,11 +933,11 @@
    * is still current gets no control — it is in the queue page's "Recently printed" — and
    * neither has a match whose players are not both known.
    */
-  function appendSheetControl(card, match) {
+  function appendSheetControl(card, match, footer) {
     const t = activeT();
-    if (!window.SheetQueue || !t) return;
+    if (!window.SheetQueue || !t) return false;
     const state = window.SheetQueue.state(match, t);
-    if (state !== "ready" && state !== "stale") return;
+    if (state !== "ready" && state !== "stale") return false;
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = state === "stale" ? "sheetbtn stale" : "sheetbtn";
@@ -933,16 +945,17 @@
     const version = state === "stale" ? window.SheetQueue.issue(match).version + 1 : 1;
     btn.textContent = state === "stale"
       ? `\uD83D\uDDA8 Reprint (v${version})`
-      : "\uD83D\uDDA8 Sheet";
+      : "\uD83D\uDDA8 Print sheet";
     btn.title = state === "stale"
       ? "The players or the target changed after this sheet was printed, so print it again"
       : "Print this match's pre-filled paper sheet";
     btn.addEventListener("click", (ev) => {
-      // The card's own click opens the score sheet, and this button sits inside the card.
+      // Opening the match is the card's action; printing is this button's own.
       ev.stopPropagation();
       openPrintPage(t, { matchId: match.id });
     });
-    card.appendChild(btn);
+    (footer || card).appendChild(btn);
+    return true;
   }
 
   function escapeHtml(s) {

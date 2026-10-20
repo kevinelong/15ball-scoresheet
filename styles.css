@@ -616,6 +616,19 @@ body { padding: 0; }
 .match-card.pending { opacity: .55; cursor: default; pointer-events: none; }
 .match-card.pending:hover { transform: none; box-shadow: none; border-color: var(--line-strong); }
 
+/* Card footer: "Tap to score" opens the match; the printer button is a separate action. */
+.card-footer {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+  gap: 6px; padding: 6px 10px 8px;
+}
+.card-open {
+  background: none; border: 0; padding: 0; color: var(--muted); cursor: pointer;
+  font: inherit; font-size: 10px; font-weight: 700; letter-spacing: .4px; text-align: left;
+}
+.card-open::before { content: "\25B8 "; }
+.card-open:hover { color: var(--red); }
+.card-footer .sheetbtn { margin-top: 0; width: auto; flex: 0 0 auto; }
+
 /* The printed-sheet control on a match card (decision 018): the plain one is a sheet that
    has not been printed yet, the amber one a reprint the bracket has made necessary. */
 .sheetbtn {
