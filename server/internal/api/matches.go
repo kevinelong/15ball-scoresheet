@@ -325,7 +325,7 @@ func (api *API) enqueueMatchReady(ctx context.Context, tx *sql.Tx, tid, mid stri
 				oppName = n.String
 			}
 		}
-		body := fmt.Sprintf("Your match against %s is starting now on table %s. Score: %s", oppName, tableRef.String, link)
+		body := fmt.Sprintf("Columbia Cue Club: your match vs %s starts on table %s. Score: %s Reply STOP to opt out.", oppName, tableRef.String, link)
 		_ = notify.Enqueue(ctx, tx, notify.Notification{
 			TournamentID: tid, MatchID: mid, EntrantID: p.eid,
 			Recipient: phone, Body: body,

@@ -71,6 +71,25 @@ The message is ASCII; the long link can push a text into two GSM segments.
 - `navigator.getInstalledRelatedApps()` — requires the same asset-links association
   and is not universal; unnecessary with verified App Links.
 
+## Sender registration (required for US delivery)
+
+Twilio accepts the API call before the carrier delivers: outbox `sent` means only that
+Twilio took the message. Check the Twilio message resource for the final status.
+
+- An **unverified toll-free** sender returns `30007 Carrier violation`; a **local
+  10DLC number without a campaign** returns `30034`.
+- Current account: the toll-free `+18887747814` toll-free verification is
+  **TWILIO_REJECTED** (“Business Information Could Not Be Verified”); the local
+  `+15034794238` sits in a Messaging Service but has **no A2P 10DLC campaign** (the
+  brand is approved). Both must be corrected in the Twilio console before delivery.
+- The message is branded and carries `Reply STOP to opt out`, so it can be used as the
+  campaign/TFV sample.
+- After approval, point `TWILIO_MESSAGING_SERVICE_SID` (or `TWILIO_FROM_NUMBER`) at the
+  approved sender, restart the service, and enqueue a fresh notification (the per-match
+  dedupe key blocks a silent resend).
+- A future Twilio `StatusCallback` should write the final delivered/undelivered status
+  back to `notifications`; today the outbox records API acceptance only.
+
 ## Verification
 
 - `curl -sSI https://codeonline.io/.well-known/assetlinks.json` → 200,
