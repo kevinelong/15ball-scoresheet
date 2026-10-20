@@ -152,6 +152,27 @@ func (api *API) tournamentVenueID(ctx context.Context, q interface {
 // player from the entrant's fields. Returns the linked player id.
 func (api *API) ensurePlayerForEntrant(ctx context.Context, tx *sql.Tx, org, entrantID, displayName string, phone, email, externalID *string, fargo *int64, wantPlayerID *string) (string, error) {
 	now := time.Now().Unix()
+	if wantPlayerID == nil || *wantPlayerID == "" {
+		// A unique exact name for the same organizer is the same person across
+		// events; link it and let the backfill below fill any missing contact
+		// fields. A duplicated name stays a new player (ambiguous).
+		rows, qerr := tx.QueryContext(ctx,
+			`SELECT id FROM players WHERE organizer_user_id=? AND name_key=? LIMIT 2`,
+			org, normalizeName(displayName))
+		if qerr == nil {
+			var ids []string
+			for rows.Next() {
+				var id string
+				if rows.Scan(&id) == nil {
+					ids = append(ids, id)
+				}
+			}
+			rows.Close()
+			if len(ids) == 1 {
+				wantPlayerID = &ids[0]
+			}
+		}
+	}
 	if wantPlayerID != nil && *wantPlayerID != "" {
 		var p Player
 		row := tx.QueryRowContext(ctx, `SELECT `+playerCols+` FROM players WHERE id = ? AND organizer_user_id = ?`, *wantPlayerID, org)

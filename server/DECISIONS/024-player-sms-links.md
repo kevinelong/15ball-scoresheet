@@ -5,8 +5,25 @@
 ## Collecting numbers
 
 Entrants carry `phone` and `notify_opt_in`; the live console captures both in the
-single-add form, the bulk paste form, and entrant edit. Only `notify_opt_in = 1` is
-texted (the consent wording is in the UI).
+single-add form, the bulk paste form, the recent-player picker, and entrant edit. Only
+`notify_opt_in = 1` is texted (the consent wording is in the UI). The single-add and
+edit forms also accept optional **email** and **Fargo**.
+
+## Player memory and auto-link
+
+- The live console's exact-name add auto-links the unique matching player; the server
+  does the same for any create that does not name a player explicitly.
+- A linked player's remembered **phone / email / Fargo** are copied onto the new entrant
+  when the form left them blank, so an SMS can go to the number given in a previous
+  tournament.
+- Contact fields the player itself lacks are backfilled from the new or edited entrant
+  (phone, email, Fargo, external id). “If we don't have those yet” is resolved in both
+  directions.
+- A duplicated name (more than one player with the same organizer + name key) is not
+  auto-linked; the existing suggestion/duplicate UI asks the desk to choose.
+- `TestEntrantAutoLinkByName` covers a name-only second event: same player id, the
+  remembered phone/email copied onto the entrant, and a missing Fargo backfilled onto
+  the player.
 
 ## Trigger and body
 

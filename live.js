@@ -132,6 +132,8 @@
     if (item.matchReason === 'phone' || item.matchReason === 'email') return true;
     return (item.score || 0) >= 0.72 && !!item.sameVenue;
   }
+  // Same comparison the server uses for a player's name key.
+  function normName(s) { return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ''); }
   // Small "same venue" chip for candidates the player has played this venue before.
   function venueChip(item) {
     return (item && item.sameVenue) ? '<span class="pill venue">same venue</span>' : '';
@@ -607,6 +609,7 @@
     return '<div class="spacer"></div><label>Recent players at this venue</label>' +
       '<div class="note">Played your other events here. Check any to add + check in.</div>' +
       '<ul class="list">' + rows + '</ul>' +
+      '<label><input id="recent-opt" type="checkbox" />Send match-ready SMS (player consented)</label>' +
       '<div class="row"><button class="ghost" data-action="recent-all">Select all</button>' +
       '<button class="pri" data-action="recent-add">Add selected</button></div><div class="spacer"></div>';
   }
@@ -623,7 +626,9 @@
     }
     if (dir) {
       h += '<label>Name</label><input id="en" placeholder="Player name" />' +
-        '<div class="row"><div><label>Mobile (optional)</label><input id="ephone" type="tel" inputmode="tel" placeholder="+1503…" /></div></div>' +
+        '<div class="row"><div style="flex:1"><label>Mobile (optional)</label><input id="ephone" type="tel" inputmode="tel" placeholder="+1503…" /></div></div>' +
+        '<div class="row"><div style="flex:1"><label>Email (optional)</label><input id="eemail" type="email" inputmode="email" /></div>' +
+        '<div style="flex:1"><label>Fargo (optional)</label><input id="efargo" type="number" inputmode="numeric" /></div></div>' +
         '<label><input id="eopt" type="checkbox" />Send match-ready SMS (player consented)</label>' +
         '<div class="spacer"></div><button class="pri" data-action="add-entrant">Add &amp; check in</button>' +
         '<div class="spacer"></div><label>Or paste a list — one player per line</label>' +
@@ -1274,13 +1279,22 @@
     });
     if (act === 'add-entrant') return guard(async function () {
       var name = val('en'); if (!name) return toast('Enter a name');
-      var body = { displayName: name };
-      var ph = val('ephone'); if (ph) { body.phone = Roster.e164(ph); body.notifyOptIn = checked('eopt'); }
+      var body = { displayName: name, notifyOptIn: checked('eopt') };
+      var ph = val('ephone'); if (ph) body.phone = Roster.e164(ph);
+      var em = val('eemail'); if (em) body.email = em;
+      var fg = val('efargo'); if (fg) body.fargo = parseInt(fg, 10);
       var cands = [];
       try {
-        var r = await api.playerSuggestions(state.t.id, { name: name, phone: body.phone || '', email: '' });
+        var r = await api.playerSuggestions(state.t.id, { name: name, phone: body.phone || '', email: body.email || '' });
         cands = (r && r.items) || [];
       } catch (e) { /* suggestion lookup is best-effort — fall through to a plain add */ }
+      // One exact name is the same person: link it and fill the remembered fields.
+      var exact = cands.filter(function (c) { return normName(c.displayName) === normName(name); });
+      if (exact.length === 1) {
+        await addEntrantChecked(Object.assign({}, body, { playerId: exact[0].playerId }));
+        await openTournament(state.t.id);
+        return;
+      }
       if (cands.length) {
         state.pendingAdd = { body: body, candidates: cands };
         renderTournament();
@@ -1326,7 +1340,7 @@
       var added = 0;
       for (var i = 0; i < picks.length; i++) {
         var p = byId[picks[i]]; if (!p) continue;
-        var body = { displayName: p.displayName, playerId: p.playerId }; // LINK to the existing player
+        var body = { displayName: p.displayName, playerId: p.playerId, notifyOptIn: checked('recent-opt') };
         if (p.phone) body.phone = Roster.e164(p.phone);
         if (p.email) body.email = p.email;
         if (p.fargo != null) body.fargo = p.fargo;
@@ -1372,8 +1386,8 @@
       var added = 0, linked = 0, dupes = 0;
       for (var i = 0; i < pv.list.length; i++) {
         var p = pv.list[i];
-        var body = { displayName: p.name };
-        if (p.phone) { body.phone = Roster.e164(p.phone); body.notifyOptIn = consent; }
+        var body = { displayName: p.name, notifyOptIn: consent };
+        if (p.phone) body.phone = Roster.e164(p.phone);
         if (p.email) body.email = p.email;
         if (p.fargo != null) body.fargo = p.fargo;
         if (p.externalId) body.externalId = p.externalId;

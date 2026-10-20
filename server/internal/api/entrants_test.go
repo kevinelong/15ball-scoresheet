@@ -15,6 +15,54 @@ func (e *testEnv) mkOpenTournament(t *testing.T) string {
 	return id
 }
 
+// TestEntrantAutoLinkByName: a name-only add in a later event links the unique
+// same-name player, copies the remembered phone/email onto the entrant, and
+// backfills a missing Fargo on the player from the new entry.
+func TestEntrantAutoLinkByName(t *testing.T) {
+	e := newTestEnv(t)
+	tid1 := e.mkOpenTournament(t)
+	code, resp := e.do(t, "POST", "/api/v1/tournaments/"+tid1+"/entrants", e.director,
+		`{"displayName":"Kevin Long","phone":"+15038886879","email":"kevin@example.com"}`)
+	if code != http.StatusCreated {
+		t.Fatalf("first entrant: want 201, got %d (%v)", code, resp)
+	}
+	eid1 := resp["entrant"].(map[string]interface{})["id"].(string)
+	var pid string
+	e.api.DB.QueryRow(`SELECT COALESCE(player_id,'') FROM entrants WHERE id=?`, eid1).Scan(&pid)
+	if pid == "" {
+		t.Fatal("first entrant should link a player")
+	}
+
+	tid2 := e.mkOpenTournament(t)
+	code, resp = e.do(t, "POST", "/api/v1/tournaments/"+tid2+"/entrants", e.director,
+		`{"displayName":"Kevin  Long","fargo":555}`)
+	if code != http.StatusCreated {
+		t.Fatalf("second entrant: want 201, got %d (%v)", code, resp)
+	}
+	eid2 := resp["entrant"].(map[string]interface{})["id"].(string)
+	var phone, email, pid2 string
+	var fargo int64
+	e.api.DB.QueryRow(`SELECT COALESCE(phone,''), COALESCE(email,''), COALESCE(fargo,0), COALESCE(player_id,'')
+	                   FROM entrants WHERE id=?`, eid2).Scan(&phone, &email, &fargo, &pid2)
+	if pid2 != pid {
+		t.Fatalf("same name should link the same player: got %q want %q", pid2, pid)
+	}
+	if phone != "+15038886879" {
+		t.Fatalf("remembered phone should fill the entrant: got %q", phone)
+	}
+	if email != "kevin@example.com" {
+		t.Fatalf("remembered email should fill the entrant: got %q", email)
+	}
+	if fargo != 555 {
+		t.Fatalf("entrant Fargo should be 555, got %d", fargo)
+	}
+	var pfargo int64
+	e.api.DB.QueryRow(`SELECT COALESCE(fargo,0) FROM players WHERE id=?`, pid).Scan(&pfargo)
+	if pfargo != 555 {
+		t.Fatalf("player Fargo should be augmented from the new entrant, got %d", pfargo)
+	}
+}
+
 func TestEntrantLifecycle(t *testing.T) {
 	e := newTestEnv(t)
 	tid := e.mkOpenTournament(t)

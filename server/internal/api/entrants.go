@@ -106,11 +106,23 @@ func (api *API) CreateEntrant(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "server_error", "")
 		return
 	}
-	if _, perr := api.ensurePlayerForEntrant(r.Context(), tx, org, id, body.DisplayName, body.Phone, body.Email, body.ExternalID, body.Fargo, body.PlayerID); perr != nil {
+	pid, perr := api.ensurePlayerForEntrant(r.Context(), tx, org, id, body.DisplayName, body.Phone, body.Email, body.ExternalID, body.Fargo, body.PlayerID)
+	if perr != nil {
 		if errors.Is(perr, sql.ErrNoRows) {
 			writeErr(w, http.StatusBadRequest, "invalid_player", "playerId does not belong to this organizer")
 			return
 		}
+		writeErr(w, http.StatusInternalServerError, "server_error", "")
+		return
+	}
+	// Fill the entrant from the remembered player: a name-only add still carries
+	// the phone the player gave in a previous event (and its email/Fargo).
+	if _, err := tx.ExecContext(r.Context(),
+		`UPDATE entrants SET
+		   phone = COALESCE(NULLIF(phone,''), (SELECT phone FROM players WHERE id=?)),
+		   email = COALESCE(NULLIF(email,''), (SELECT email FROM players WHERE id=?)),
+		   fargo = COALESCE(fargo, (SELECT fargo FROM players WHERE id=?))
+		 WHERE id=?`, pid, pid, pid, id); err != nil {
 		writeErr(w, http.StatusInternalServerError, "server_error", "")
 		return
 	}
@@ -322,6 +334,32 @@ func (api *API) PatchEntrant(w http.ResponseWriter, r *http.Request) {
 		ActorUserID: actor(r.Context()), RequestID: reqID(r.Context()),
 		After: after,
 	})
+	// Keep the cross-event player's missing contact fields filled from this edit.
+	if cur.PlayerID != nil && *cur.PlayerID != "" {
+		if org, oerr := api.tournamentOrganizer(r.Context(), tx, tid); oerr == nil {
+			name := cur.DisplayName
+			if body.DisplayName != nil && *body.DisplayName != "" {
+				name = *body.DisplayName
+			}
+			phone := cur.Phone
+			if body.Phone != nil {
+				phone = body.Phone
+			}
+			email := cur.Email
+			if body.Email != nil {
+				email = body.Email
+			}
+			fargo := cur.Fargo
+			if body.Fargo != nil {
+				fargo = body.Fargo
+			}
+			ext := cur.ExternalID
+			if body.ExternalID != nil {
+				ext = body.ExternalID
+			}
+			_, _ = api.ensurePlayerForEntrant(r.Context(), tx, org, eid, name, phone, email, ext, fargo, cur.PlayerID)
+		}
+	}
 	if err := tx.Commit(); err != nil {
 		writeErr(w, http.StatusInternalServerError, "server_error", "")
 		return
