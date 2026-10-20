@@ -63,3 +63,35 @@ Always `doas nginx -t` before `doas rc-service nginx reload`.
 Nightly `sqlite3 /var/lib/fifteenball/data.db ".backup /var/lib/fifteenball/backups/fifteenball-$(date +%F).db"`
 at 04:17, prune >30 days, periodic `PRAGMA integrity_check`. Needs `apk add sqlite`
 (the CLI is not installed by default; the server itself does not require it).
+
+## Android App Links (player SMS score links)
+
+Android opens a texted `https://codeonline.io/15ball/live.html?t=…&m=…` in the Score
+app when it is installed, and in the browser when it is not. That is a verified App
+Link, not a JavaScript redirect.
+
+- Serve the association at the **domain root**:
+  `https://codeonline.io/.well-known/assetlinks.json`. The reference copy is
+  [`server/deploy/assetlinks.json`](../deploy/assetlinks.json); the live codeonline
+  web root is `/home/kevin/codeonline`, so install it at
+  `/home/kevin/codeonline/.well-known/assetlinks.json`.
+- It names package `com.kevin.score` and the **release signing certificate** SHA-256
+  `3B:72:3D:B8:B6:04:A7:12:68:11:BC:F0:DF:53:9C:17:7B:35:20:7B:5C:EE:E5:7F:73:AD:45:13:E6:DA:F1:29`.
+  Rebuild the app with the same release key, or update this fingerprint.
+- The app manifest already declares `autoVerify` for `https://codeonline.io/15ball/`
+  (path prefix `/15ball/`). Android verifies at install; existing installs can be
+  re-verified with `adb shell pm verify-app-links --re-verify com.kevin.score`.
+- Check: `curl -sSI https://codeonline.io/.well-known/assetlinks.json` → 200,
+  `application/json`, no redirect.
+- Without the file Android may show a chooser instead of opening the app directly; the
+  link still works.
+
+## Player SMS (score links)
+
+- Entrants carry `phone` + `notify_opt_in`; the live console captures both (single add,
+  bulk paste, edit). Only opted-in entrants are texted.
+- A match assigned to a table queues the alert; `StartMatch` retries the same enqueue
+  (dedupe key prevents doubles). Body includes opponent, table, and
+  `<BASE_URL>/live.html?t=<slug|id>&m=<matchId>`.
+- `BASE_URL` in `/etc/fifteenball/fifteenball.env` is the public base
+  (`https://codeonline.io/15ball`). Twilio creds are in the same root-only env file.

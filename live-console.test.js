@@ -313,6 +313,14 @@ const draftTournament = { id: "t1", slug: "race-cup", name: "Race Cup", game: "9
     assert(c.calls.submitResult.length === 0, "opening the sheet must submit nothing");
   });
 
+  await test("console: a scoring link's m= opens that match's sheet", async () => {
+    const c = loadConsole({ tournament: nineTournament, entrants, matches: nineScheduled }, { search: "?t=t1&m=m1" });
+    await settle();
+    eq(c.sheetHidden(), false, "the match sheet opens from the link");
+    assert(c.sheetNames().indexOf("Ada") !== -1, "with the match's players: " + c.sheetNames());
+    eq(c.calls.submitResult.length, 0, "opening a link submits nothing");
+  });
+
   await test("console: the bracket slot opens the sheet, and nothing else can submit", async () => {
     const c = loadConsole({ tournament: nineTournament, entrants, matches: nineTreeScheduled });
     await settle();

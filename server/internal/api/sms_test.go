@@ -40,6 +40,7 @@ func boolStr(b bool) string {
 func TestMatchReadySMS(t *testing.T) {
 	e := newTestEnv(t)
 	e.api.SMSReady = func() bool { return true }
+	e.api.BaseURL = "https://codeonline.io/15ball"
 	ctx := context.Background()
 
 	// Ann opts in; Bob has a phone but did NOT opt in → only Ann is texted.
@@ -76,8 +77,39 @@ func TestMatchReadySMS(t *testing.T) {
 	// Ann is texted, and the body names her opponent (Bob) and the table.
 	if fake.Messages[0].To != "+15550000001" ||
 		!strings.Contains(fake.Messages[0].Body, "Bob") ||
-		!strings.Contains(fake.Messages[0].Body, "table 7") {
+		!strings.Contains(fake.Messages[0].Body, "table 7") ||
+		!strings.Contains(fake.Messages[0].Body, "Score: https://codeonline.io/15ball/live.html?t=") ||
+		!strings.Contains(fake.Messages[0].Body, "&m="+mid) {
 		t.Fatalf("unexpected message: %+v", fake.Messages[0])
+	}
+}
+
+// TestStartMatchSMS: if the match was assigned while SMS was off, starting it (with
+// SMS now configured) still texts both opted-in players. The dedupe key means a
+// normal assign→start flow does not double-text.
+func TestStartMatchSMS(t *testing.T) {
+	e := newTestEnv(t)
+	e.api.BaseURL = "https://codeonline.io/15ball"
+	tid, mid := e.mkStartedTournamentSMS(t, "+15550000011", "+15550000012", true, true)
+
+	e.api.SMSReady = func() bool { return false }
+	if code, _ := e.do(t, "POST", "/api/v1/tournaments/"+tid+"/matches/"+mid+"/assign", e.director,
+		`{"scorekeeperUserId":"u_scorekeeper@x.com","tableRef":"9"}`); code != http.StatusOK {
+		t.Fatalf("assign: want 200, got %d", code)
+	}
+	var n int
+	e.api.DB.QueryRow(`SELECT COUNT(*) FROM notifications WHERE match_id=?`, mid).Scan(&n)
+	if n != 0 {
+		t.Fatalf("SMS off at assign: want 0 notifications, got %d", n)
+	}
+
+	e.api.SMSReady = func() bool { return true }
+	if code, _ := e.do(t, "POST", "/api/v1/tournaments/"+tid+"/matches/"+mid+"/start", e.director, ""); code != http.StatusOK {
+		t.Fatalf("start: want 200, got %d", code)
+	}
+	e.api.DB.QueryRow(`SELECT COUNT(*) FROM notifications WHERE match_id=?`, mid).Scan(&n)
+	if n != 2 {
+		t.Fatalf("start with SMS on: want 2 pending, got %d", n)
 	}
 }
 

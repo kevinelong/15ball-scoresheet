@@ -92,6 +92,7 @@ func main() {
 
 	// Domain API (/api/v1). Reads require a session; mutations require CSRF + director+.
 	dapi := api.New(st.DB, a)
+	dapi.BaseURL = cfg.BaseURL
 	sess := r.With(a.RequireSession)
 	dir := r.With(a.RequireCSRF, a.RequireSession, a.RequireRoles(auth.DirectorOrAbove...))
 	// Open match editing (OPEN_MATCH_EDITING): the match board reads + score actions

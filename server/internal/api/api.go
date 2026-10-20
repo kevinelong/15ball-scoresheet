@@ -21,6 +21,9 @@ import (
 type API struct {
 	DB   *sql.DB
 	Auth *auth.Auth
+	// BaseURL is the public origin + path (e.g. https://codeonline.io/15ball) used to
+	// build the score link in player SMS messages.
+	BaseURL string
 	// SMSReady gates match-ready SMS enqueue; it is evaluated per request so that
 	// Twilio creds added to the env file after boot take effect without a restart.
 	// Nil means SMS is off.

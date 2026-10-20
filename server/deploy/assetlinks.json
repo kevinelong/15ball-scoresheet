@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.kevin.score",
+      "sha256_cert_fingerprints": [
+        "3B:72:3D:B8:B6:04:A7:12:68:11:BC:F0:DF:53:9C:17:7B:35:20:7B:5C:EE:E5:7F:73:AD:45:13:E6:DA:F1:29"
+      ]
+    }
+  }
+]

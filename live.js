@@ -1529,10 +1529,20 @@
     renderHome();
   });
 
-  // A ?t=<id> link opens a public scoring board (no sign-in); otherwise normal boot.
+  // A ?t=<id> link opens a public scoring board (no sign-in); ?m=<matchId> also opens
+  // that match's sheet, which is the link texted to players. Otherwise normal boot.
   function init() {
-    var pt = new URLSearchParams(location.search).get('t');
-    if (pt) { state.public = true; whoEl.textContent = 'Open scoring'; return guard(function () { return openTournament(pt); }); }
+    var params = new URLSearchParams(location.search);
+    var pt = params.get('t');
+    var pm = params.get('m');
+    if (pt) {
+      state.public = true;
+      whoEl.textContent = 'Open scoring';
+      return guard(async function () {
+        await openTournament(pt);
+        if (pm) openSheet(pm, null);
+      });
+    }
     boot();
   }
   init();

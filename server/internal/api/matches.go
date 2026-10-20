@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -277,14 +278,26 @@ func (api *API) enqueueMatchReady(ctx context.Context, tx *sql.Tx, tid, mid stri
 	if !api.smsReady() {
 		return
 	}
-	var aID, bID, tableRef sql.NullString
+	var aID, bID, tableRef, slug sql.NullString
 	if err := tx.QueryRowContext(ctx,
-		`SELECT entrant_a_id, entrant_b_id, table_ref FROM matches WHERE id=?`, mid).Scan(&aID, &bID, &tableRef); err != nil {
+		`SELECT entrant_a_id, entrant_b_id, table_ref,
+		        (SELECT slug FROM tournaments WHERE id=?) FROM matches WHERE id=?`,
+		tid, mid).Scan(&aID, &bID, &tableRef, &slug); err != nil {
 		return
 	}
 	if !tableRef.Valid || tableRef.String == "" {
 		return // "ready" means at a table
 	}
+	// The public score link. Prefer the tournament slug: it is shorter in a text.
+	tour := tid
+	if slug.Valid && slug.String != "" {
+		tour = slug.String
+	}
+	base := strings.TrimRight(api.BaseURL, "/")
+	if base == "" {
+		base = "https://codeonline.io/15ball"
+	}
+	link := base + "/live.html?t=" + url.QueryEscape(tour) + "&m=" + url.QueryEscape(mid)
 	// Each player is texted their own opponent's name.
 	type rcpt struct{ eid, oppID string }
 	pairs := []rcpt{}
@@ -312,7 +325,7 @@ func (api *API) enqueueMatchReady(ctx context.Context, tx *sql.Tx, tid, mid stri
 				oppName = n.String
 			}
 		}
-		body := fmt.Sprintf("Your match against %s is starting now on table %s.", oppName, tableRef.String)
+		body := fmt.Sprintf("Your match against %s is starting now on table %s. Score: %s", oppName, tableRef.String, link)
 		_ = notify.Enqueue(ctx, tx, notify.Notification{
 			TournamentID: tid, MatchID: mid, EntrantID: p.eid,
 			Recipient: phone, Body: body,
@@ -356,6 +369,9 @@ func (api *API) StartMatch(w http.ResponseWriter, r *http.Request) {
 		ActorUserID: actor(r.Context()), RequestID: reqID(r.Context()),
 	})
 	api.emitEvent(r.Context(), tx, tid, "match.updated", map[string]string{"matchId": mid, "state": "in_progress"})
+	// Also try the alert at start. The assign normally sent it; this covers a match
+	// assigned while SMS was off, and the dedupe key stops a double text.
+	api.enqueueMatchReady(r.Context(), tx, tid, mid)
 	if err := tx.Commit(); err != nil {
 		writeErr(w, http.StatusInternalServerError, "server_error", "")
 		return
