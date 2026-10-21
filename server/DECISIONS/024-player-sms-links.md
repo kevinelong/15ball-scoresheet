@@ -32,12 +32,24 @@ edit forms also accept optional **email** and **Fargo**.
   the dedupe key `<match>:<entrant>:match_ready` prevents a double text.
 - Body:
 
-  `Your match against <opponent> is starting now on table <n>. Score: <link>`
+  `Columbia Cue Club: Your match vs <opponent> is starting now on table <n>. Live: <link> Reply STOP to opt out.`
 
   where `<link>` is `<BASE_URL>/live.html?t=<tournament slug or id>&m=<match id>`.
   `BASE_URL` comes from the server env (`https://codeonline.io/15ball`).
 
 The message is ASCII; the long link can push a text into two GSM segments.
+
+## Enrollment confirmation
+
+- When staff records a player's verbal yes (create with `notifyOptIn`, or PATCH
+  `notifyOptIn:true`), the server queues one confirmation:
+
+  `Columbia Cue Club Match Alerts: You're enrolled. Msg frequency varies. Msg & data rates may apply. Reply HELP for help, STOP to opt out.`
+
+- Deduped by `<entrant>:enrollment` and queued only while SMS is configured. It is
+  separate from the per-match alert.
+- The public consent page `https://codeonline.io/15ball/sms-optin.html` documents the
+  verbal script, the example alert (sender + `Live:` link), and the confirmation.
 
 ## Opening the link
 
@@ -78,10 +90,12 @@ Twilio took the message. Check the Twilio message resource for the final status.
 
 - An **unverified toll-free** sender returns `30007 Carrier violation`; a **local
   10DLC number without a campaign** returns `30034`.
-- Current account: the toll-free `+18887747814` toll-free verification is
-  **TWILIO_REJECTED** (“Business Information Could Not Be Verified”); the local
-  `+15034794238` sits in a Messaging Service but has **no A2P 10DLC campaign** (the
-  brand is approved). Both must be corrected in the Twilio console before delivery.
+- Current account: the toll-free `+18887747814` verification is **TWILIO_REJECTED**
+  (“Business Information Could Not Be Verified”). The sole-proprietor brand
+  `BNcc66f512d2342ec21ead320aed5bb187` is **APPROVED** and identity **VERIFIED**;
+  campaign `QE2c6890da8086d771620e9b13fadeba0b` for `MG65466dbba3d4289e84d3e8dcf673004a`
+  was submitted on 2026-10-20 and is **IN_PROGRESS**. The local `+15034794238` sends
+  once Twilio approves that campaign.
 - The message is branded and carries `Reply STOP to opt out`, so it can be used as the
   campaign/TFV sample.
 - After approval, point `TWILIO_MESSAGING_SERVICE_SID` (or `TWILIO_FROM_NUMBER`) at the
@@ -94,6 +108,7 @@ Twilio took the message. Check the Twilio message resource for the final status.
 
 - `curl -sSI https://codeonline.io/.well-known/assetlinks.json` → 200,
   `application/json`, no redirect; body names `com.kevin.score` and the fingerprint.
-- Go tests: `TestMatchReadySMS` (table, opponent, link), `TestStartMatchSMS` (start
-  trigger with SMS off at assign), `TestMatchReadySMSDisabled`.
+- Go tests: `TestMatchReadySMS` (branded body, live link), `TestStartMatchSMS`,
+  `TestMatchReadySMSDisabled`, `TestEnrollmentConfirmationOnCreate`,
+  `TestEnrollmentConfirmationOnOptIn`.
 - Live-console test: `?t=t1&m=m1` opens `m1`'s sheet.

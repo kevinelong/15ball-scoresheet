@@ -126,6 +126,12 @@ func (api *API) CreateEntrant(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "server_error", "")
 		return
 	}
+	if optIn == 1 {
+		var phone string
+		if err := tx.QueryRowContext(r.Context(), `SELECT COALESCE(phone,'') FROM entrants WHERE id=?`, id).Scan(&phone); err == nil {
+			api.enqueueEnrollmentConfirmation(r.Context(), tx, tid, id, phone)
+		}
+	}
 	_ = audit.Write(r.Context(), tx, audit.Entry{
 		EntityType: "entrant", EntityID: id, Action: "created",
 		ActorUserID: actor(r.Context()), RequestID: reqID(r.Context()),
@@ -328,6 +334,11 @@ func (api *API) PatchEntrant(w http.ResponseWriter, r *http.Request) {
 		`UPDATE entrants SET `+strings.Join(sets, ", ")+`, updated_at=?, version=version+1 WHERE id=?`, args...); err != nil {
 		writeErr(w, http.StatusConflict, "duplicate_display_name", "an entrant with that name already exists")
 		return
+	}
+	var consentPhone string
+	var consentOptIn int
+	if err := tx.QueryRowContext(r.Context(), `SELECT COALESCE(phone,''), notify_opt_in FROM entrants WHERE id=?`, eid).Scan(&consentPhone, &consentOptIn); err == nil && consentOptIn == 1 {
+		api.enqueueEnrollmentConfirmation(r.Context(), tx, tid, eid, consentPhone)
 	}
 	_ = audit.Write(r.Context(), tx, audit.Entry{
 		EntityType: "entrant", EntityID: eid, Action: "updated",

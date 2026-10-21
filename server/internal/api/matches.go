@@ -325,13 +325,28 @@ func (api *API) enqueueMatchReady(ctx context.Context, tx *sql.Tx, tid, mid stri
 				oppName = n.String
 			}
 		}
-		body := fmt.Sprintf("Columbia Cue Club: your match vs %s starts on table %s. Score: %s Reply STOP to opt out.", oppName, tableRef.String, link)
+		body := fmt.Sprintf("Columbia Cue Club: Your match vs %s is starting now on table %s. Live: %s Reply STOP to opt out.", oppName, tableRef.String, link)
 		_ = notify.Enqueue(ctx, tx, notify.Notification{
 			TournamentID: tid, MatchID: mid, EntrantID: p.eid,
 			Recipient: phone, Body: body,
 			DedupeKey: mid + ":" + p.eid + ":match_ready",
 		})
 	}
+}
+
+const enrollmentConfirmationBody = "Columbia Cue Club Match Alerts: You're enrolled. Msg frequency varies. Msg & data rates may apply. Reply HELP for help, STOP to opt out."
+
+// enqueueEnrollmentConfirmation queues the one-time confirmation after staff
+// records verbal consent. It is idempotent per entrant, so the create and
+// subsequent PATCH paths cannot double-text; SMS-off leaves no queued job.
+func (api *API) enqueueEnrollmentConfirmation(ctx context.Context, tx *sql.Tx, tid, eid, phone string) {
+	if !api.smsReady() || phone == "" {
+		return
+	}
+	_ = notify.Enqueue(ctx, tx, notify.Notification{
+		TournamentID: tid, EntrantID: eid, Recipient: phone, Body: enrollmentConfirmationBody,
+		DedupeKey: eid + ":enrollment",
+	})
 }
 
 // StartMatch: POST /api/v1/tournaments/{id}/matches/{matchId}/start

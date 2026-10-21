@@ -91,7 +91,10 @@ Link, not a JavaScript redirect.
 - Entrants carry `phone` + `notify_opt_in`; the live console captures both (single add,
   bulk paste, edit). Only opted-in entrants are texted.
 - A match assigned to a table queues the alert; `StartMatch` retries the same enqueue
-  (dedupe key prevents doubles). Body includes opponent, table, and
-  `<BASE_URL>/live.html?t=<slug|id>&m=<matchId>`.
+  (dedupe key prevents doubles). Body is branded and carries the live link:
+  `Columbia Cue Club: Your match vs <opponent> is starting now on table <n>. Live: <BASE_URL>/live.html?t=<slug|id>&m=<matchId> Reply STOP to opt out.`
+- Recording verbal consent (create with `notifyOptIn`, or PATCH to opt in) queues one
+  enrollment confirmation, deduped per entrant. The public opt-in page is
+  `https://codeonline.io/15ball/sms-optin.html`.
 - `BASE_URL` in `/etc/fifteenball/fifteenball.env` is the public base
   (`https://codeonline.io/15ball`). Twilio creds are in the same root-only env file.
