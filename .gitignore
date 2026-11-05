@@ -15,3 +15,25 @@ server/*.db
 server/*.db-wal
 server/*.db-shm
 server/.env
+
+# --- dependency stores, caches and build output (added 2026-11-05) ---
+bower_components/
+.deno/
+.venv/
+venv/
+virtualenv/
+site-packages/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.tox/
+.gradle/
+.next/
+.nuxt/
+.parcel-cache/
+target/
+dist/
+build/
+Pods/
+DerivedData/
+.cache/
